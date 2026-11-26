@@ -1,0 +1,10 @@
+$ node --experimental-strip-types scripts/check-documentation.ts
+AGENTS.md: 5021 words
+DESIGN.md: 4648 words
+PRODUCT.md: 5418 words
+agent-skills/references/documentary-method.md: 161 words
+agent-skills/source-preparation/SKILL.md: 280 words
+agent-skills/workbench-framing/SKILL.md: 437 words
+context/TECH.md: 8926 words (WARNING: advisory limit 6000)
+docs/ROADMAP.md: 3049 words
+Documentation: 78 Markdown files, 458 local links, 0 errors.

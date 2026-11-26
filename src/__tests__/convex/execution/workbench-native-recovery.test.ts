@@ -1,10 +1,13 @@
+import { readFileSync } from "node:fs";
 import { api, internal } from "@convex/_generated/api";
+import { sha256Hex } from "@convex/domain/sourcePassages";
 import { executionError } from "@convex/execution/errors";
 import { runPiMission } from "@convex/integrations/piMission";
-import { nodeActionGenerationDeadline } from "@convex/resourcePolicy";
 import { PiConvexStorage } from "@convex/integrations/piStorage";
+import { nodeActionGenerationDeadline } from "@convex/resourcePolicy";
 import { type FunctionArgs, getFunctionName } from "convex/server";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import { readMessageBodies } from "@/__tests__/setup/retained-messages";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 
 afterEach(() => {
@@ -46,7 +49,10 @@ test("a reopened final reply adopts once after an operation arrived before compl
                         const finish = args as FunctionArgs<
                             typeof internal.execution.invocations.finish
                         >;
-                        if (finish.response.kind === "complete") {
+                        if (
+                            finish.response?.kind === "complete" ||
+                            finish.preparedReply
+                        ) {
                             const run = await t.run((c) => c.db.get(runId));
                             assert(run?.currentFramingRevisionId);
                             const revisionId = run.currentFramingRevisionId;
@@ -146,7 +152,12 @@ test("reopening after a stale tool reply preserves its refusal instead of execut
                         const finish = args as FunctionArgs<
                             typeof internal.execution.invocations.finish
                         >;
-                        if (finish.response.kind === "operations") {
+                        if (
+                            (
+                                finish.response ??
+                                finish.preparedSubmission?.response
+                            )?.kind === "operations"
+                        ) {
                             await client.mutation(
                                 api.execution.conversations.submit,
                                 {
@@ -209,7 +220,45 @@ test("reopening after a stale tool reply preserves its refusal instead of execut
     ).toEqual([]);
 }, 30000);
 
-test("a crash after publication settles the original native task before the next mission without replaying model work", async () => {
+test.each([
+    null,
+    "completed-unsettled.json",
+    "fragmented-completed-unsettled.json",
+])("a crash after publication settles the native task before the next mission (baseline: %s)", async (captureName) => {
+    const baseline = captureName
+        ? (JSON.parse(
+              readFileSync(
+                  `.agents/artifacts/sources-workflow-no-legacy/baseline-recovery/${captureName}`,
+                  "utf8",
+              ),
+          ) as {
+              mission: {
+                  definitionVersion: number;
+                  result?: { kind: "workbench_v1"; text: string };
+              };
+              delivery: { contentHash: string };
+              messages: { message: { content: string } }[];
+              resultFragments?: { content: string }[];
+              resultManifest?: { contentHash: string };
+          })
+        : undefined;
+    const archivedReply = baseline?.messages
+        .map(({ message }) => message.content)
+        .join("");
+    if (baseline) {
+        const { directedWorkbenchDefinition } = await import(
+            "@convex/domain/workbenchAgent"
+        );
+        assert(archivedReply);
+        expect(directedWorkbenchDefinition.version).toBe(
+            baseline.mission.definitionVersion,
+        );
+        expect(sha256Hex(archivedReply)).toBe(baseline.delivery.contentHash);
+        vi.spyOn(directedWorkbenchDefinition, "simulate").mockReturnValue({
+            kind: "complete",
+            text: archivedReply,
+        });
+    }
     const { t, client, runId } = await seedWorkbench(true);
     const active = await t.mutation(
         internal.execution.conversations.startTurn,
@@ -247,6 +296,7 @@ test("a crash after publication settles the original native task before the next
         ).rejects.toThrow();
     } finally {
         fault.mockRestore();
+        vi.restoreAllMocks();
     }
     const before = await t.run(async (ctx) => ({
         mission: await ctx.db.get(active.missionId),
@@ -264,6 +314,37 @@ test("a crash after publication settles the original native task before the next
     const sessionId = before.session?._id;
     assert(sessionId);
     await t.run((ctx) => ctx.db.patch(sessionId, { leaseUntil: 0 }));
+    if (baseline) {
+        const turn = await t.run((ctx) => ctx.db.get(active.turnId));
+        assert(turn?.publishedMessageId);
+        const publishedMessageId = turn.publishedMessageId;
+        const delivery = await t.run((ctx) => ctx.db.get(publishedMessageId));
+        assert(delivery?.bodyTextId);
+        expect(before.mission).toMatchObject({
+            textualOutcome: {
+                textId: delivery.bodyTextId,
+                contentHash: baseline.delivery.contentHash,
+            },
+        });
+        expect(before.mission).not.toHaveProperty("result");
+        expect(before.mission).not.toHaveProperty("resultTextId");
+        const history = await client.query(
+            api.execution.conversations.listMessages,
+            {
+                runId,
+                paginationOpts: { numItems: 10, cursor: null },
+            },
+        );
+        const replies = (await readMessageBodies(client, history.page)).filter(
+            ({ role }) => role === "assistant",
+        );
+        expect(replies.map(({ _id }) => _id)).toEqual([delivery._id]);
+        assert(replies[0]);
+        expect(sha256Hex(replies[0].text)).toBe(baseline.delivery.contentHash);
+        expect(
+            await t.run((ctx) => ctx.db.query("providerCalls").collect()),
+        ).toEqual([]);
+    }
     await client.mutation(api.execution.conversations.submit, {
         runId,
         requestKey: "after-crash",

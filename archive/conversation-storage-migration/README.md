@@ -1,0 +1,5 @@
+# Retired conversation migration regressions
+
+These transition-only regressions are preserved verbatim from the additive migration at commit `8cad64c3`. They require the historical Convex Agent schema and the temporary copy, reconciliation and stream-upgrade handlers. They are outside the active build and are not current runtime contracts. The November 25 migration record in `docs/verification/2026-11-25-pr2-local-storage-migration.md` records the executed evidence and its limits. Current history, instructions, approvals, native recovery and capacity regressions remain under `src/__tests__/convex/`.
+
+The previous journal stream-upgrade and native in-place conversion regressions can be inspected in the same commit with `git show 8cad64c3:src/__tests__/convex/execution/journal.test.ts` and `git show 8cad64c3:src/__tests__/convex/execution/workbench-native-recovery.test.ts`. Their active-file copies were retired with the protocol rather than retained as another executable compatibility layer.

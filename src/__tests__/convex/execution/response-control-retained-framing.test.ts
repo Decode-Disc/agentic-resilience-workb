@@ -14,6 +14,7 @@ import { validate } from "convex-helpers/validators";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import retained from "@/__tests__/setup/fixtures/nvidia-citation-review.json";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
+import { readConversationPageWithBodies } from "@/__tests__/setup/retained-messages";
 import { workbenchAdmissionInput } from "@/__tests__/setup/workbench";
 import { seedWorkbenchMaterials } from "@/__tests__/setup/workbench-materials";
 
@@ -329,13 +330,10 @@ test.each([
         });
         expect(check.requestId).toBeUndefined();
     }
-    const history = await client.query(
-        api.execution.conversations.listMessages,
-        {
-            runId,
-            paginationOpts: { cursor: null, numItems: 20 },
-        },
-    );
+    const history = await readConversationPageWithBodies(client, {
+        runId,
+        paginationOpts: { cursor: null, numItems: 20 },
+    });
     expect(history.page.find((m) => m.role === "assistant")?.text).toContain(
         retained.draft,
     );

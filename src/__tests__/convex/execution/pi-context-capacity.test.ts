@@ -2,6 +2,7 @@ import { api, internal } from "@convex/_generated/api";
 import { afterEach, expect, test, vi } from "vitest";
 import { seedConversation } from "@/__tests__/setup/agent-harness";
 import { seedPiHistory, seedPiMission } from "@/__tests__/setup/pi-mission";
+import { readConversationPageWithBodies } from "@/__tests__/setup/retained-messages";
 
 afterEach(() => {
     vi.useRealTimers();
@@ -118,10 +119,10 @@ test("native context pressure compacts working history while keeping the exact a
     expect(
         reasoning.some((invocation) => invocation.inputJson.includes(text)),
     ).toBe(true);
-    const messages = await f.client.query(
-        api.execution.conversations.listMessages,
-        { runId: f.runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
+    const messages = await readConversationPageWithBodies(f.client, {
+        runId: f.runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(messages.page.find((message) => message.role === "user")?.text).toBe(
         text,
     );

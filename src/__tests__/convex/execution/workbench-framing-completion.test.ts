@@ -1,6 +1,7 @@
 import { api, internal } from "@convex/_generated/api";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import { readConversationPageWithBodies } from "@/__tests__/setup/retained-messages";
 import { activateSourcesMission } from "@/__tests__/setup/sources-mission";
 import {
     seedWorkbench,
@@ -79,10 +80,10 @@ test("initial framing cannot publish a prose-only program", async () => {
     expect(
         await f.client.query(api.framing.get, { runId: f.runId }),
     ).toMatchObject({ revision: 1, content: { scope: "", questions: [] } });
-    const messages = await f.client.query(
-        api.execution.conversations.listMessages,
-        { runId: f.runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
+    const messages = await readConversationPageWithBodies(f.client, {
+        runId: f.runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(
         messages.page.filter((message) => message.role === "assistant"),
     ).toEqual([]);
@@ -203,10 +204,10 @@ test("repeated missing-program completion permits correction beyond three invoca
     expect(
         await f.client.query(api.framing.get, { runId: f.runId }),
     ).toMatchObject({ revision: 2, content });
-    const history = await f.client.query(
-        api.execution.conversations.listMessages,
-        { runId: f.runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
+    const history = await readConversationPageWithBodies(f.client, {
+        runId: f.runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(
         history.page.filter((message) => message.role === "assistant"),
     ).toHaveLength(1);
@@ -258,7 +259,7 @@ test.each([
     expect(finished).toMatchObject({ kind: "blocked" });
     expect(
         (
-            await f.client.query(api.execution.conversations.listMessages, {
+            await readConversationPageWithBodies(f.client, {
                 runId: f.runId,
                 paginationOpts: { numItems: 20, cursor: null },
             })

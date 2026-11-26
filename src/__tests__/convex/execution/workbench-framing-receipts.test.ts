@@ -14,6 +14,7 @@ import {
     nativeTextReply,
     nativeToolReply,
 } from "@/__tests__/setup/pi-native";
+import { readConversationPageWithBodies } from "@/__tests__/setup/retained-messages";
 import {
     seedWorkbench,
     workbenchAdmissionInput,
@@ -300,10 +301,10 @@ test.each([
             text: "I will correct the proposal and resubmit it.",
         },
     });
-    const history = await client.query(
-        api.execution.conversations.listMessages,
-        { runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
+    const history = await readConversationPageWithBodies(client, {
+        runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     const reply = history.page.find(
         (message) => message.role === "assistant",
     )?.text;
@@ -426,10 +427,10 @@ test.each([
         kind: "complete",
         text: "The current program remains available.",
     });
-    const history = await client.query(
-        api.execution.conversations.listMessages,
-        { runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
+    const history = await readConversationPageWithBodies(client, {
+        runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     const text = history.page.find(
         (message) => message.role === "assistant",
     )?.text;
@@ -597,10 +598,10 @@ test.each([
             text: "The edit was rejected.",
         }),
     ).rejects.toThrow("framing_receipt_unavailable");
-    const history = await client.query(
-        api.execution.conversations.listMessages,
-        { runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
+    const history = await readConversationPageWithBodies(client, {
+        runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(
         history.page.filter((message) => message.role === "assistant"),
     ).toEqual([]);

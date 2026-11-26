@@ -1,14 +1,20 @@
 import { framingCitationPolicy } from "@convex/domain/framingContracts";
 import { savedMaterialMissionFields } from "@convex/domain/savedMaterialOperations";
 import { preparationModelLimitsValidator } from "@convex/domain/sourcePreparationAuthority";
+import {
+    sourcesCompletionAdmission,
+    sourcesOperationAdmission,
+} from "@convex/domain/sourcesContracts";
 import { auditActorValidator } from "@convex/domain/validators";
 import {
     workbenchCommand,
     workbenchCommandOutcome,
+    workbenchOperationAdmission,
 } from "@convex/domain/workbenchContracts";
 import {
     responseControlState,
     responseControlSummary,
+    workbenchCompletionAdmission,
 } from "@convex/domain/workbenchResponseControlContracts";
 import { reasoningEffort } from "@convex/modelConfigurationSchema";
 import { vEventId } from "@convex-dev/workflow";
@@ -45,17 +51,26 @@ import {
 } from "./operationContracts";
 import { textManifestValidator } from "./retainedText";
 
+const retainedTextCheckpointValidator = v.object({
+    words: v.array(v.number()),
+    tail: v.array(v.number()),
+    sizeBytes: v.number(),
+});
+
+export const nativeInputBodyValidator = v.union(
+    v.object({ messageId: v.id("agentMessageDeliveries"), text: v.string() }),
+    v.object({
+        messageId: v.id("agentMessageDeliveries"),
+        contentHash: v.string(),
+    }),
+);
+
 export const nativeInputsValidator = v.array(
     v.object({
         requestId: v.string(),
         nativeInputSequence: v.number(),
         instructionVersion: v.number(),
-        messages: v.array(
-            v.object({
-                messageId: v.id("agentMessageDeliveries"),
-                text: v.string(),
-            }),
-        ),
+        messages: v.array(nativeInputBodyValidator),
     }),
 );
 
@@ -180,13 +195,7 @@ export const executionTables = {
         receivedBytes: v.number(),
         receivedCharacters: v.number(),
         fragmentEnds: v.array(v.number()),
-        checkpoint: v.optional(
-            v.object({
-                words: v.array(v.number()),
-                tail: v.array(v.number()),
-                sizeBytes: v.number(),
-            }),
-        ),
+        checkpoint: v.optional(retainedTextCheckpointValidator),
     }).index("by_key", ["key"]),
     retainedTextFragments: defineTable({
         textId: v.id("retainedTexts"),
@@ -221,7 +230,6 @@ export const executionTables = {
             }),
         ),
         runId: v.id("researchRuns"),
-        storageRef: v.string(),
         queuedCount: v.number(),
         activeTurnId: v.optional(v.id("agentConversationTurns")),
         createdAt: v.number(),
@@ -265,7 +273,8 @@ export const executionTables = {
         publicationRevision: v.optional(v.number()),
         runId: v.id("researchRuns"),
         conversationId: v.id("agentConversations"),
-        storageMessageRef: v.string(),
+        bodyTextId: v.optional(v.id("retainedTexts")),
+        bodyContentHash: v.optional(v.string()),
         framingBaseRevisionId: v.optional(v.id("framingRevisions")),
         controlCommand: v.optional(
             v.object({
@@ -306,6 +315,7 @@ export const executionTables = {
         createdAt: v.number(),
     })
         .index("by_run_and_key", ["runId", "requestKey"])
+        .index("by_body_text", ["bodyTextId"])
         .index("by_run", ["runId"])
         .index("by_run_and_status", ["runId", "status"])
         .index("by_turn", ["turnId"])
@@ -339,6 +349,18 @@ export const executionTables = {
                 state: agentStateValidator,
                 result: v.optional(agentResultValidator),
                 resultTextId: v.optional(v.id("retainedTexts")),
+                textualOutcome: v.optional(
+                    v.object({
+                        version: v.literal(1),
+                        ownership: v.optional(v.literal("mission")),
+                        kind: v.union(
+                            v.literal("workbench_v1"),
+                            v.literal("conversation_validation_v1"),
+                        ),
+                        textId: v.id("retainedTexts"),
+                        contentHash: v.string(),
+                    }),
+                ),
             }),
         ),
     )
@@ -377,6 +399,10 @@ export const executionTables = {
         ),
         inputJson: v.string(),
         inputTextId: v.optional(v.id("retainedTexts")),
+        sourcesOperationAdmission: v.optional(sourcesOperationAdmission),
+        sourcesCompletionAdmission: v.optional(sourcesCompletionAdmission),
+        workbenchOperationAdmission: v.optional(workbenchOperationAdmission),
+        workbenchCompletionAdmission: v.optional(workbenchCompletionAdmission),
         inputContentHash: v.optional(v.string()),
         preparationInputHash: v.optional(v.string()),
         nativePreparation: v.optional(
@@ -396,6 +422,23 @@ export const executionTables = {
         receivedOutputJson: v.optional(v.string()),
         receivedOutputTextId: v.optional(v.id("retainedTexts")),
         correction: v.optional(completionFeedbackValidator),
+        nativeOperations: v.optional(
+            v.object({
+                responseHash: v.string(),
+                calls: v.array(
+                    v.object({
+                        callId: v.string(),
+                        completion: v.optional(v.literal(true)),
+                    }),
+                ),
+            }),
+        ),
+        nativeCompletion: v.optional(
+            v.object({
+                callId: v.string(),
+                responseHash: v.string(),
+            }),
+        ),
         receivedWhileAuthorized: v.optional(v.boolean()),
         adoptionGeneration: v.optional(v.number()),
         requestIds: v.optional(v.array(v.id("agentOperationRequests"))),
@@ -406,6 +449,7 @@ export const executionTables = {
         completedAt: v.optional(v.number()),
     })
         .index("by_mission", ["missionId"])
+        .index("by_mission_and_status", ["missionId", "status"])
         .index("by_run_and_task_key", ["runId", "taskKey"]),
     agentOperationRequests: defineTable({
         historyRead: v.optional(historyReadReceiptValidator),
@@ -477,6 +521,7 @@ export const executionTables = {
         .index("by_invocation", ["invocationId"]),
     agentExecutionEvents: defineTable({
         nativeInputSequence: v.optional(v.number()),
+        contextHistoryHash: v.optional(v.string()),
         contextObservation: v.optional(
             v.object({
                 version: v.literal(1),
@@ -530,6 +575,10 @@ export const executionTables = {
             "nativeInputSequence",
         ])
         .index("by_run_and_context_key", ["runId", "contextObservation.key"])
+        .index("by_kind_and_context_history_hash", [
+            "kind",
+            "contextHistoryHash",
+        ])
         .index("by_mission_and_sequence", ["missionId", "sequence"])
         .index("by_mission_and_history_source", [
             "missionId",

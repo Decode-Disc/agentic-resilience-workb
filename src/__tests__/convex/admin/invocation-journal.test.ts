@@ -1,12 +1,18 @@
 import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
+import { stageObservedBody } from "@convex/execution/observedReply";
 import { appendRetainedText } from "@convex/execution/retainedText";
+import schema from "@convex/schema";
 import type { FunctionReturnType } from "convex/server";
+import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 
-async function journalFixture() {
-    const fixture = await seedInspectedEvidence();
+async function journalFixture(
+    existing?: Parameters<typeof seedInspectedEvidence>[1],
+) {
+    const fixture = await seedInspectedEvidence({}, existing);
     const { t, args } = fixture;
     const missionId = await t.mutation(internal.execution.missions.start, {
         runId: args.runId,
@@ -139,6 +145,99 @@ test("historical inputs are not presented as reconstructed request snapshots", a
     ).rejects.toThrow("Not authenticated");
 });
 
+test.each([
+    { id: "ai-sdk", version: 1 },
+    { id: "convex-agent", version: 2 },
+])("an administrator can inspect a retained $id journal without restarting its retired executor", async (generationBackend) => {
+    const { t, args, userId, visitorId, missionId, invocationId } =
+        await journalFixture();
+    const reply = stableStringify({
+        version: 1,
+        provenance: "simulation",
+        content: "Historical reply, preserved exactly.",
+    });
+    await t.mutation(internal.execution.invocations.retainOutput, {
+        invocationId,
+        expectedGeneration: 4,
+        responseJson: '{"kind":"blocked","code":"historical_record"}',
+        observableReplyJson: reply,
+    });
+    await t.run(async (ctx) => {
+        await ctx.db.patch(visitorId, { role: "admin" });
+        await ctx.db.patch(missionId, {
+            generationBackend,
+            executionRuntime: undefined,
+            status: "blocked",
+            blockCode: "historical_record",
+        });
+        await ctx.db.patch(invocationId, {
+            generationBackend,
+            status: "returned",
+        });
+    });
+    const snapshot = () =>
+        t.run(async (ctx) => ({
+            mission: await ctx.db.get(missionId),
+            invocation: await ctx.db.get(invocationId),
+            calls: await ctx.db.query("providerCalls").collect(),
+            scheduled: await ctx.db.system
+                .query("_scheduled_functions")
+                .collect(),
+        }));
+    const before = await snapshot();
+    const admin = t.withIdentity({ subject: `${userId}|historical-journal` });
+    const page = await admin.query(
+        api.adminOperations.listRunJournalEventsPage,
+        {
+            runId: args.runId,
+            paginationOpts: { numItems: 20, cursor: null },
+        },
+    );
+    const event = page.page.find(
+        (item) => item.kind === "invocation_request_recorded",
+    );
+    if (!event) throw new Error("Expected request event");
+    const detail = await admin.query(api.adminOperations.inspectJournalEvent, {
+        runId: args.runId,
+        eventId: event._id,
+    });
+    expect(detail.invocation).toMatchObject({
+        generationBackend,
+        status: "returned",
+        provenance: "simulation",
+    });
+    const request = await admin.query(
+        api.adminOperations.readInvocationJournalPayload,
+        { runId: args.runId, invocationId, part: "request" },
+    );
+    expect(request.kind).toBe("recorded");
+    if (request.kind !== "recorded" || request.payload.json === undefined)
+        throw new Error("Expected retained request");
+    expect(JSON.parse(request.payload.json)).toEqual({
+        version: 1,
+        input: {
+            prompt: "Private prompt retained as text <script>bad()</script>",
+        },
+    });
+    const observed = await admin.query(
+        api.adminOperations.readInvocationJournalPayload,
+        { runId: args.runId, invocationId, part: "reply" },
+    );
+    expect(observed.kind).toBe("recorded");
+    if (observed.kind !== "recorded")
+        throw new Error("Expected retained reply");
+    expect(observed.payload.json).toBe(reply);
+    expect(await snapshot()).toEqual(before);
+    await t.run((ctx) => ctx.db.patch(visitorId, { status: "revoked" }));
+    await expect(
+        admin.query(api.adminOperations.readInvocationJournalPayload, {
+            runId: args.runId,
+            invocationId,
+            part: "request",
+        }),
+    ).rejects.toThrow("Unauthorized");
+});
+
 test("inspection refuses cross-dossier event, payload and mission correlations", async () => {
     const { t, args, userId, visitorId, missionId, invocationId } =
         await journalFixture();
@@ -257,7 +356,7 @@ test("journal inspection rejects a conversation reference belonging to another d
         });
         const conversationId = await ctx.db.insert("agentConversations", {
             runId: otherRun,
-            storageRef: "foreign",
+
             queuedCount: 0,
             createdAt: 1,
         });
@@ -387,4 +486,117 @@ test("only an active administrator can read a committed open diagnostic prefix a
     expect(output?.fragments.page).toEqual([
         { index: 0, content: "committed before crash" },
     ]);
+});
+
+test.each([
+    70_000, 175_000,
+])("administrator inspects retained output of %i characters and recovers exact fragments", async (size) => {
+    const { t, args, userId, visitorId, invocationId } = await journalFixture(
+        convexTest({
+            schema,
+            modules: import.meta.glob("/convex/**/*.ts"),
+            transactionLimits: { bytesRead: 128 * 1024 },
+        }),
+    );
+    const responseJson = stableStringify({
+        kind: "blocked",
+        code: `${"x".repeat(size)} 🧭`,
+    });
+    const authority = { invocationId, expectedGeneration: 4 };
+    const responseTextId = await t.action((ctx) =>
+        stageObservedBody(ctx, authority, "response", responseJson),
+    );
+    const observableReplyTextId = await t.action((ctx) =>
+        stageObservedBody(
+            ctx,
+            authority,
+            "reply",
+            stableStringify({
+                version: 1,
+                provenance: "simulation",
+                response: JSON.parse(responseJson),
+            }),
+        ),
+    );
+    if (!responseTextId || !observableReplyTextId)
+        throw new Error("Missing staged fixture output");
+    await t.mutation(internal.execution.invocations.retainOutput, {
+        invocationId,
+        expectedGeneration: 4,
+        responseTextId,
+        observableReplyTextId,
+    });
+    await t.run((ctx) => ctx.db.patch(visitorId, { role: "admin" }));
+    const admin = t.withIdentity({ subject: `${userId}|large-result` });
+    const event = await t.run((ctx) =>
+        ctx.db
+            .query("agentExecutionEvents")
+            .withIndex("by_invocation_and_kind", (q) =>
+                q
+                    .eq("invocationId", invocationId)
+                    .eq("kind", "invocation_output_observed"),
+            )
+            .first(),
+    );
+    if (!event) throw new Error("Missing observation event");
+    const runId = args.runId;
+    const detail = await admin.query(api.adminOperations.inspectJournalEvent, {
+        runId,
+        eventId: event._id,
+    });
+    expect(detail.invocation).toMatchObject({
+        receivedOutput: {
+            contentHash: sha256Hex(responseJson),
+            sizeBytes: Buffer.byteLength(responseJson),
+        },
+    });
+    expect(detail.invocation).not.toHaveProperty("receivedOutputJson");
+    const separate = await admin.query(
+        api.adminOperations.inspectJournalEvent,
+        {
+            runId,
+            eventId: event._id,
+            bodyAccess: "separate",
+        },
+    );
+    const contentHash = sha256Hex(responseJson);
+    expect(separate.invocation).toMatchObject({
+        receivedOutput: {
+            contentHash,
+            sizeBytes: Buffer.byteLength(responseJson),
+        },
+    });
+    expect(separate.invocation).not.toHaveProperty("receivedOutputJson");
+    const read = api.adminOperations.listInvocationPayloadFragmentsPage;
+    const scope = {
+        runId,
+        invocationId,
+        part: "received" as const,
+        contentHash,
+    };
+    await expect(
+        t.query(read, {
+            ...scope,
+            paginationOpts: { numItems: 1, cursor: null },
+        }),
+    ).rejects.toThrow("Not authenticated");
+    await expect(
+        admin.query(read, {
+            ...scope,
+            contentHash: "wrong-content",
+            paginationOpts: { numItems: 1, cursor: null },
+        }),
+    ).rejects.toThrow("Journal correlation mismatch");
+    let cursor: string | null = null;
+    let actual = "";
+    for (;;) {
+        const page: FunctionReturnType<typeof read> = await admin.query(read, {
+            ...scope,
+            paginationOpts: { numItems: 1, cursor },
+        });
+        actual += page.page.map((item) => item.content).join("");
+        if (page.isDone) break;
+        cursor = page.continueCursor;
+    }
+    expect(actual).toBe(responseJson);
 });

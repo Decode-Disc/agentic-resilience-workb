@@ -286,7 +286,7 @@ test.each([
                         !edited &&
                         getFunctionName(reference) ===
                             "execution/invocations:begin" &&
-                        result.kind === "ready"
+                        result.kind === "ready_reference"
                     ) {
                         edited = true;
                         const frame = await client.query(api.framing.get, {

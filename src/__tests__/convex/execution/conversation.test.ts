@@ -1,7 +1,8 @@
 import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedConversation as fixture } from "@/__tests__/setup/agent-harness";
+import { readMessageBodies } from "@/__tests__/setup/retained-messages";
 
 afterEach(() => {
     vi.unstubAllEnvs();
@@ -12,7 +13,7 @@ async function observeSimulation(
     invocationId: Id<"agentInvocations">,
 ) {
     const args = { invocationId, expectedGeneration: 1 };
-    const response = await t.query(internal.execution.simulation.invoke, args);
+    const response = await t.action(internal.execution.simulation.invoke, args);
     await t.mutation(internal.execution.invocationLifecycle.retainOutput, {
         ...args,
         responseJson: JSON.stringify(response),
@@ -31,6 +32,36 @@ test("message reading returns application delivery data without component storag
             delivery: "queue",
         },
     );
+    const delivery = await f.t.run((ctx) => ctx.db.get(messageId));
+    expect(delivery?.bodyTextId).toBeDefined();
+    expect(delivery).not.toHaveProperty("storageMessageRef");
+    const conversation = await f.t.run((ctx) =>
+        ctx.db
+            .query("agentConversations")
+            .withIndex("by_run", (q) => q.eq("runId", f.runId))
+            .unique(),
+    );
+    expect(conversation).not.toBeNull();
+    expect(conversation).not.toHaveProperty("storageRef");
+    const paged = await f.client.query(
+        api.execution.conversations.listMessages,
+        {
+            runId: f.runId,
+            bodyAccess: "separate",
+            paginationOpts: { numItems: 1, cursor: null },
+        },
+    );
+    const reference = paged.page[0]?.body;
+    assert(reference);
+    expect(
+        await f.client.query(api.execution.conversations.readMessageBody, {
+            runId: f.runId,
+            messageId,
+            contentHash: reference.contentHash,
+            index: 0,
+        }),
+    ).toMatchObject({ content: "Inspect retained material", nextIndex: null });
+
     const page = await f.client.query(
         api.execution.conversations.listMessages,
         { runId: f.runId, paginationOpts: { numItems: 20, cursor: null } },
@@ -39,7 +70,8 @@ test("message reading returns application delivery data without component storag
         {
             _id: messageId,
             runId: f.runId,
-            text: "Inspect retained material",
+            text: "",
+            body: reference,
             role: "user",
             delivery: "queue",
             status: "queued",
@@ -63,7 +95,7 @@ test("public history preserves the analyst request identity while admission is p
         runId: f.runId,
         paginationOpts: { numItems: 20, cursor: null },
     });
-    expect(history.page).toEqual([
+    expect(await readMessageBodies(f.client, history.page)).toEqual([
         expect.objectContaining({
             _id: messageId,
             requestKey: "immediate-message",
@@ -97,7 +129,7 @@ test("an admitted dossier keeps one conversation and idempotent queued messages 
         api.execution.conversations.listMessages,
         { runId: f.runId, paginationOpts: { numItems: 20, cursor: null } },
     );
-    expect(page.page).toEqual([
+    expect(await readMessageBodies(f.client, page.page)).toEqual([
         expect.objectContaining({
             text: input.text,
             delivery: "queue",

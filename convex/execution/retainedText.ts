@@ -6,7 +6,11 @@ import {
     sha256CheckpointHex,
     sha256Hex,
 } from "@convex/domain/sourcePassages";
-import { TEXT_FRAGMENT_CHARACTERS } from "@convex/resourcePolicy";
+import {
+    CONVEX_MAX_ARRAY_VALUES,
+    CONVEX_MAX_DOCUMENT_BYTES,
+    TEXT_FRAGMENT_CHARACTERS,
+} from "@convex/resourcePolicy";
 import type { PaginationOptions } from "convex/server";
 import { getDocumentSize, type Infer, v } from "convex/values";
 import { executionError } from "./errors";
@@ -21,6 +25,32 @@ export const textFragmentValidator = v.object({
     index: v.number(),
     content: v.string(),
 });
+
+function requireManifestCapacity(
+    text: Omit<Doc<"retainedTexts">, "_id" | "_creationTime">,
+) {
+    const open = text.stream && !text.stream.sealed ? text.stream : undefined;
+    const fragmentCount = open
+        ? open.fragments + (open.tail || !open.fragments ? 1 : 0)
+        : text.fragmentHashes.length;
+    if (
+        fragmentCount > CONVEX_MAX_ARRAY_VALUES ||
+        getDocumentSize(text) > CONVEX_MAX_DOCUMENT_BYTES
+    )
+        throw executionError("retained_text_manifest_capacity");
+}
+
+function requirePackedStreamManifest(text: Doc<"retainedTexts">) {
+    const stream = text.stream;
+    if (
+        !stream ||
+        text.fragmentHashes.length !== stream.fragments ||
+        text.fragmentEnds.length !== stream.fragments ||
+        (text.fragmentEnds.at(-1) ?? 0) !==
+            text.receivedCharacters - stream.tail.length
+    )
+        throw executionError("retained_text_incomplete");
+}
 
 /** Ordered append identity is independent of immutable packed-fragment layout. */
 export async function appendRetainedText(
@@ -65,6 +95,10 @@ export async function appendRetainedText(
         }));
     text ??= await ctx.db.get(textId);
     if (!text?.stream) throw executionError("retained_text_invalid");
+    requirePackedStreamManifest(text);
+    const fragmentHashes = [...text.fragmentHashes];
+    const fragmentEnds = [...text.fragmentEnds];
+    let endOffset = fragmentEnds.at(-1) ?? 0;
     let tail = text.stream.tail + content;
     let fragments = text.stream.fragments;
     let checkpoint = text.checkpoint;
@@ -82,16 +116,21 @@ export async function appendRetainedText(
             checkpoint,
             new TextEncoder().encode(fragment),
         );
+        fragmentHashes.push(sha256Hex(fragment));
+        endOffset += fragment.length;
+        fragmentEnds.push(endOffset);
         tail = tail.slice(end);
     }
     const encoder = new TextEncoder();
-    await ctx.db.patch(textId, {
+    const patch = {
         receivedBytes:
             text.receivedBytes +
             encoder.encode(text.stream.tail + content).length -
             encoder.encode(text.stream.tail).length,
         receivedCharacters: text.receivedCharacters + content.length,
         checkpoint,
+        fragmentHashes,
+        fragmentEnds,
         stream: {
             sealed: false,
             nextSequence: sequence + 1,
@@ -99,57 +138,52 @@ export async function appendRetainedText(
             fragments,
             tail,
         },
-    });
+    };
+    requireManifestCapacity({ ...text, ...patch });
+    await ctx.db.patch(textId, patch);
     return textId;
 }
 
-/** Seal builds the final immutable manifest once, after the producer has stopped. */
-export async function sealRetainedText(
+/** Seal the remaining tail against the manifest accumulated by ordered appends. */
+export async function finalizeRetainedTextStream(
     ctx: MutationCtx,
     textId: Id<"retainedTexts">,
 ) {
     const text = await ctx.db.get(textId);
     if (!text?.stream) throw executionError("retained_text_invalid");
     if (text.stream.sealed) return text;
-    const fragments = (
-        await ctx.db
-            .query("retainedTextFragments")
-            .withIndex("by_text_and_index", (q) => q.eq("textId", textId))
-            .take(text.stream.fragments + 1)
-    ).map(({ index, content }) => ({ index, content }));
-    if (fragments.length !== text.stream.fragments)
-        throw executionError("retained_text_incomplete");
+    const { fragments, tail } = text.stream;
+    requirePackedStreamManifest(text);
+    const tailBytes = new TextEncoder().encode(tail);
+    if (
+        (text.checkpoint?.sizeBytes ?? 0) + tailBytes.length !==
+        text.receivedBytes
+    )
+        throw executionError("retained_text_invalid");
+    const fragmentHashes = [...text.fragmentHashes];
+    const fragmentEnds = [...text.fragmentEnds];
     let checkpoint = text.checkpoint;
-    if (text.stream.tail || !fragments.length) {
-        const content = text.stream.tail;
+    if (tail || !fragments) {
         await ctx.db.insert("retainedTextFragments", {
             textId,
-            index: fragments.length,
-            content,
+            index: fragments,
+            content: tail,
         });
-        checkpoint = advanceSha256(
-            checkpoint,
-            new TextEncoder().encode(content),
-        );
-        fragments.push({ index: fragments.length, content });
+        checkpoint = advanceSha256(checkpoint, tailBytes);
+        fragmentHashes.push(sha256Hex(tail));
+        fragmentEnds.push(text.receivedCharacters);
     }
-    let end = 0;
+    if (!checkpoint) throw executionError("retained_text_invalid");
     const patch = {
-        contentHash: sha256CheckpointHex(
-            checkpoint ?? advanceSha256(undefined, new Uint8Array()),
-        ),
+        contentHash: sha256CheckpointHex(checkpoint),
         sizeBytes: text.receivedBytes,
         characters: text.receivedCharacters,
-        fragmentHashes: fragments.map((fragment) =>
-            sha256Hex(fragment.content),
-        ),
-        fragmentEnds: fragments.map((fragment) => {
-            end += fragment.content.length;
-            return end;
-        }),
-        received: fragments.length,
+        fragmentHashes,
+        fragmentEnds,
+        received: fragmentHashes.length,
         stream: { ...text.stream, sealed: true, tail: "" },
     };
+    requireManifestCapacity({ ...text, ...patch });
     await ctx.db.patch(textId, patch);
     return { ...text, ...patch };
 }
@@ -177,24 +211,18 @@ export function retainedTextParts(content: string) {
     };
 }
 
-/** Retains an immutable logical text using the same verified fragments as native observations. */
-export async function retainCompleteText(
+/** Transfers a staged body to its final owner within the owning publication transaction. */
+export async function adoptRetainedTextKey(
     ctx: MutationCtx,
+    textId: Id<"retainedTexts">,
     key: string,
-    content: string,
 ) {
-    const { manifest, parts } = retainedTextParts(content);
-    let textId: Id<"retainedTexts"> | undefined;
-    for (const [index, part] of parts.entries()) {
-        textId = await stageRetainedText(ctx, key, {
-            ...manifest,
-            index,
-            content: part,
-        });
-    }
-    if (!textId) throw executionError("retained_text_invalid");
-    await completeRetainedText(ctx, textId);
-    return textId;
+    const existing = await ctx.db
+        .query("retainedTexts")
+        .withIndex("by_key", (q) => q.eq("key", key))
+        .unique();
+    if (existing) throw executionError("publication_conflict");
+    await ctx.db.patch(textId, { key });
 }
 
 /** Internal byte storage only; callers enforce their own writer/observation authority on every stage. */
@@ -243,16 +271,17 @@ export async function stageRetainedText(
                 JSON.stringify(manifest.fragmentHashes))
     )
         throw executionError("retained_text_conflict");
+    const staged = existing ?? {
+        key,
+        ...manifest,
+        received: 0,
+        receivedBytes: 0,
+        receivedCharacters: 0,
+        fragmentEnds: [],
+    };
+    if (!existing) requireManifestCapacity(staged);
     const textId =
-        existing?._id ??
-        (await ctx.db.insert("retainedTexts", {
-            key,
-            ...manifest,
-            received: 0,
-            receivedBytes: 0,
-            receivedCharacters: 0,
-            fragmentEnds: [],
-        }));
+        existing?._id ?? (await ctx.db.insert("retainedTexts", staged));
     const next = existing?.received ?? 0;
     if (index < next) {
         const previous = await ctx.db
@@ -288,14 +317,16 @@ export async function stageRetainedText(
         sha256CheckpointHex(checkpoint) !== manifest.contentHash
     )
         throw executionError("retained_text_invalid");
-    await ctx.db.insert("retainedTextFragments", { textId, index, content });
-    await ctx.db.patch(textId, {
+    const patch = {
         received: next + 1,
         receivedBytes,
         receivedCharacters,
         checkpoint,
-        fragmentEnds: [...(existing?.fragmentEnds ?? []), receivedCharacters],
-    });
+        fragmentEnds: [...staged.fragmentEnds, receivedCharacters],
+    };
+    requireManifestCapacity({ ...staged, ...patch });
+    await ctx.db.insert("retainedTextFragments", { textId, index, content });
+    await ctx.db.patch(textId, patch);
     return textId;
 }
 
@@ -405,18 +436,6 @@ export async function retainedTextPage(
         isDone: end === count,
         continueCursor: `${prefix}${end}`,
     };
-}
-
-/** Readers verify the complete content as well as individual fragments before using a logical record. */
-export async function readRetainedText(
-    ctx: QueryCtx,
-    textId: Id<"retainedTexts">,
-) {
-    const text = await completeRetainedText(ctx, textId);
-    const parts = [];
-    for (let index = 0; index < text.fragmentHashes.length; index++)
-        parts.push(await retainedTextFragment(ctx, text, index));
-    return verifyRetainedText(text, parts.join(""));
 }
 
 export function verifyRetainedText(

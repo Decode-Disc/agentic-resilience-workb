@@ -14,7 +14,10 @@ import {
 import { z } from "zod";
 import { internal } from "../../../convex/_generated/api.js";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { QUALIFICATION_TOOLING_POLICY as TOOLING_POLICY } from "../../../convex/resourcePolicy.ts";
+import {
+    PERSISTENCE_PAGE_SIZE,
+    QUALIFICATION_TOOLING_POLICY as TOOLING_POLICY,
+} from "../../../convex/resourcePolicy.ts";
 import { resolveLocalRuntime } from "../../local-runtime.ts";
 import { openQualificationJournal } from "./journal.ts";
 import {
@@ -120,7 +123,7 @@ export async function sourcesQualificationPhase(
         const journal = openQualificationJournal(root, protocol);
         journal.begin("qualification");
         const fingerprints = preserveQualificationCandidate(root);
-        verifyQualificationCandidate(root, fingerprints);
+        await verifyQualificationCandidate(root, fingerprints);
         const publication = await client.query(
             ref(internal.execution.piControl.publicationStatus),
         );
@@ -418,7 +421,10 @@ export async function hydrateSourcesTranscriptPage(
             const page = await readText({
                 invocationId,
                 part,
-                paginationOpts: { cursor, numItems: 1 },
+                paginationOpts: {
+                    cursor,
+                    numItems: PERSISTENCE_PAGE_SIZE.transcriptFragments,
+                },
             });
             for (const fragment of page.page) {
                 assert.equal(

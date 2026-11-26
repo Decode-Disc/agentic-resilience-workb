@@ -45,6 +45,7 @@ import type * as domain_framingEditAuthority from "../domain/framingEditAuthorit
 import type * as domain_framingProvenance from "../domain/framingProvenance.js";
 import type * as domain_invitationCodes from "../domain/invitationCodes.js";
 import type * as domain_manualSourceIntake from "../domain/manualSourceIntake.js";
+import type * as domain_preparedAnalystWording from "../domain/preparedAnalystWording.js";
 import type * as domain_previewCache from "../domain/previewCache.js";
 import type * as domain_providerAvailability from "../domain/providerAvailability.js";
 import type * as domain_publicSourceUrl from "../domain/publicSourceUrl.js";
@@ -108,6 +109,7 @@ import type * as execution_authority from "../execution/authority.js";
 import type * as execution_cancellation from "../execution/cancellation.js";
 import type * as execution_commonOperations from "../execution/commonOperations.js";
 import type * as execution_context from "../execution/context.js";
+import type * as execution_conversationBodies from "../execution/conversationBodies.js";
 import type * as execution_conversations from "../execution/conversations.js";
 import type * as execution_errors from "../execution/errors.js";
 import type * as execution_executionProtocol from "../execution/executionProtocol.js";
@@ -121,6 +123,7 @@ import type * as execution_journal from "../execution/journal.js";
 import type * as execution_missionData from "../execution/missionData.js";
 import type * as execution_missionHistory from "../execution/missionHistory.js";
 import type * as execution_missions from "../execution/missions.js";
+import type * as execution_observedReply from "../execution/observedReply.js";
 import type * as execution_operationContracts from "../execution/operationContracts.js";
 import type * as execution_operationResults from "../execution/operationResults.js";
 import type * as execution_operations from "../execution/operations.js";
@@ -139,7 +142,6 @@ import type * as framing from "../framing.js";
 import type * as framingCitationPolicy from "../framingCitationPolicy.js";
 import type * as http from "../http.js";
 import type * as integrations_agentSkillReader from "../integrations/agentSkillReader.js";
-import type * as integrations_agentStorage from "../integrations/agentStorage.js";
 import type * as integrations_approvedSourceRetrieval from "../integrations/approvedSourceRetrieval.js";
 import type * as integrations_documentaryControl from "../integrations/documentaryControl.js";
 import type * as integrations_evidenceNormalization from "../integrations/evidenceNormalization.js";
@@ -155,6 +157,7 @@ import type * as integrations_modelRouting from "../integrations/modelRouting.js
 import type * as integrations_modelTransport from "../integrations/modelTransport.js";
 import type * as integrations_openRouterConfiguration from "../integrations/openRouterConfiguration.js";
 import type * as integrations_openRouterGeneration from "../integrations/openRouterGeneration.js";
+import type * as integrations_piInvocation from "../integrations/piInvocation.js";
 import type * as integrations_piMission from "../integrations/piMission.js";
 import type * as integrations_piModelProfiles from "../integrations/piModelProfiles.js";
 import type * as integrations_piNativeInput from "../integrations/piNativeInput.js";
@@ -269,6 +272,7 @@ declare const fullApi: ApiFromModules<{
   "domain/framingProvenance": typeof domain_framingProvenance;
   "domain/invitationCodes": typeof domain_invitationCodes;
   "domain/manualSourceIntake": typeof domain_manualSourceIntake;
+  "domain/preparedAnalystWording": typeof domain_preparedAnalystWording;
   "domain/previewCache": typeof domain_previewCache;
   "domain/providerAvailability": typeof domain_providerAvailability;
   "domain/publicSourceUrl": typeof domain_publicSourceUrl;
@@ -332,6 +336,7 @@ declare const fullApi: ApiFromModules<{
   "execution/cancellation": typeof execution_cancellation;
   "execution/commonOperations": typeof execution_commonOperations;
   "execution/context": typeof execution_context;
+  "execution/conversationBodies": typeof execution_conversationBodies;
   "execution/conversations": typeof execution_conversations;
   "execution/errors": typeof execution_errors;
   "execution/executionProtocol": typeof execution_executionProtocol;
@@ -345,6 +350,7 @@ declare const fullApi: ApiFromModules<{
   "execution/missionData": typeof execution_missionData;
   "execution/missionHistory": typeof execution_missionHistory;
   "execution/missions": typeof execution_missions;
+  "execution/observedReply": typeof execution_observedReply;
   "execution/operationContracts": typeof execution_operationContracts;
   "execution/operationResults": typeof execution_operationResults;
   "execution/operations": typeof execution_operations;
@@ -363,7 +369,6 @@ declare const fullApi: ApiFromModules<{
   framingCitationPolicy: typeof framingCitationPolicy;
   http: typeof http;
   "integrations/agentSkillReader": typeof integrations_agentSkillReader;
-  "integrations/agentStorage": typeof integrations_agentStorage;
   "integrations/approvedSourceRetrieval": typeof integrations_approvedSourceRetrieval;
   "integrations/documentaryControl": typeof integrations_documentaryControl;
   "integrations/evidenceNormalization": typeof integrations_evidenceNormalization;
@@ -379,6 +384,7 @@ declare const fullApi: ApiFromModules<{
   "integrations/modelTransport": typeof integrations_modelTransport;
   "integrations/openRouterConfiguration": typeof integrations_openRouterConfiguration;
   "integrations/openRouterGeneration": typeof integrations_openRouterGeneration;
+  "integrations/piInvocation": typeof integrations_piInvocation;
   "integrations/piMission": typeof integrations_piMission;
   "integrations/piModelProfiles": typeof integrations_piModelProfiles;
   "integrations/piNativeInput": typeof integrations_piNativeInput;
@@ -479,5 +485,4 @@ export declare const internal: FilterApi<
 export declare const components: {
   workflow: import("@convex-dev/workflow/_generated/component.js").ComponentApi<"workflow">;
   rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;
-  agent: import("@convex-dev/agent/_generated/component.js").ComponentApi<"agent">;
 };

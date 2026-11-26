@@ -1,6 +1,7 @@
 import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { QueryCtx } from "@convex/_generated/server";
+import type { AnalystTurnWording } from "@convex/domain/preparedAnalystWording";
 import type { AgentDefinition } from "@convex/execution/agentDefinition";
 import { executionError, executionFailureCode } from "@convex/execution/errors";
 import { turnFramingCitationPolicy } from "@convex/framingCitationPolicy";
@@ -35,7 +36,13 @@ export async function readWorkbenchFacts(
     ctx: QueryCtx,
     run: Doc<"researchRuns">,
     mission?: Doc<"agentMissions">,
-): ReturnType<AgentDefinition["context"]> {
+    instructionTexts?: Map<Id<"agentMessageDeliveries">, string>,
+    preparedWording?: AnalystTurnWording,
+): Promise<
+    Awaited<ReturnType<AgentDefinition["context"]>> & {
+        factsRevisionTemplate?: string;
+    }
+> {
     const framing = run.currentFramingRevisionId
         ? await ctx.db.get(run.currentFramingRevisionId)
         : null;
@@ -54,7 +61,13 @@ export async function readWorkbenchFacts(
             mission.definitionId,
             mission.definitionVersion,
         ) === "referenced"
-            ? await documentaryInventoryForMission(ctx, mission, reads)
+            ? await documentaryInventoryForMission(
+                  ctx,
+                  mission,
+                  reads,
+                  instructionTexts,
+                  preparedWording,
+              )
             : null;
     const framingCitationPolicy = mission
         ? await turnFramingCitationPolicy(ctx, mission)
@@ -141,6 +154,18 @@ export async function readWorkbenchFacts(
             qualifications: controlled,
         });
     }
+    const wordingReferences = preparedWording
+        ? new Map(
+              [
+                  ...preparedWording.messages,
+                  ...preparedWording.transmitted,
+              ].flatMap((message) =>
+                  message.text === undefined
+                      ? [[message.messageId, message.contentHash] as const]
+                      : [],
+              ),
+          )
+        : undefined;
     const context = {
         company: run.companySnapshot ?? null,
         originalRequest: run.researchAngle ?? null,
@@ -206,7 +231,12 @@ export async function readWorkbenchFacts(
                     ),
                 };
             }),
-        analystRequests: await projectWorkbenchInstructions(ctx, instructions),
+        analystRequests: await projectWorkbenchInstructions(
+            ctx,
+            instructions,
+            instructionTexts,
+            wordingReferences,
+        ),
         ...(preparation?.sourcesMission
             ? {
                   documentaryPreparation: {
@@ -225,35 +255,34 @@ export async function readWorkbenchFacts(
             : {}),
         activeWork: {},
     };
+    const revision = stableStringify({
+        company: context.company,
+        originalRequest: context.originalRequest,
+        coveragePreset: context.coveragePreset,
+        analystRequests: context.analystRequests,
+        framing: context.framing,
+        research: context.research,
+        materials: context.availableMaterials,
+        ...(context.unavailableDocumentaryMaterials
+            ? {
+                  unavailableDocumentaryMaterials:
+                      context.unavailableDocumentaryMaterials,
+              }
+            : {}),
+        preparation: context.documentaryPreparation ?? null,
+        corpusRevisionId: run.activeCorpusRevisionId ?? null,
+        captureIds: preparation?.sourcesMission?.captureIds ?? [],
+        qualifications: preparation?.sourcesMission?.qualifications ?? [],
+        restrictions:
+            preparation?.sourcesMission?.restrictedContributions ?? [],
+    });
     return {
         kind: "ready",
-        context: {
-            ...context,
-            factsRevisionHash: sha256Hex(
-                stableStringify({
-                    company: context.company,
-                    originalRequest: context.originalRequest,
-                    coveragePreset: context.coveragePreset,
-                    analystRequests: context.analystRequests,
-                    framing: context.framing,
-                    research: context.research,
-                    materials: context.availableMaterials,
-                    ...(context.unavailableDocumentaryMaterials
-                        ? {
-                              unavailableDocumentaryMaterials:
-                                  context.unavailableDocumentaryMaterials,
-                          }
-                        : {}),
-                    preparation: context.documentaryPreparation ?? null,
-                    corpusRevisionId: run.activeCorpusRevisionId ?? null,
-                    captureIds: preparation?.sourcesMission?.captureIds ?? [],
-                    qualifications:
-                        preparation?.sourcesMission?.qualifications ?? [],
-                    restrictions:
-                        preparation?.sourcesMission?.restrictedContributions ??
-                        [],
-                }),
-            ),
-        },
+        context: { ...context, factsRevisionHash: sha256Hex(revision) },
+        ...(context.analystRequests.some(
+            (request) => "originalTextHash" in request,
+        )
+            ? { factsRevisionTemplate: revision }
+            : {}),
     };
 }

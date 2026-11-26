@@ -1,0 +1,253 @@
+--- a/vitest.config.ts
++++ b/vitest.config.ts
+@@ -2,7 +2,7 @@
+ import { configDefaults, defineConfig } from "vitest/config";
+ 
+ export default defineConfig({
+-    resolve: { tsconfigPaths: true },
++    resolve: { tsconfigPaths: true, alias: { "@baseline-convex": new URL("./old/convex", import.meta.url).pathname } },
+     plugins: [viteReact()],
+     test: {
+         environment: "jsdom",
+--- a/src/__tests__/setup/workbench.ts
++++ b/src/__tests__/setup/workbench.ts
+@@ -30,11 +30,12 @@
+     transactionLimits: NonNullable<
+         Parameters<typeof convexTest>[0]["transactionLimits"]
+     > = false,
++    modules = import.meta.glob("/convex/**/*.ts"),
+ ) {
+     vi.useFakeTimers();
+     const t = convexTest({
+         schema,
+-        modules: import.meta.glob("/convex/**/*.ts"),
++        modules,
+         transactionLimits,
+     });
+     agentTest.register(t);
+--- a/src/__tests__/convex/execution/workbench-native-recovery.test.ts
++++ b/src/__tests__/convex/execution/workbench-native-recovery.test.ts
+@@ -222,49 +222,24 @@
+     ).toEqual([]);
+ }, 30000);
+ 
+-test.each([
+-    null,
+-    "completed-unsettled.json",
+-    "fragmented-completed-unsettled.json",
+-])("a crash after publication settles the native task before the next mission (baseline: %s)", async (captureName) => {
+-    const baseline = captureName
+-        ? (JSON.parse(
+-              readFileSync(
+-                  `.agents/artifacts/sources-workflow-no-legacy/baseline-recovery/${captureName}`,
+-                  "utf8",
+-              ),
+-          ) as {
+-              mission: {
+-                  definitionVersion: number;
+-                  result?: { kind: "workbench_v1"; text: string };
+-              };
+-              delivery: { contentHash: string };
+-              messages: { message: { content: string } }[];
+-              resultFragments?: { content: string }[];
+-              resultManifest?: { contentHash: string };
+-          })
+-        : undefined;
+-    const legacyResultJson = baseline?.resultFragments
+-        ?.map(({ content }) => content)
+-        .join("");
+-    const archivedReply = baseline?.messages
+-        .map(({ message }) => message.content)
+-        .join("");
+-    if (baseline) {
+-        const { directedWorkbenchDefinition } = await import(
+-            "@convex/domain/workbenchAgent"
+-        );
+-        assert(archivedReply);
+-        expect(directedWorkbenchDefinition.version).toBe(
+-            baseline.mission.definitionVersion,
+-        );
+-        expect(sha256Hex(archivedReply)).toBe(baseline.delivery.contentHash);
++test.each([false, true])("baseline code creates an original unsettled journal that current code migrates and settles in place (fragmented: %s)", async (fragmented) => {
++    let upgraded = false;
++    const baselineModules = import.meta.glob("/old/convex/**/*.ts");
++    const currentModules = import.meta.glob("/convex/**/*.ts");
++    const modules = Object.fromEntries(Object.entries(currentModules).map(([path, useCurrent]) => [
++        path,
++        () => upgraded ? useCurrent() : baselineModules[`/old${path}`](),
++    ]));
++    const { t, client, runId } = await seedWorkbench(true, undefined, undefined, undefined, undefined, 5, "balanced", false, modules);
++    const { runPiMission: runBaseline } = await import("@baseline-convex/integrations/piMission");
++    const { PiConvexStorage: BaselineStorage } = await import("@baseline-convex/integrations/piStorage");
++    if (fragmented) {
++        const { directedWorkbenchDefinition } = await import("@baseline-convex/domain/workbenchAgent");
+         vi.spyOn(directedWorkbenchDefinition, "simulate").mockReturnValue({
+             kind: "complete",
+-            text: archivedReply,
++            text: `Historical documentary explanation. ${"x".repeat(82_000)} 🧭`,
+         });
+     }
+-    const { t, client, runId } = await seedWorkbench(true);
+     const active = await t.mutation(
+         internal.execution.conversations.startTurn,
+         {
+@@ -275,11 +250,11 @@
+         },
+     );
+     if (!active) throw new Error("Missing active turn");
+-    const commit = PiConvexStorage.prototype.commit;
++    const commit = BaselineStorage.prototype.commit;
+     const fault = vi
+-        .spyOn(PiConvexStorage.prototype, "commit")
++        .spyOn(BaselineStorage.prototype, "commit")
+         .mockImplementation(async function (
+-            this: PiConvexStorage,
++            this: BaselineStorage,
+             writes,
+             context,
+         ) {
+@@ -291,7 +266,7 @@
+     try {
+         await expect(
+             t.action((ctx) =>
+-                runPiMission(
++                runBaseline(
+                     ctx,
+                     { missionId: active.missionId, expectedGeneration: 1 },
+                     "crashed",
+@@ -319,82 +294,22 @@
+     const sessionId = before.session?._id;
+     assert(sessionId);
+     await t.run((ctx) => ctx.db.patch(sessionId, { leaseUntil: 0 }));
+-    if (baseline) {
+-        const { deliveryId, storageMessageRef } = await t.run(async (ctx) => {
+-            const mission = await ctx.db.get(active.missionId);
++    const originalCommits = await t.run((ctx) => ctx.db.query("piCommits")
++        .withIndex("by_session_and_sequence", (q) => q.eq("sessionId", sessionId)).collect());
++    upgraded = true;
++    {
++        const original = await t.run(async (ctx) => {
+             const turn = await ctx.db.get(active.turnId);
+-            assert(
+-                mission &&
+-                    "protocolVersion" in mission &&
+-                    mission.textualOutcome,
+-            );
+             assert(turn?.publishedMessageId);
+             const delivery = await ctx.db.get(turn.publishedMessageId);
+-            assert(delivery?.bodyTextId);
+-            const bodyTextId = delivery.bodyTextId;
+-            const body = await readRetainedText(ctx, bodyTextId);
+-            const run = await ctx.db.get(runId);
+-            assert(run?.ownerVisitorId);
+-            const storageRef = await createConversationStorage(
+-                ctx,
+-                run.ownerVisitorId,
+-            );
+-            expect(sha256Hex(body)).toBe(baseline.delivery.contentHash);
+-            const messageIds = [];
+-            for (const { message } of baseline.messages) {
+-                const saved = await saveMessage(ctx, components.agent, {
+-                    threadId: storageRef,
+-                    message: { role: "assistant", content: message.content },
+-                });
+-                messageIds.push(saved.messageId);
+-            }
+-            const [first] = messageIds;
+-            assert(first);
+-            const storageMessageRef =
+-                messageIds.length === 1 ? first : JSON.stringify(messageIds);
+-            await ctx.db.patch(turn.conversationId, { storageRef });
+-            await ctx.db.patch(delivery._id, {
+-                storageMessageRef,
+-                bodyTextId: undefined,
+-                bodyContentHash: undefined,
+-            });
+-            if (legacyResultJson) {
+-                const { parts, manifest } = retainedTextParts(legacyResultJson);
+-                expect(manifest.contentHash).toBe(
+-                    baseline.resultManifest?.contentHash,
+-                );
+-                expect(parts).toEqual(
+-                    baseline.resultFragments?.map(({ content }) => content),
+-                );
+-                let resultTextId: Id<"retainedTexts"> | undefined;
+-                for (const [index, content] of parts.entries())
+-                    resultTextId = await stageRetainedText(
+-                        ctx,
+-                        `${mission._id}:result`,
+-                        { ...manifest, index, content },
+-                    );
+-                assert(resultTextId);
+-                await ctx.db.patch(mission._id, {
+-                    textualOutcome: undefined,
+-                    resultTextId,
+-                });
+-            } else {
+-                assert(baseline.mission.result);
+-                await ctx.db.patch(mission._id, {
+-                    textualOutcome: undefined,
+-                    result: baseline.mission.result,
+-                });
+-            }
+-            const fragments = await ctx.db
+-                .query("retainedTextFragments")
+-                .withIndex("by_text_and_index", (q) =>
+-                    q.eq("textId", bodyTextId),
+-                )
+-                .collect();
+-            for (const fragment of fragments) await ctx.db.delete(fragment._id);
+-            await ctx.db.delete(bodyTextId);
+-            return { deliveryId: delivery._id, storageMessageRef };
++            assert(delivery?.storageMessageRef && !delivery.bodyTextId);
++            const mission = await ctx.db.get(active.missionId);
++            assert(mission && "protocolVersion" in mission);
++            if (fragmented) expect(mission.resultTextId).toBeDefined();
++            else expect(mission.result?.kind).toBe("workbench_v1");
++            return { deliveryId: delivery._id, storageMessageRef: delivery.storageMessageRef, contentHash: delivery.contentHash };
+         });
++        const { deliveryId, storageMessageRef } = original;
+         for (const phase of ["draining", "frozen", "active"] as const)
+             await t.mutation(
+                 internal.execution.retainedText.advanceStreamUpgrade,
+@@ -411 +326,3 @@
+-        const scope = { runId, deliveryId };
++        const legacyDeliveries = await t.run((ctx) => ctx.db.query("agentMessageDeliveries").withIndex("by_run", (q) => q.eq("runId", runId)).collect());
++        for (const delivery of legacyDeliveries) {
++        const scope = { runId, deliveryId: delivery._id };
+@@ -427,6 +344,7 @@
+                 sourceIdentity: source.sourceIdentity,
+             },
+         );
++        }
+         await t.action(
+             internal.execution.missionData.migrateLegacyMissionResult,
+             {
+@@ -453,6 +371,18 @@
+         const settled = await t.run((ctx) => ctx.db.get(sessionId));
+         assert(settled);
+         expect(settled.settledSequence).toBe(settled.sequence);
++        const recovered = await t.run(async (ctx) => ({
++            commits: await ctx.db.query("piCommits").withIndex("by_session_and_sequence", (q) =>
++                q.eq("sessionId", sessionId),
++            ).collect(),
++            mission: await ctx.db.get(active.missionId),
++        }));
++        expect(recovered.commits.slice(0, originalCommits.length)).toEqual(originalCommits);
++        expect(recovered.mission).toMatchObject({
++            _id: active.missionId,
++            definitionVersion: 5,
++            textualOutcome: { contentHash: original.contentHash },
++        });
+         const retained = await t.run((ctx) => ctx.db.get(deliveryId));
+         expect(retained).toMatchObject({
+             storageMessageRef,
+@@ -468,7 +398,7 @@
+         const replies = history.page.filter(({ role }) => role === "assistant");
+         expect(replies.map(({ _id }) => _id)).toEqual([deliveryId]);
+         assert(replies[0]);
+-        expect(sha256Hex(replies[0].text)).toBe(baseline.delivery.contentHash);
++        expect(sha256Hex(replies[0].text)).toBe(original.contentHash);
+         expect(
+             await t.run((ctx) => ctx.db.query("providerCalls").collect()),
+         ).toEqual([]);

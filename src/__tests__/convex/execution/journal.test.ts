@@ -1,6 +1,6 @@
 import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { sha256Hex } from "@convex/domain/sourcePassages";
+import { advanceSha256, sha256Hex } from "@convex/domain/sourcePassages";
 import { recordMissionEvent } from "@convex/execution/authority";
 import {
     projectMissionHistoryEvent,
@@ -8,20 +8,29 @@ import {
     retainExecutionEventPayload,
     retainInvocationPayload,
 } from "@convex/execution/journal";
+import { stageObservedBody } from "@convex/execution/observedReply";
 import {
     appendRetainedText,
     completeRetainedText,
-    readRetainedText,
-    sealRetainedText,
+    finalizeRetainedTextStream,
+    retainedTextFragment,
+    retainedTextParts,
 } from "@convex/execution/retainedText";
+import { recoverPiInvocationBody } from "@convex/integrations/piInvocation";
 import {
     MAX_OPERATION_RESULT_BYTES,
     TEXT_FRAGMENT_CHARACTERS,
 } from "@convex/resourcePolicy";
+import schema from "@convex/schema";
 import { makeFunctionReference } from "convex/server";
 import { getDocumentSize } from "convex/values";
+import { convexTest } from "convex-test";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedHistoryMission } from "@/__tests__/setup/execution-history";
+import {
+    readHistoryEvent,
+    readRetainedBody,
+} from "@/__tests__/setup/retained-history";
 import {
     seedInspectedEvidence,
     seedSourcePreparation,
@@ -63,10 +72,10 @@ test("append storage packs slow Unicode chunks and rejects changed or out-of-ord
         await f.t.run((ctx) =>
             appendRetainedText(ctx, "diagnostic-stream", i, "a"),
         );
-    await f.t.run((ctx) => sealRetainedText(ctx, id));
-    await f.t.run((ctx) => sealRetainedText(ctx, id));
+    await f.t.run((ctx) => finalizeRetainedTextStream(ctx, id));
+    await f.t.run((ctx) => finalizeRetainedTextStream(ctx, id));
     const expected = `${head}\ude00${"a".repeat(10)}`;
-    expect(await f.t.run((ctx) => readRetainedText(ctx, id))).toBe(expected);
+    expect(await readRetainedBody(f.t, id)).toBe(expected);
     const text = await f.t.run((ctx) => ctx.db.get(id));
     expect(text?.fragmentHashes).toHaveLength(2);
     expect(text?.sizeBytes).toBe(new TextEncoder().encode(expected).length);
@@ -76,6 +85,110 @@ test("append storage packs slow Unicode chunks and rejects changed or out-of-ord
             appendRetainedText(ctx, "diagnostic-stream", 12, "late"),
         ),
     ).rejects.toThrow("retained_text_sequence");
+});
+
+test("seals a streamed body larger than the transaction read budget", async () => {
+    const t = convexTest({
+        schema,
+        modules: import.meta.glob("/convex/**/*.ts"),
+        transactionLimits: { bytesRead: 16 * 1024 * 1024 },
+    });
+    const fragment = "界".repeat(TEXT_FRAGMENT_CHARACTERS);
+    const fragmentCount = 100;
+    const key = "large-diagnostic-stream";
+    const id = await t.run((ctx) => appendRetainedText(ctx, key, 0, fragment));
+    for (let sequence = 1; sequence < fragmentCount; sequence++) {
+        await t.run((ctx) => appendRetainedText(ctx, key, sequence, fragment));
+    }
+    const tail = "End 😀";
+    await t.run((ctx) => appendRetainedText(ctx, key, fragmentCount, tail));
+
+    const { manifest, metrics } = await t.run(async (ctx) => ({
+        manifest: await finalizeRetainedTextStream(ctx, id),
+        metrics: await ctx.meta.getTransactionMetrics(),
+    }));
+    expect(metrics.documentsRead.used).toBeLessThanOrEqual(3);
+    expect(metrics.bytesRead.used).toBeLessThan(32 * 1024);
+
+    expect(manifest.characters).toBe(6_144_006);
+    expect(manifest.sizeBytes).toBe(18_432_008);
+    expect(manifest.fragmentEnds.at(-2)).toBe(6_144_000);
+    expect(manifest.fragmentHashes).toHaveLength(101);
+    expect(manifest.contentHash).toBe(
+        sha256Hex(fragment.repeat(fragmentCount) + tail),
+    );
+});
+
+test("an append that would exceed the manifest array limit preserves the sealable prefix", async () => {
+    const { t } = await seedHistoryMission();
+    const fragment = "x".repeat(TEXT_FRAGMENT_CHARACTERS);
+    const hash = sha256Hex(fragment);
+    const fragmentCount = 8191;
+    const characters = fragmentCount * fragment.length;
+    const id = await t.run((ctx) =>
+        ctx.db.insert("retainedTexts", {
+            key: "manifest-capacity",
+            contentHash: sha256Hex(""),
+            sizeBytes: 0,
+            characters: 0,
+            fragmentHashes: Array.from({ length: fragmentCount }, () => hash),
+            fragmentEnds: Array.from(
+                { length: fragmentCount },
+                (_, index) => (index + 1) * fragment.length,
+            ),
+            received: 0,
+            receivedBytes: characters + 1,
+            receivedCharacters: characters + 1,
+            checkpoint: {
+                ...advanceSha256(undefined, new TextEncoder().encode(fragment)),
+                sizeBytes: characters,
+            },
+            stream: {
+                sealed: false,
+                nextSequence: fragmentCount + 1,
+                fragments: fragmentCount,
+                tail: "x",
+            },
+        }),
+    );
+    const before = await t.run((ctx) => ctx.db.get(id));
+    await expect(
+        t.run((ctx) =>
+            appendRetainedText(
+                ctx,
+                "manifest-capacity",
+                fragmentCount + 1,
+                fragment,
+            ),
+        ),
+    ).rejects.toThrow("retained_text_manifest_capacity");
+    expect(await t.run((ctx) => ctx.db.get(id))).toEqual(before);
+    const sealed = await t.run((ctx) => finalizeRetainedTextStream(ctx, id));
+    expect(sealed.fragmentHashes).toHaveLength(8192);
+    expect(sealed.fragmentEnds.at(-1)).toBe(characters + 1);
+});
+
+test("stream finalization refuses a missing packed manifest without reconstructing or mutating it", async () => {
+    const f = await seedHistoryMission();
+    const id = await f.t.run((ctx) =>
+        appendRetainedText(
+            ctx,
+            "missing-manifest",
+            0,
+            "p".repeat(TEXT_FRAGMENT_CHARACTERS),
+        ),
+    );
+    await f.t.run((ctx) =>
+        ctx.db.patch(id, {
+            fragmentHashes: [],
+            fragmentEnds: [],
+        }),
+    );
+    const before = await f.t.run((ctx) => ctx.db.get(id));
+    await expect(
+        f.t.run((ctx) => finalizeRetainedTextStream(ctx, id)),
+    ).rejects.toThrow("retained_text_incomplete");
+    expect(await f.t.run((ctx) => ctx.db.get(id))).toEqual(before);
 });
 
 test.each([
@@ -123,7 +236,7 @@ test.each([
             .first(),
     );
     assert(event?.invocationPayloadId && event.payload);
-    const full = await f.t.run((ctx) => projectMissionHistoryEvent(ctx, event));
+    const full = await readHistoryEvent(f.t, event);
     let actual = "";
     let offset = 0;
     let total = Infinity;
@@ -170,9 +283,7 @@ test("older_event_never_acquires_a_later_reply", async () => {
             .unique(),
     );
     assert(event);
-    const before = await f.t.run((ctx) =>
-        projectMissionHistoryEvent(ctx, event),
-    );
+    const before = await readHistoryEvent(f.t, event);
     await f.t.run(async (ctx) => {
         await ctx.db.patch(begun.invocationId, {
             outputJson: "Later reply",
@@ -187,9 +298,7 @@ test("older_event_never_acquires_a_later_reply", async () => {
             JSON.stringify({ text: "Later reply" }),
         );
     });
-    expect(
-        await f.t.run((ctx) => projectMissionHistoryEvent(ctx, event)),
-    ).toEqual(before);
+    expect(await readHistoryEvent(f.t, event)).toEqual(before);
     expect(before.json).toContain("Exact original request");
     expect(before.json).not.toContain("Later reply");
 });
@@ -215,9 +324,7 @@ test("terminal metadata cannot acquire a reply retained after its event", async 
         );
     });
     assert(event);
-    const before = await f.t.run((ctx) =>
-        projectMissionHistoryEvent(ctx, event),
-    );
+    const before = await readHistoryEvent(f.t, event);
     await f.t.run(async (ctx) => {
         const invocation = await ctx.db.get(begun.invocationId);
         assert(invocation);
@@ -228,9 +335,7 @@ test("terminal metadata cannot acquire a reply retained after its event", async 
             JSON.stringify({ text: "Reply retained afterwards" }),
         );
     });
-    expect(
-        await f.t.run((ctx) => projectMissionHistoryEvent(ctx, event)),
-    ).toEqual(before);
+    expect(await readHistoryEvent(f.t, event)).toEqual(before);
 });
 
 test("a recorded invocation part without its immutable payload is an integrity failure", async () => {
@@ -424,8 +529,9 @@ test("new invocations identify their journal version without expanding continuat
 async function oneShotFixture(
     logicalInputHash?: string,
     operation = "source_qualification",
+    existing?: Parameters<typeof seedSourcePreparation>[1],
 ) {
-    const fixture = await seedSourcePreparation({ models: true });
+    const fixture = await seedSourcePreparation({ models: true }, existing);
     const { t, runId, corpusRevisionId, sourceId } = fixture;
     await t.mutation(internal.researchPlanning.createForRun, {
         runId,
@@ -756,6 +862,91 @@ test("an oversized observable reply does not discard the normalized result or pr
     });
 });
 
+test("one-shot settlement links a large result and provider reply without hydrating their fragments", async () => {
+    const { t, invocationId, attempt, providerCallId } = await oneShotFixture(
+        undefined,
+        undefined,
+        convexTest({
+            schema,
+            modules: import.meta.glob("/convex/**/*.ts"),
+            transactionLimits: { bytesRead: 128 * 1024 },
+        }),
+    );
+    const output = JSON.stringify({
+        status: "succeeded",
+        finding: "é".repeat(42_000),
+    });
+    const envelope = JSON.stringify({
+        content: "Exact provider output 🧭".repeat(28_000),
+        version: 1,
+    });
+    const stage = internal.execution.invocationLifecycle.stageObservedReply;
+    const stageBody = async (part: "response" | "reply", text: string) => {
+        const { parts, manifest } = retainedTextParts(text);
+        let id: Id<"retainedTexts"> | undefined;
+        for (const [index, content] of parts.entries())
+            id = await t.mutation(stage, {
+                invocationId,
+                expectedGeneration: 3,
+                part,
+                fragment: { ...manifest, index, content },
+            });
+        assert(id);
+        return id;
+    };
+    const outputTextId = await stageBody("response", output);
+    const observableReplyTextId = await stageBody("reply", envelope);
+    const finish = internal.execution.invocationLifecycle.finishOneShot;
+    const args = {
+        invocationId,
+        outputTextId,
+        observableReplyTextId,
+        attempt: {
+            ...attempt,
+            status: "succeeded" as const,
+            dispatchOutcome: "response_received" as const,
+        },
+    };
+    await expect(
+        t.mutation(finish, { ...args, outputTextId: observableReplyTextId }),
+    ).rejects.toThrow("invocation_result_invalid");
+    expect(await t.run((ctx) => ctx.db.get(providerCallId))).toMatchObject({
+        status: "started",
+    });
+    await t.mutation(finish, args);
+    await t.mutation(finish, args);
+    await t.run(async (ctx) => {
+        expect(await ctx.db.get(providerCallId)).toMatchObject({
+            status: "succeeded",
+        });
+        expect(await ctx.db.get(invocationId)).toMatchObject({
+            status: "returned",
+            outputTextId,
+        });
+        expect(
+            await ctx.db.query("agentInvocationPayloads").unique(),
+        ).toMatchObject({
+            state: "complete",
+            textId: observableReplyTextId,
+            contentHash: sha256Hex(envelope),
+        });
+    });
+    for (const [id, original] of [
+        [outputTextId, output],
+        [observableReplyTextId, envelope],
+    ] as const) {
+        const manifest = await t.run((ctx) => completeRetainedText(ctx, id));
+        const fragments = [];
+        for (let index = 0; index < manifest.fragmentHashes.length; index++)
+            fragments.push(
+                await t.run((ctx) =>
+                    retainedTextFragment(ctx, manifest, index),
+                ),
+            );
+        expect(fragments.join("")).toBe(original);
+    }
+});
+
 test("dispatch authority is checked again after request persistence", async () => {
     const { t, runId, invocationId } = await oneShotFixture();
     await t.mutation(internal.execution.invocations.retainRequest, {
@@ -786,6 +977,44 @@ test("dispatch authority is checked again after request persistence", async () =
         ctx.db.query("agentInvocationPayloads").unique(),
     );
     expect(payload?.state).toBe("complete");
+});
+
+test("request staging refuses a manifest that would exceed the database array capacity", async () => {
+    const { t, missionId } = await seedHistoryMission();
+    const begun = await t.mutation(internal.execution.invocations.begin, {
+        missionId,
+        expectedGeneration: 1,
+        taskKey: "oversized-request-manifest",
+        provenance: "simulation",
+    });
+    assert(begun.kind === "ready");
+    const count = 8193;
+    const content = "x".repeat(TEXT_FRAGMENT_CHARACTERS);
+    const hash = sha256Hex(content);
+    await expect(
+        t.mutation(internal.execution.invocationLifecycle.stageRequest, {
+            invocationId: begun.invocationId,
+            expectedGeneration: 1,
+            fragment: {
+                index: 0,
+                content,
+                contentHash: hash,
+                sizeBytes: count * content.length,
+                characters: count * content.length,
+                fragmentHashes: Array.from({ length: count }, () => hash),
+            },
+        }),
+    ).rejects.toThrow("retained_text_manifest_capacity");
+    expect(
+        await t.run((ctx) =>
+            ctx.db
+                .query("retainedTexts")
+                .withIndex("by_key", (q) =>
+                    q.eq("key", `${begun.invocationId}:request`),
+                )
+                .unique(),
+        ),
+    ).toBeNull();
 });
 
 test("fragmented requests publish only after all exact fragments and refuse conflicting retries", async () => {
@@ -847,9 +1076,7 @@ test("fragmented requests publish only after all exact fragments and refuse conf
             .unique(),
     );
     assert(event);
-    const observed = await t.run((ctx) =>
-        projectMissionHistoryEvent(ctx, event),
-    );
+    const observed = await readHistoryEvent(t, event);
     expect(JSON.parse(observed.json).invocation.value).toEqual(
         JSON.parse(json),
     );
@@ -917,13 +1144,30 @@ test("a confirmed native observable reply retains complete large content before 
     const replyJson = JSON.stringify({
         version: 1,
         content: "Exact provider observation 🧭".repeat(28000),
+        provenance: "simulation",
     });
-    await f.t.mutation(internal.execution.invocations.retainOutput, {
-        invocationId: begun.invocationId,
-        expectedGeneration: 1,
+    const args = { invocationId: begun.invocationId, expectedGeneration: 1 };
+    const { parts, manifest } = retainedTextParts(replyJson);
+    let observableReplyTextId: Id<"retainedTexts"> | undefined;
+    for (const [index, content] of parts.entries())
+        observableReplyTextId = await f.t.mutation(
+            internal.execution.invocationLifecycle.stageObservedReply,
+            {
+                ...args,
+                part: "reply",
+                fragment: { ...manifest, index, content },
+            },
+        );
+    assert(observableReplyTextId);
+    const retain = internal.execution.invocationLifecycle.retainOutput;
+    await f.t.mutation(retain, {
+        ...args,
         responseJson: JSON.stringify({ kind: "operations", requests: [] }),
-        observableReplyJson: replyJson,
+        observableReplyTextId,
     });
+    expect(
+        await f.t.run((ctx) => ctx.db.query("providerCalls").collect()),
+    ).toEqual([]);
     const payload = await f.t.run((ctx) =>
         ctx.db
             .query("agentInvocationPayloads")
@@ -932,7 +1176,10 @@ test("a confirmed native observable reply retains complete large content before 
             )
             .unique(),
     );
-    expect(payload?.state).toBe("complete");
+    expect(payload).toMatchObject({
+        state: "complete",
+        textId: observableReplyTextId,
+    });
     const event = await f.t.run((ctx) =>
         ctx.db
             .query("agentExecutionEvents")
@@ -944,9 +1191,7 @@ test("a confirmed native observable reply retains complete large content before 
             .unique(),
     );
     assert(event);
-    const history = await f.t.run((ctx) =>
-        projectMissionHistoryEvent(ctx, event),
-    );
+    const history = await readHistoryEvent(f.t, event);
     expect(JSON.parse(history.json).invocation.value).toEqual(
         JSON.parse(replyJson),
     );
@@ -967,11 +1212,20 @@ test("recovery retention leaves document capacity for bounded lifecycle results"
         }),
     );
     const rawOutputJson = JSON.stringify({ original: "r".repeat(400 * 1024) });
+    const rawOutputTextId = await f.t.action((ctx) =>
+        stageObservedBody(
+            ctx,
+            { invocationId: begun.invocationId, expectedGeneration: 1 },
+            "raw",
+            rawOutputJson,
+        ),
+    );
+    assert(rawOutputTextId);
     await f.t.mutation(internal.execution.invocations.retainOutput, {
         invocationId: begun.invocationId,
         expectedGeneration: 1,
         responseJson: JSON.stringify({ kind: "operations", requests: [] }),
-        rawOutputJson,
+        rawOutputTextId,
     });
     const invocation = await f.t.run((ctx) => ctx.db.get(begun.invocationId));
     assert(invocation);
@@ -987,11 +1241,12 @@ test("recovery retention leaves document capacity for bounded lifecycle results"
             },
         }),
     ).toBeLessThan(1024 * 1024);
-    const { invocationRawOutputJson } = await import(
-        "@convex/execution/journal"
-    );
     expect(
-        await f.t.run((ctx) => invocationRawOutputJson(ctx, invocation)),
+        await f.t.action((ctx) =>
+            recoverPiInvocationBody(ctx, invocation, "raw", {
+                expectedGeneration: 1,
+            }),
+        ),
     ).toBe(rawOutputJson);
 });
 

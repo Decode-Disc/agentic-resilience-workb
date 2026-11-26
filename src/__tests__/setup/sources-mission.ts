@@ -1,10 +1,16 @@
 import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { MutationCtx } from "@convex/_generated/server";
+import { stableStringify } from "@convex/domain/sourcePassages";
 import { sourceCaptureScopeKey } from "@convex/domain/sourceRetrievalPolicy";
 import { initializeSources } from "@convex/domain/sources";
 import { sourcesV5Definition as retainedSourcesDefinition } from "@convex/domain/sourcesAgent";
+import type { sourcesCompletionProposalValidator } from "@convex/domain/sourcesContracts";
+import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import type { AgentDefinition } from "@convex/execution/agentDefinition";
+import { stageObservedBody } from "@convex/execution/observedReply";
+import { preparePiResult } from "@convex/integrations/piInvocation";
+import type { Infer } from "convex/values";
 import { vi } from "vitest";
 import { seedInspectedEvidence } from "./source-preparation";
 
@@ -252,4 +258,60 @@ export async function seedObservedSources(
     if (nativeOutcome.kind !== "success")
         throw new Error("Native fixture read failed");
     return { ...f, nativeReadRequestId };
+}
+
+/** Retains exact Sources proposals through native observation before testing adoption or refusal. */
+export async function retainSourcesProposal(
+    t: Awaited<ReturnType<typeof seedCapturedSources>>["t"],
+    authority: {
+        invocationId: Id<"agentInvocations">;
+        expectedGeneration: number;
+    },
+    response: Infer<typeof sourcesCompletionProposalValidator>,
+) {
+    const responseJson = stableStringify(response);
+    const responseTextId = await t.action((ctx) =>
+        stageObservedBody(ctx, authority, "response", responseJson),
+    );
+    const envelope = stableStringify({
+        version: 1,
+        provenance: "simulation",
+        response,
+    });
+    const observableReplyTextId = await t.action((ctx) =>
+        stageObservedBody(ctx, authority, "reply", envelope),
+    );
+    await t.mutation(internal.execution.invocations.retainOutput, {
+        ...authority,
+        ...(responseTextId ? { responseTextId } : { responseJson }),
+        ...(observableReplyTextId
+            ? { observableReplyTextId }
+            : { observableReplyJson: envelope }),
+    });
+    return responseJson;
+}
+
+/** Prepares a native structured result before fixtures invoke its owning settlement mutation. */
+export async function prepareSourcesResult(
+    t: Awaited<ReturnType<typeof seedCapturedSources>>["t"],
+    authority: Parameters<typeof stageObservedBody>[1],
+    response: Infer<typeof sourcesCompletionProposalValidator>,
+) {
+    const responseJson = await retainSourcesProposal(t, authority, response);
+    const { mission } = await t.query(
+        internal.execution.invocationLifecycle.forExecution,
+        authority,
+    );
+    const preparation = await t.action((ctx) =>
+        preparePiResult(
+            ctx,
+            authority,
+            response,
+            responseJson,
+            getAgentDefinition(mission.definitionId, mission.definitionVersion),
+        ),
+    );
+    if (!preparation?.preparedResult)
+        throw new Error("Sources fixture completion was not prepared");
+    return preparation.preparedResult;
 }

@@ -42,6 +42,7 @@ import {
 import {
     CAMPAIGN_REVIEW_REPORT_PATH,
     CampaignReviewFormatError,
+    campaignReviewNavigation,
     type campaignReviewTemplate,
     campaignReviewVerdicts,
     listCampaignReviewEvidence,
@@ -1259,7 +1260,7 @@ export async function runPiCampaignReview(options: {
     const captured = z
         .object({ manifest: campaignManifestSchema })
         .parse(contextFile("campaign-lot.json"));
-    const context = {
+    const baseContext = {
         objective: captured.manifest.objective,
         capability: captured.manifest.capability,
         mode: captured.manifest.mode,
@@ -1328,6 +1329,22 @@ export async function runPiCampaignReview(options: {
         pinPath && existsSync(pinPath)
             ? readReviewJson(pinPath, missionSchema)
             : undefined;
+    const legacyMission =
+        retained &&
+        !Object.hasOwn(retained.context, "observationPrefixes") &&
+        !Object.hasOwn(retained.context, "scenarioStatuses");
+    const context = legacyMission
+        ? baseContext
+        : {
+              ...baseContext,
+              ...campaignReviewNavigation(
+                  root,
+                  template.evidenceHash,
+                  captured.manifest.version === 1
+                      ? []
+                      : captured.manifest.scenarios.map(({ id }) => id),
+              ),
+          };
     if (retained) {
         if (retained.resourcePolicy !== RESOURCE_POLICY_VERSION)
             return {
@@ -1618,7 +1635,12 @@ export async function runPiCampaignReview(options: {
         tools: ["read", "ls", "grep", ...reportTools.map((tool) => tool.name)],
         customTools: [read, list, grep, ...reportTools],
         resourceLoader: loader,
-        sessionManager: SessionManager.inMemory(root),
+        sessionManager: SessionManager.inMemory(
+            root,
+            legacyMission
+                ? undefined
+                : { id: `review-${template.evidenceHash.slice(0, 48)}` },
+        ),
         settingsManager: SettingsManager.inMemory({
             compaction: { enabled: true },
             retry: { enabled: false, provider: { maxRetries: 0 } },
@@ -1704,7 +1726,16 @@ export async function runPiCampaignReview(options: {
                       messages: [
                           ...context.messages,
                           {
-                              role: "system" as const,
+                              role:
+                                  legacyMission ||
+                                  (selected.compat &&
+                                      "supportsMidConvoSystemMessages" in
+                                          selected.compat &&
+                                      selected.compat
+                                          .supportsMidConvoSystemMessages ===
+                                          true)
+                                      ? ("system" as const)
+                                      : ("user" as const),
                               content: `Review request ${attempt}. ${
                                   requestLimit === undefined
                                       ? "No request ceiling was supplied in the captured mandate."
@@ -1768,7 +1799,12 @@ export async function runPiCampaignReview(options: {
                 ? {}
                 : {
                       fetch: options.transport.fetch(attempt, purpose),
-                      cacheRetention: "none",
+                      // Pi gives one-off compactions a fresh routing ID. Putting it in the
+                      // body would change the request hash when replaying a retained response.
+                      cacheRetention:
+                          legacyMission || purpose === "compaction"
+                              ? "none"
+                              : "short",
                       transport: "sse",
                   }),
         });

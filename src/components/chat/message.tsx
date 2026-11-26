@@ -311,9 +311,11 @@ export function MessageActions({ className, ...props }: ComponentProps<"div">) {
 export function MessageFooter({
     createdAt,
     text,
+    copyDisabled,
 }: {
     createdAt?: Date | string;
     text?: string;
+    copyDisabled?: boolean;
 }) {
     const date =
         typeof createdAt === "string" ? new Date(createdAt) : createdAt;
@@ -362,7 +364,7 @@ export function MessageFooter({
             ) : (
                 <span data-slot="message-time">{label}</span>
             )}
-            <MessageCopy text={text} />
+            <MessageCopy text={text} disabled={copyDisabled} />
         </MessageActions>
     );
 }

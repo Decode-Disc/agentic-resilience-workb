@@ -19,8 +19,8 @@ type ReadPage = (
     >
 >;
 
-import { expect, test, vi } from "vitest";
 import { createHash } from "node:crypto";
+import { expect, test, vi } from "vitest";
 
 const invocation: Doc<"agentInvocations"> = {
     _id: "invocation" as Id<"agentInvocations">,
@@ -118,21 +118,25 @@ test("transcript export hydrates and verifies fragmented admitted input and requ
     const readText = vi.fn(
         async (args: {
             part: string;
-            paginationOpts: { cursor: string | null };
+            paginationOpts: { cursor: string | null; numItems: number };
         }) => {
             const content = args.part === "input" ? input : request;
-            const index = args.paginationOpts.cursor === null ? 0 : 1;
+            expect(args.paginationOpts.numItems).toBe(4);
+            const first = args.paginationOpts.cursor === null;
+            const fragmentLength = 16_000;
+            const offset = first ? 0 : 4;
+            const count = first
+                ? 4
+                : Math.ceil(content.length / fragmentLength) - offset;
             return {
-                page: [
-                    {
-                        index,
-                        content:
-                            index === 0
-                                ? content.slice(0, 60000)
-                                : content.slice(60000),
-                    },
-                ],
-                isDone: index === 1,
+                page: Array.from({ length: count }, (_, index) => ({
+                    index: offset + index,
+                    content: content.slice(
+                        (offset + index) * fragmentLength,
+                        (offset + index + 1) * fragmentLength,
+                    ),
+                })),
+                isDone: !first,
                 continueCursor: "next",
             };
         },

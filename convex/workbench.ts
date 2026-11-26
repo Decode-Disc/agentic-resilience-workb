@@ -49,10 +49,17 @@ import {
     requireMissionAuthority,
 } from "@convex/execution/authority";
 import {
+    conversationBodyAccess,
+    conversationBodyReference,
+    conversationPageBodies,
+    readConversationWording,
+} from "@convex/execution/conversationBodies";
+import {
     analystConversationTurn,
     conversationTurnForAnalyst,
     isApprovalReceiptMessage,
     recordControlExchange,
+    requireConversationHistoryRun,
     requireConversationRequestKey,
     requireInstructionVersion,
 } from "@convex/execution/conversations";
@@ -67,7 +74,6 @@ import {
     researchControlConfirmation,
     resumeResearch,
 } from "@convex/execution/researchControl";
-import { readConversationMessages } from "@convex/integrations/agentStorage";
 import { reasoningChoices } from "@convex/integrations/modelRouting";
 import {
     modelPrepared,
@@ -302,11 +308,7 @@ export const command = mutation({
                 confirmation.conversationId !== conversation._id
             )
                 throw executionError("conversation_message_unavailable");
-            const [text] = await readConversationMessages(
-                ctx,
-                conversation.storageRef,
-                [confirmation.storageMessageRef],
-            );
+            const [text] = await readConversationWording(ctx, [confirmation]);
             if (text === undefined)
                 throw executionError("conversation_message_unavailable");
             return {
@@ -800,6 +802,7 @@ export const history = query({
     args: {
         runId: v.id("researchRuns"),
         paginationOpts: paginationOptsValidator,
+        bodyAccess: conversationBodyAccess,
     },
     returns: paginationResultValidator(
         v.object({
@@ -807,11 +810,12 @@ export const history = query({
             _id: v.id("agentMessageDeliveries"),
             approvalRequestIds: v.optional(v.array(v.id("approvalRequests"))),
             text: v.string(),
+            body: conversationBodyReference,
             work: v.union(turnView, v.null()),
         }),
     ),
     handler: async (ctx, args) => {
-        await requireWorkspaceRun(ctx, args.runId);
+        await requireConversationHistoryRun(ctx, args.runId);
         if (args.paginationOpts.numItems > 20)
             throw new Error("Conversation page exceeds capacity");
         const page = await ctx.db
@@ -828,11 +832,7 @@ export const history = query({
             (message) => !isApprovalReceiptMessage(message),
         );
         if (visible.length === 0) return { ...page, page: [] };
-        const texts = await readConversationMessages(
-            ctx,
-            conversation.storageRef,
-            visible.map((m) => m.storageMessageRef),
-        );
+        const bodies = conversationPageBodies(visible);
         const turns = new Map<
             string,
             Awaited<ReturnType<typeof readTurn>> & { deferred?: boolean }
@@ -881,9 +881,8 @@ export const history = query({
         return {
             ...page,
             page: visible.map((m, index) => {
-                const text = texts[index];
-                if (text === undefined)
-                    throw new Error("Conversation message unavailable");
+                const body = bodies[index];
+                if (!body) throw new Error("Conversation message unavailable");
                 const approvalRequestIds =
                     m.role === "assistant" && m.delivery === "reply" && m.turnId
                         ? turnApprovals.get(m.turnId)
@@ -904,7 +903,7 @@ export const history = query({
                         ? { approvalRequestId: m.approvalRequestId }
                         : {}),
                     ...(approvalRequestIds ? { approvalRequestIds } : {}),
-                    text,
+                    ...body,
                     work: m.turnId ? (turns.get(m.turnId) ?? null) : null,
                 };
             }),
@@ -973,11 +972,7 @@ export const performInstruction = internalMutation({
                     (run.researchControlRevision ?? 0)
             )
                 throw executionError("version_conflict");
-            const [text] = await readConversationMessages(
-                ctx,
-                conversation.storageRef,
-                [message.storageMessageRef],
-            );
+            const [text] = await readConversationWording(ctx, [message]);
             if (!text) throw executionError("instruction_not_authorized");
             const control = explicitResearchControl(text);
             const commandAction =
@@ -1095,11 +1090,7 @@ export const performInstruction = internalMutation({
                     (run.researchControlRevision ?? 0)
             )
                 throw executionError("version_conflict");
-            const [text] = await readConversationMessages(
-                ctx,
-                conversation.storageRef,
-                [message.storageMessageRef],
-            );
+            const [text] = await readConversationWording(ctx, [message]);
             if (!text || explicitResearchControl(text) !== input.action)
                 throw executionError("explicit_research_intent_required");
             const generation = await (input.action === "pause"

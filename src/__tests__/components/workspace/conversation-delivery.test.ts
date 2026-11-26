@@ -46,6 +46,14 @@ function cache(
                 args: { runId, paginationOpts: { cursor: null, numItems: 20 } },
                 value: { page: [], isDone: true, continueCursor: "" },
             },
+            {
+                args: {
+                    runId,
+                    bodyAccess: "separate",
+                    paginationOpts: { cursor: null, numItems: 20 },
+                },
+                value: { page: [], isDone: true, continueCursor: "" },
+            },
         ]);
     const setQuery = vi.fn<OptimisticLocalStore["setQuery"]>();
     return { getQuery, getAllQueries, setQuery };
@@ -69,7 +77,7 @@ test("an idle submission enters the real SDK paginated cache under its stable re
     expect(write && getFunctionName(write[0])).toBe(
         getFunctionName(api.workbench.history),
     );
-    expect(write?.[1]).toMatchObject({ runId });
+    expect(write?.[1]).toMatchObject({ runId, bodyAccess: "separate" });
     expect(store.setQuery.mock.calls[0]?.[2]).toMatchObject({
         page: [
             {
@@ -96,6 +104,7 @@ test("an existing request on a later page is not inserted a second time", () => 
         {
             args: {
                 runId,
+                bodyAccess: "separate",
                 paginationOpts: { cursor: "next-page", numItems: 20 },
             },
             value: {

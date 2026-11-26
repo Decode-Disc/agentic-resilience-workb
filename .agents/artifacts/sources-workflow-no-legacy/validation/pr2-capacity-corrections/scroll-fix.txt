@@ -1,0 +1,39 @@
+$ playwright test --config workbench-ui.playwright.config.ts launched-layout.spec.ts -g 'retains the reader at 390px'
+
+Running 1 test using 1 worker
+
+(node:3607440) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 src/__tests__/design-system/workbench-ui/browser/launched-layout.spec.ts:4:5 › mobile launched opens conversation from Ask AI and retains the reader at 390px (15.0s)
+
+
+  1) src/__tests__/design-system/workbench-ui/browser/launched-layout.spec.ts:4:5 › mobile launched opens conversation from Ask AI and retains the reader at 390px 
+
+    Error: expect(locator).toBeInViewport() failed
+
+    Locator:  getByText('I can help frame this research before it starts.', { exact: true })
+    Expected: in viewport
+    Received: viewport ratio 0
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toBeInViewport" with timeout 5000ms
+      - waiting for getByText('I can help frame this research before it starts.', { exact: true })
+        12 × locator resolved to <p>I can help frame this research before it starts.</p>
+           - unexpected value "viewport ratio 0"
+
+
+      90 |             await expect(readingAnchor).toBeInViewport();
+      91 |             await page.setViewportSize({ width: 1440, height: 1000 });
+    > 92 |             await expect(readingAnchor).toBeInViewport();
+         |                                         ^
+      93 |             await expect(
+      94 |                 page.getByRole("textbox", { name: "Ask about the sources" }),
+      95 |             ).toHaveValue("Keep this question while I inspect the progress.");
+        at /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/design-system/workbench-ui/browser/launched-layout.spec.ts:92:41
+
+    Error Context: test-results/workbench-ui/launched-layout-mobile-lau-dd987-retains-the-reader-at-390px/error-context.md
+
+  1 failed
+    src/__tests__/design-system/workbench-ui/browser/launched-layout.spec.ts:4:5 › mobile launched opens conversation from Ask AI and retains the reader at 390px 
+[ELIFECYCLE] Command failed with exit code 1.

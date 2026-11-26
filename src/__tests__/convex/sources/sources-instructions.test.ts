@@ -326,7 +326,7 @@ test.each([
         provenance: "simulation",
     });
     expect(begun.kind).toBe("ready");
-    if (begun.kind !== "ready") throw new Error(begun.code);
+    if (begun.kind !== "ready") throw new Error(JSON.stringify(begun));
     if (delivered)
         await f.t.mutation(internal.workbench.processInstructions, {
             runId: f.runId,
@@ -361,7 +361,7 @@ test.each([
         provenance: "simulation",
     });
     expect(next.kind).toBe("ready");
-    if (next.kind !== "ready") throw new Error(next.code);
+    if (next.kind !== "ready") throw new Error(JSON.stringify(next));
     expect(JSON.parse(next.inputJson).activeWork).toMatchObject({
         needsRevision: 2,
         needs: expect.arrayContaining([

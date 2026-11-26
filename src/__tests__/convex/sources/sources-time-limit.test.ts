@@ -11,6 +11,7 @@ import { pinMissionModel } from "@convex/modelConfiguration";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { documentaryReply } from "@/__tests__/setup/model-stream";
+import { readWorkbenchPageWithBodies } from "@/__tests__/setup/retained-messages";
 import {
     dispatchSourcesOperation,
     seedCapturedSources,
@@ -662,7 +663,7 @@ test("the time limit raises one system request and posts it in the conversation"
     });
     expect(snapshot.sourcesDecisionRequestId).toBe(requests[0]?._id);
 
-    const history = await client(f).query(api.workbench.history, {
+    const history = await readWorkbenchPageWithBodies(client(f), {
         runId: f.runId,
         paginationOpts: { numItems: 20, cursor: null },
     });
@@ -732,7 +733,7 @@ test("Always continue renews the window at the next time limit without asking", 
         },
     });
 
-    const history = await client(f).query(api.workbench.history, {
+    const history = await readWorkbenchPageWithBodies(client(f), {
         runId: f.runId,
         paginationOpts: { numItems: 20, cursor: null },
     });
@@ -782,7 +783,7 @@ test("Always use what's prepared hands over at the next time limit and records i
     });
     expect(view.grantActive).toBe(true);
 
-    const history = await client(f).query(api.workbench.history, {
+    const history = await readWorkbenchPageWithBodies(client(f), {
         runId: f.runId,
         paginationOpts: { numItems: 20, cursor: null },
     });
@@ -887,7 +888,7 @@ test("a dossier paused at the time limit without a decision request gets one", a
         { runId: f.runId },
     );
     assert(requestId);
-    const history = await client(f).query(api.workbench.history, {
+    const history = await readWorkbenchPageWithBodies(client(f), {
         runId: f.runId,
         paginationOpts: { numItems: 20, cursor: null },
     });
@@ -913,7 +914,7 @@ test("a decision receipt does not appear in the visible conversation", async () 
         choice: "once",
     });
 
-    const history = await client(f).query(api.workbench.history, {
+    const history = await readWorkbenchPageWithBodies(client(f), {
         runId: f.runId,
         paginationOpts: { numItems: 20, cursor: null },
     });
@@ -928,8 +929,8 @@ test("a decision receipt does not appear in the visible conversation", async () 
     let cursor: string | null = null;
     let isDone = false;
     while (!isDone) {
-        const page: typeof history = await client(f).query(
-            api.workbench.history,
+        const page: typeof history = await readWorkbenchPageWithBodies(
+            client(f),
             {
                 runId: f.runId,
                 paginationOpts: { numItems: 1, cursor },

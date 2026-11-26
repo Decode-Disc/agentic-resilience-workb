@@ -1,0 +1,46 @@
+
+ RUN  v4.1.10 /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+
+ ❯ src/__tests__/convex/execution/large-response.test.ts (16 tests | 1 failed | 9 skipped) 93443ms
+   × recovers the exact retained invocation response beyond one read transaction 10042ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/convex/execution/large-response.test.ts > recovers the exact retained invocation response beyond one read transaction
+Error: Read too much data in a single function execution (limit: 131072 bytes). This is a Convex limit: https://docs.convex.dev/production/state/limits
+ ❯ performAsyncSyscall node_modules/.pnpm/convex@1.47.0_patch_hash=c8f69880be44b5aa3af2cc1c8fa90ae4005ba20a7965a6bc164c8a50ec547b5e_react@19.2.7/node_modules/convex/src/server/impl/syscall.ts:52:10
+ ❯ QueryImpl.next node_modules/.pnpm/convex@1.47.0_patch_hash=c8f69880be44b5aa3af2cc1c8fa90ae4005ba20a7965a6bc164c8a50ec547b5e_react@19.2.7/node_modules/convex/src/server/impl/query_impl.ts:264:28
+ ❯ QueryImpl.collect node_modules/.pnpm/convex@1.47.0_patch_hash=c8f69880be44b5aa3af2cc1c8fa90ae4005ba20a7965a6bc164c8a50ec547b5e_react@19.2.7/node_modules/convex/src/server/impl/query_impl.ts:317:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 passed | 9 skipped (16)
+   Start at  12:40:55
+   Duration  118.39s (transform 11.96s, setup 1.69s, import 18.13s, tests 93.44s, environment 4.08s)
+
+Command exited with non-zero status 1
+	Command being timed: "pnpm exec vitest run src/__tests__/convex/execution/large-response.test.ts -t oversized invalid operation|large malformed|large schema|large original JSON formatting|schema-valid operation beyond|oversized completion notes|recovers the exact retained --testTimeout=120000 --maxWorkers=1"
+	User time (seconds): 83.49
+	System time (seconds): 8.56
+	Percent of CPU this job got: 75%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 2:01.47
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 787744
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 10
+	Minor (reclaiming a frame) page faults: 970852
+	Voluntary context switches: 18996
+	Involuntary context switches: 48719
+	Swaps: 0
+	File system inputs: 46528
+	File system outputs: 15552
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 1

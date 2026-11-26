@@ -1,5 +1,9 @@
 import { api, internal } from "@convex/_generated/api";
+import { stableStringify } from "@convex/domain/sourcePassages";
+import { getAgentDefinition } from "@convex/execution/agentCatalog";
+import { preparePiReply } from "@convex/integrations/piInvocation";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import { readConversationPageWithBodies } from "@/__tests__/setup/retained-messages";
 import {
     seedWorkbench,
     workbenchAdmissionInput,
@@ -274,6 +278,18 @@ test("a code-owned confirmation does not consume a changed-facts review", async 
             },
         }),
     ).toMatchObject({ kind: "completed" });
+    const transcript = await readConversationPageWithBodies(f.client, {
+        runId: f.runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
+    expect(
+        transcript.page
+            .filter((message) => message.role === "assistant")
+            .map((message) => message.text),
+    ).toEqual([
+        "Your dossier is available.",
+        "No resume was executed. Sources preparation has ended. Inspect the retained material and its limits. Question-led Investigation is not available yet.",
+    ]);
     expect(
         (await f.t.run((ctx) => ctx.db.get(baseline._id)))
             ?.responseFactsRevisionHash,
@@ -305,4 +321,96 @@ test("a code-owned confirmation does not consume a changed-facts review", async 
             },
         }),
     ).toMatchObject({ kind: "blocked", code: "pending_operations" });
+});
+
+test("a prepared reply is refused after facts change and every attempt stays reachable for purge", async () => {
+    const f = await seedWorkbench(true);
+    const active = await begin(f, "prepared-facts");
+    const args = {
+        invocationId: active.invocation.invocationId,
+        expectedGeneration: 1,
+    };
+    const response = {
+        kind: "complete" as const,
+        text: "Your dossier is available.",
+    };
+    const responseJson = stableStringify(response);
+    await f.t.mutation(internal.execution.invocations.retainOutput, {
+        ...args,
+        responseJson,
+    });
+    const mission = await f.t.run((ctx) => ctx.db.get(active.missionId));
+    assert(mission);
+    const definition = getAgentDefinition(
+        mission.definitionId,
+        mission.definitionVersion,
+    );
+    const prepare = () =>
+        f.t.action((ctx) =>
+            preparePiReply(ctx, args, response, responseJson, definition),
+        );
+    const prepared = await prepare();
+    assert(prepared && "textId" in prepared && prepared.reviewDraft);
+    await expect(
+        f.t.mutation(internal.execution.invocations.finish, {
+            ...args,
+            response,
+            preparedReply: {
+                ...prepared,
+                reviewDraft: {
+                    ...prepared.reviewDraft,
+                    claimedStatuses: ["running"],
+                },
+            },
+        }),
+    ).rejects.toThrow("invocation_result_invalid");
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.runId, {
+            lifecycleState: "sources_prepared",
+            researchStartedAt: 1,
+        }),
+    );
+    const revised = await prepare();
+    assert(revised && "textId" in revised);
+    expect(revised.basisHash).not.toBe(prepared.basisHash);
+    expect(revised.textId).not.toBe(prepared.textId);
+    await expect(
+        f.t.mutation(internal.execution.invocations.finish, {
+            ...args,
+            response,
+            preparedReply: prepared,
+        }),
+    ).resolves.toMatchObject({
+        kind: "blocked",
+        code: "mission_context_changed",
+    });
+    const history = await readConversationPageWithBodies(f.client, {
+        runId: f.runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
+    expect(
+        history.page.filter((message) => message.role === "assistant"),
+    ).toEqual([]);
+    // Simulation uses a browser-test dossier. Purge exercises the analyst dossier path.
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.runId, {
+            purpose: "research",
+            browserTestContextId: undefined,
+        }),
+    );
+    await f.t.action(internal.dossierPurge.purgeResearchDossiers, {
+        runIds: [f.runId],
+        reason: "Verify retained reply preparation cleanup",
+    });
+    await f.t.run(async (ctx) => {
+        for (const id of [prepared.textId, revised.textId]) {
+            expect(await ctx.db.get(id)).toBeNull();
+            expect(
+                await ctx.db
+                    .query("retainedTextFragments")
+                    .withIndex("by_text_and_index", (q) => q.eq("textId", id))
+                    .first(),
+            ).toBeNull();
+        }
+    });
 });

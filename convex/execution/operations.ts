@@ -11,6 +11,7 @@ import {
 import { readResearchState } from "@convex/domain/researchState";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import {
+    DOSSIER_PURGE_PARENT_SCAN_BYTES,
     EXECUTION_WINDOW_MS,
     MAX_OPERATION_RESULT_BYTES,
 } from "@convex/resourcePolicy";
@@ -85,10 +86,14 @@ export async function purgeDossierOperationBatch(
     runId: Id<"researchRuns">,
     limit: number,
 ) {
-    const requests = await ctx.db
+    const { page: requests, isDone } = await ctx.db
         .query("agentOperationRequests")
         .withIndex("by_run_and_status", (q) => q.eq("runId", runId))
-        .take(limit);
+        .paginate({
+            cursor: null,
+            numItems: limit,
+            maximumBytesRead: DOSSIER_PURGE_PARENT_SCAN_BYTES,
+        });
     for (const request of requests) {
         const drained = await deleteOperationObservationBatch(
             ctx,
@@ -99,7 +104,7 @@ export async function purgeDossierOperationBatch(
         await ctx.db.delete(request._id);
         if (drained) return true;
     }
-    return requests.length === limit;
+    return !isDone;
 }
 
 /** Runs in the scheduled action itself; no parent action remains open to await another worker. */

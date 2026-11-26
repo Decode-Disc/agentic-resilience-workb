@@ -1,0 +1,39 @@
+$ playwright test --config workbench-ui.playwright.config.ts launched-layout.spec.ts -g 'retains the reader at 390px'
+
+Running 1 test using 1 worker
+
+(node:3615839) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 src/__tests__/design-system/workbench-ui/browser/launched-layout.spec.ts:4:5 › mobile launched opens conversation from Ask AI and retains the reader at 390px (10.9s)
+
+
+  1) src/__tests__/design-system/workbench-ui/browser/launched-layout.spec.ts:4:5 › mobile launched opens conversation from Ask AI and retains the reader at 390px 
+
+    Error: expect(locator).toHaveAttribute(expected) failed
+
+    Locator:  getByRole('dialog', { name: 'Conversation', exact: true }).getByRole('button', { name: 'Research context', exact: true })
+    Expected: "false"
+    Received: "true"
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toHaveAttribute" with timeout 5000ms
+      - waiting for getByRole('dialog', { name: 'Conversation', exact: true }).getByRole('button', { name: 'Research context', exact: true })
+        14 × locator resolved to <button tabindex="0" type="button" data-popup-open="" id="base-ui-_r_4r_" aria-expanded="true" aria-haspopup="dialog" aria-controls="_r_4q_" title="Research context" data-base-ui-click-trigger="" data-context-layout="popover" aria-label="Research context" data-slot="conversation-context-trigger" class="group/button shrink-0 transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-…>…</button>
+           - unexpected value "true"
+
+
+      105 |             exact: true,
+      106 |         });
+    > 107 |         await expect(contextTrigger).toHaveAttribute("aria-expanded", "false");
+          |                                      ^
+      108 |         await contextTrigger.click();
+      109 |         await expect(
+      110 |             page.getByRole("region", { name: "Scope", exact: true }),
+        at /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/design-system/workbench-ui/browser/launched-layout.spec.ts:107:38
+
+    Error Context: test-results/workbench-ui/launched-layout-mobile-lau-dd987-retains-the-reader-at-390px/error-context.md
+
+  1 failed
+    src/__tests__/design-system/workbench-ui/browser/launched-layout.spec.ts:4:5 › mobile launched opens conversation from Ask AI and retains the reader at 390px 
+[ELIFECYCLE] Command failed with exit code 1.

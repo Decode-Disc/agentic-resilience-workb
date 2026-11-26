@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { createHash } from "node:crypto";
+import { EventEmitter } from "node:events";
 import {
     existsSync,
     mkdirSync,
@@ -11,6 +12,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PassThrough } from "node:stream";
 import {
     campaignReviewTemplate,
     runCampaign,
@@ -19,10 +21,39 @@ import { afterEach, expect, test, vi } from "vitest";
 import { configurableCampaign } from "@/__tests__/setup/qualification-v2";
 
 const cli = vi.hoisted(() => vi.fn());
-vi.mock("node:child_process", async (original) => ({
-    ...(await original<typeof import("node:child_process")>()),
-    spawnSync: cli,
-}));
+vi.mock("node:child_process", async (original) => {
+    const real = await original<typeof import("node:child_process")>();
+    return {
+        ...real,
+        spawnSync: cli,
+        spawn: (
+            command: string,
+            args: readonly string[] = [],
+            options?: Parameters<typeof real.spawn>[2],
+        ) => {
+            if (command === "flock")
+                return real.spawn(command, args, options ?? {});
+            const child = Object.assign(new EventEmitter(), {
+                stdout: new PassThrough(),
+                stderr: new PassThrough(),
+                kill: () => true,
+            });
+            queueMicrotask(() => {
+                const result = cli(command, [...args], options) ?? {
+                    status: 0,
+                    stdout: "",
+                    stderr: "",
+                };
+                if (result.stdout) child.stdout.end(result.stdout);
+                else child.stdout.end();
+                if (result.stderr) child.stderr.end(result.stderr);
+                else child.stderr.end();
+                child.emit("close", result.status ?? 0, null);
+            });
+            return child;
+        },
+    };
+});
 vi.mock("../../../scripts/local-runtime.ts", () => ({
     resolveLocalRuntime: async () => ({
         origins: { convex: "http://127.0.0.1:3216" },
@@ -197,6 +228,41 @@ test("closing an unsettled lot preserves its initial failure and publishes a val
     );
     const flags = new Map<string, string>();
     cli.mockImplementation((_binary, args: string[]) => {
+        if (args[0] === "evaluation:archive") {
+            const recordDirIndex = args.indexOf("--record-dir");
+            const records =
+                (recordDirIndex !== -1
+                    ? args[recordDirIndex + 1]
+                    : undefined) ?? join(root, "archives");
+            const recordDir = join(records, "verified-unsettled-close");
+            mkdirSync(recordDir, { recursive: true });
+            const archivePath = join(root, "verified-unsettled-close.tar.gz");
+            const recordPath = join(recordDir, "record.json");
+            const bytes = "verified archive fixture";
+            writeFileSync(archivePath, bytes);
+            writeFileSync(
+                recordPath,
+                JSON.stringify({
+                    verification: "restored_and_verified",
+                    archive: {
+                        path: archivePath,
+                        bytes: Buffer.byteLength(bytes),
+                        sha256: createHash("sha256")
+                            .update(bytes)
+                            .digest("hex"),
+                    },
+                }),
+            );
+            return {
+                status: 0,
+                stdout: JSON.stringify({
+                    status: "verified",
+                    archive: archivePath,
+                    record: recordPath,
+                }),
+                stderr: "",
+            };
+        }
         const env = args.indexOf("env");
         if (env !== -1) {
             const operation = args[env + 1];

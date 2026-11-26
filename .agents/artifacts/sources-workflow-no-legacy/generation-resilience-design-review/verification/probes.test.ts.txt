@@ -1,0 +1,85 @@
+// Temporary characterization probes appended to the existing documentary integration suite.
+// Reuse its fixture and external HTTP replacement; all domain/Convex collaborators execute.
+test.each([
+    ["execution/invocationLifecycle:finishOneShot", 0, "unknown"],
+    ["sourcesMission:retainControl", 1, "unknown"],
+    ["execution/operations:recordResult", 1, "completed"],
+] as const)("review verification: acknowledgement loss at %s", async (target, qualifications, status) => {
+    const f = await fixture();
+    mockControlReply("context_only");
+    const args = { requestId: f.requestId, expectedGeneration: 4 };
+    await f.t.action(internal.execution.operations.dispatch, args);
+    const { getFunctionName } = await import("convex/server");
+    const { execute } = await import("@convex/sourcesMissionActions");
+    let lost = false;
+    const result = await f.t.action(async (ctx) => {
+        const transport: typeof ctx = {
+            ...ctx,
+            runMutation: async (reference, ...mutationArgs) => {
+                const committed = await ctx.runMutation(reference, ...mutationArgs);
+                if (!lost && getFunctionName(reference) === target) {
+                    lost = true;
+                    throw new Error("Synthetic response lost after real mutation commit");
+                }
+                return committed;
+            },
+        };
+        return execute._handler(transport, args);
+    });
+    expect(lost).toBe(true);
+    expect(result?.kind).toBe(status === "completed" ? "success" : "unavailable");
+    const state = await f.t.run(async (ctx) => ({
+        request: await ctx.db.get(f.requestId),
+        mission: await ctx.db.get(f.missionId),
+        preparation: await ctx.db.get(f.preparationId),
+        calls: await ctx.db.query("providerCalls").collect(),
+        invocations: await ctx.db.query("agentInvocations").collect(),
+    }));
+    expect(state.request?.status).toBe(status);
+    expect(state.preparation?.sourcesMission?.qualifications).toHaveLength(qualifications);
+    expect(state.calls).toHaveLength(1);
+    expect(state.calls[0]?.status).toBe("succeeded");
+    expect(state.invocations.some((i) => i.outputJson !== undefined || i.outputTextId !== undefined)).toBe(true);
+    if (status === "unknown") expect(state.mission).toMatchObject({ status: "blocked", blockCode: "operation_outcome_unknown" });
+});
+
+test("review verification: a stale budget baseline permits a negative reservation delta", async () => {
+    const f = await fixture();
+    mockControlReply("context_only");
+    await dispatchSourcesOperation(f.t, { requestId: f.requestId, expectedGeneration: 4 });
+    const { patchQualificationReceipt } = await import("@convex/qualificationUsage");
+    const budget = await f.t.run(async (ctx) => {
+        const call = await ctx.db.query("providerCalls").first();
+        assert(call);
+        // Deliberately model a classifier change without rebasing its materialized budget.
+        await ctx.db.patch(call._id, { status: "failed", errorCode: "request_timeout" });
+        await ctx.db.patch(f.runId, { sourcePreparationBudget: { version: 1, work: 0, incidents: 1, reserved: 0, dispatches: 1 } });
+        const reclassified = await ctx.db.get(call._id);
+        assert(reclassified);
+        await patchQualificationReceipt(ctx, reclassified, { errorCode: "invalid_output" });
+        return (await ctx.db.get(f.runId))?.sourcePreparationBudget;
+    });
+    expect(budget).toEqual({ version: 1, work: 0, incidents: 2, reserved: -1, dispatches: 1 });
+});
+
+test("review verification: an abandoned checking claim cannot be ordinarily reclaimed", async () => {
+    const f = await fixture();
+    mockControlReply("context_only");
+    await dispatchSourcesOperation(f.t, { requestId: f.requestId, expectedGeneration: 4 });
+    const call = await f.t.run(async (ctx) => {
+        const call = await ctx.db.query("providerCalls").first();
+        assert(call?.invocationId);
+        // The buffered HTTP fixture needs an explicit observed identity for this lookup-only scenario.
+        const providerObservation = { generationId: "offline-permission-control", observedAt: Date.now() };
+        await ctx.db.patch(call._id, { status: "failed", errorCode: "request_timeout", reportedCost: undefined, reportedCostFinal: false, billing: undefined, providerObservation });
+        return { ...call, providerObservation };
+    });
+    assert(call.invocationId);
+    await f.t.mutation(internal.providerCalls.requestBilling, { invocationId: call.invocationId });
+    expect(await f.t.mutation(internal.providerCalls.claimBilling, { providerCallId: call._id, attempt: 1 })).toEqual({ generationId: call.providerObservation?.generationId });
+    const checking = await f.t.run((ctx) => ctx.db.get(call._id));
+    assert(checking?.billing?.retryAt);
+    vi.setSystemTime(checking.billing.retryAt + 1);
+    expect(await f.t.mutation(internal.providerCalls.claimBilling, { providerCallId: call._id, attempt: 2 })).toBeNull();
+    expect((await f.t.run((ctx) => ctx.db.get(call._id)))?.billing).toMatchObject({ state: "checking", attempt: 1 });
+});

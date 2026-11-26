@@ -222,7 +222,7 @@ export async function runWorkbenchQualification(
         throw new Error("This lot is already closed");
     const fingerprints = preserveQualificationCandidate(root);
     try {
-        verifyQualificationCandidate(root, fingerprints);
+        await verifyQualificationCandidate(root, fingerprints);
     } catch (error) {
         const diagnostic = qualificationDiagnostic("validation", error);
         journal.finish("qualification", {

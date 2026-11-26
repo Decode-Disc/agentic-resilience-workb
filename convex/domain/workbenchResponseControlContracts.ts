@@ -2,6 +2,7 @@ import type { Doc } from "@convex/_generated/dataModel";
 import { RESPONSE_CONTROL_MAX_INPUT_BYTES } from "@convex/resourcePolicy";
 import { type Infer, v } from "convex/values";
 import { researchStatus } from "./researchStateContracts";
+import { sha256Hex } from "./sourcePassages";
 
 /** One versioned policy owns configuration, score boundaries and correction limits. */
 export const responseControlConfiguration = v.object({
@@ -14,6 +15,11 @@ export const responseControlPolicy = responseControlConfiguration.extend({
     revision: v.number(),
 });
 export type ResponseControlPolicy = Infer<typeof responseControlPolicy>;
+export const workbenchCompletionAdmission = v.object({
+    responseControl: v.object({ policy: responseControlPolicy }),
+    factsRevisionHash: v.optional(v.string()),
+});
+
 export const DEFAULT_RESPONSE_CONTROL_POLICY: ResponseControlPolicy = {
     revision: 0,
     enabled: false,
@@ -159,12 +165,11 @@ export function responseReviewOperationKey(requestId: string) {
     return `response-coherence:${requestId}:attempt:1`;
 }
 
-/** Checks explicit status clauses, including list items and unstarted-research wording; historical quotations stay intact. */
-export function conflictsWithResearchStatus(
-    text: string,
-    run: Pick<Doc<"researchRuns">, "lifecycleState" | "executionStatus">,
-): boolean {
-    const expected = researchStatus(run);
+/** Retains only explicit current-status claims; quoted and fenced content is excluded. */
+function claimedResearchStatuses(text: string) {
+    const claims = new Set<
+        Infer<typeof preparedResponseReviewDraft>["claimedStatuses"][number]
+    >();
     let fenced = false;
     for (const line of text.split("\n")) {
         if (/^\s*```/.test(line)) {
@@ -186,10 +191,9 @@ export function conflictsWithResearchStatus(
             if (
                 /^(?:no research(?: program)? has been|research (?:has not|hasn't)(?: been)?) (?:started|initiated)\b/i.test(
                     clause,
-                ) &&
-                expected !== "not_started"
+                )
             )
-                return true;
+                claims.add("not_started");
             const claim =
                 /^(research (?:has not started|is running|is paused|is complete|has been cancelled))\b/i.exec(
                     clause,
@@ -201,13 +205,47 @@ export function conflictsWithResearchStatus(
                 "research is complete": "completed",
                 "research has been cancelled": "cancelled",
             } as const;
-            if (
-                claim?.[1] &&
-                statuses[claim[1].toLowerCase() as keyof typeof statuses] !==
-                    expected
-            )
-                return true;
+            if (claim?.[1])
+                claims.add(
+                    statuses[claim[1].toLowerCase() as keyof typeof statuses],
+                );
         }
     }
-    return false;
+    return [...claims];
+}
+
+export function conflictsWithResearchStatus(
+    draft: string | ReturnType<typeof prepareResponseReviewDraft>,
+    run: Pick<Doc<"researchRuns">, "lifecycleState" | "executionStatus">,
+): boolean {
+    const expected = researchStatus(run);
+    const statuses =
+        typeof draft === "string"
+            ? claimedResearchStatuses(draft)
+            : draft.claimedStatuses;
+    return statuses.some((status) => status !== expected);
+}
+
+export const preparedResponseReviewDraft = v.object({
+    contentHash: v.string(),
+    claimedStatuses: v.array(
+        v.union(
+            v.literal("not_started"),
+            v.literal("running"),
+            v.literal("paused"),
+            v.literal("completed"),
+            v.literal("cancelled"),
+        ),
+    ),
+    text: v.optional(v.string()),
+});
+
+/** Advisory requests only need exact draft bytes when the draft can fit in the request. */
+export function prepareResponseReviewDraft(text: string) {
+    const bytes = new TextEncoder().encode(text);
+    return {
+        contentHash: sha256Hex(bytes),
+        claimedStatuses: claimedResearchStatuses(text),
+        ...(bytes.length <= RESPONSE_CONTROL_LIMITS.inputBytes ? { text } : {}),
+    };
 }

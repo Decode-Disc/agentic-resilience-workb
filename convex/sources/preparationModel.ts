@@ -3,12 +3,14 @@
 import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { ActionCtx } from "@convex/_generated/server";
+import { stableStringify } from "@convex/domain/sourcePassages";
 import {
     preparationBudgetOutcome,
     preparationFailureCode,
     sourcePreparationError,
 } from "@convex/domain/sourcePreparationAuthority";
 import { executionFailureCode } from "@convex/execution/errors";
+import { stageObservedBody } from "@convex/execution/observedReply";
 import type { DocumentaryControlAttempt } from "@convex/integrations/documentaryControl";
 import type { AttemptDependencies } from "@convex/integrations/modelTransport";
 import type {
@@ -18,6 +20,7 @@ import type {
 import type { SourceQualificationRoute } from "@convex/integrations/sourceQualificationConfig";
 import { revisionRoute } from "@convex/modelConfiguration";
 import { resolveGenerationAuthority } from "@convex/resourcePolicy";
+import type { FunctionReturnType } from "convex/server";
 
 type PreparationModelReceipt = {
     latencyMs: number;
@@ -145,10 +148,20 @@ export async function executePreparationModel<
             operationKey: `${preparation.operationKey}:step:${input.operation === "source_comparison" ? "source_comparison" : "source_preparation"}:input:${input.inputHash}:attempt:${plan.attempt}`,
             attempt: plan.attempt,
         };
-        const claimed = await ctx.runMutation(
-            internal.providerCalls.recordAttempt,
-            { ...attempt, status: "started" },
-        );
+        let claimed: FunctionReturnType<
+            typeof internal.providerCalls.recordAttempt
+        >;
+        try {
+            claimed = await ctx.runMutation(
+                internal.providerCalls.recordAttempt,
+                { ...attempt, status: "started" },
+            );
+        } catch (error) {
+            const code = executionFailureCode(error);
+            if (code === "retained_stream_upgrade_held")
+                return { reasonCode: code, providerCallId, receipt };
+            throw error;
+        }
         providerCallId = claimed.providerCallId;
         if (!claimed.shouldExecute)
             return {
@@ -244,7 +257,7 @@ export async function executePreparationModel<
             },
         };
         if (result.status === "not_run") {
-            await ctx.runMutation(
+            const captureFailure = await ctx.runMutation(
                 internal.execution.invocationLifecycle.finishOneShot,
                 {
                     invocationId,
@@ -263,47 +276,93 @@ export async function executePreparationModel<
                     }),
                 },
             );
+            if (captureFailure)
+                return { reasonCode: captureFailure, providerCallId, receipt };
             return { result, providerCallId, receipt };
         }
-        await ctx.runMutation(
+        const outputJson = JSON.stringify(
+            result.status === "succeeded"
+                ? {
+                      status: result.status,
+                      result:
+                          "qualification" in result
+                              ? result.qualification
+                              : result.output,
+                  }
+                : {
+                      status: result.status,
+                      errorCode: result.errorCode,
+                      diagnostic: result.outputDiagnostic ?? null,
+                  },
+        );
+        const settledAttempt = {
+            ...attempt,
+            ...receipt,
+            status: result.status,
+            dispatchOutcome: result.dispatchOutcome,
+            httpStatus: result.httpStatus,
+            retryAfterAt: result.retryAfterAt,
+            ...(result.status === "failed"
+                ? {
+                      errorCode: result.errorCode,
+                      retryable: result.retryable,
+                      diagnostic: result.outputDiagnostic,
+                  }
+                : {}),
+        };
+        const stageAuthority = {
+            invocationId,
+            expectedGeneration: preparation.executionGeneration,
+        };
+        let outputTextId: Id<"retainedTexts"> | undefined;
+        let observableReplyTextId: Id<"retainedTexts"> | undefined;
+        let observableReplyJson: string | undefined;
+        try {
+            observableReplyJson = result.observableReplyJson
+                ? stableStringify(JSON.parse(result.observableReplyJson))
+                : undefined;
+            outputTextId = await stageObservedBody(
+                ctx,
+                stageAuthority,
+                "response",
+                outputJson,
+            );
+            observableReplyTextId = await stageObservedBody(
+                ctx,
+                stageAuthority,
+                "reply",
+                observableReplyJson,
+            );
+        } catch (error) {
+            const captureFailure =
+                executionFailureCode(error) ?? "observable_reply_unavailable";
+            const reasonCode = await ctx.runMutation(
+                internal.execution.invocationLifecycle.finishOneShot,
+                {
+                    invocationId,
+                    attempt: settledAttempt,
+                    captureFailure,
+                },
+            );
+            return {
+                reasonCode: reasonCode ?? captureFailure,
+                providerCallId,
+                receipt,
+            };
+        }
+        const captureFailure = await ctx.runMutation(
             internal.execution.invocationLifecycle.finishOneShot,
             {
                 invocationId,
-                ...(result.observableReplyJson
-                    ? { observableReplyJson: result.observableReplyJson }
-                    : {}),
-                attempt: {
-                    ...attempt,
-                    ...receipt,
-                    status: result.status,
-                    dispatchOutcome: result.dispatchOutcome,
-                    httpStatus: result.httpStatus,
-                    retryAfterAt: result.retryAfterAt,
-                    ...(result.status === "failed"
-                        ? {
-                              errorCode: result.errorCode,
-                              retryable: result.retryable,
-                              diagnostic: result.outputDiagnostic,
-                          }
-                        : {}),
-                },
-                outputJson: JSON.stringify(
-                    result.status === "succeeded"
-                        ? {
-                              status: result.status,
-                              result:
-                                  "qualification" in result
-                                      ? result.qualification
-                                      : result.output,
-                          }
-                        : {
-                              status: result.status,
-                              errorCode: result.errorCode,
-                              diagnostic: result.outputDiagnostic ?? null,
-                          },
-                ),
+                ...(observableReplyTextId
+                    ? { observableReplyTextId }
+                    : { observableReplyJson }),
+                attempt: settledAttempt,
+                ...(outputTextId ? { outputTextId } : { outputJson }),
             },
         );
+        if (captureFailure)
+            return { reasonCode: captureFailure, providerCallId, receipt };
         if (result.status === "succeeded")
             return { result, providerCallId, receipt };
         if (

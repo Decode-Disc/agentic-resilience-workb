@@ -1,0 +1,3446 @@
+{
+  "versions": {
+    "piAI": "1.4.0",
+    "ai": "7.0.138",
+    "openrouter": "3.1.0"
+  },
+  "fixtureDefinitions": [
+    {
+      "name": "valid",
+      "deltas": [
+        {
+          "length": 6,
+          "sha256": "15c1dc806689456a6eadb35204f45c3cca963731d8d3d4328fbb39ab7b67263c",
+          "trailingWhitespace": 0
+        },
+        {
+          "length": 5,
+          "sha256": "85c4c3aa5b76e63a203c963945794445acaaaff918e91863d04b34ab9f3e3c58",
+          "trailingWhitespace": 0
+        }
+      ],
+      "finish": true
+    },
+    {
+      "name": "complete-whitespace",
+      "deltas": [
+        {
+          "length": 11,
+          "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+          "trailingWhitespace": 0
+        },
+        {
+          "length": 8192,
+          "sha256": "429ddc28ed0d82ed4d8e77f25db9d2c1b9ebba461be131f6b96683d95bc68eed",
+          "trailingWhitespace": 8192
+        },
+        {
+          "length": 8192,
+          "sha256": "925143a5855bee88bde7c6591fb1cf0a05afe931b80ac8a0e6e47a785133940f",
+          "trailingWhitespace": 8192
+        }
+      ],
+      "finish": true
+    },
+    {
+      "name": "prefix-whitespace",
+      "deltas": [
+        {
+          "length": 6,
+          "sha256": "15c1dc806689456a6eadb35204f45c3cca963731d8d3d4328fbb39ab7b67263c",
+          "trailingWhitespace": 0
+        },
+        {
+          "length": 8192,
+          "sha256": "429ddc28ed0d82ed4d8e77f25db9d2c1b9ebba461be131f6b96683d95bc68eed",
+          "trailingWhitespace": 8192
+        },
+        {
+          "length": 8192,
+          "sha256": "925143a5855bee88bde7c6591fb1cf0a05afe931b80ac8a0e6e47a785133940f",
+          "trailingWhitespace": 8192
+        }
+      ],
+      "finish": true
+    },
+    {
+      "name": "complete-eof",
+      "deltas": [
+        {
+          "length": 11,
+          "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+          "trailingWhitespace": 0
+        }
+      ],
+      "finish": false
+    },
+    {
+      "name": "prefix-eof",
+      "deltas": [
+        {
+          "length": 6,
+          "sha256": "15c1dc806689456a6eadb35204f45c3cca963731d8d3d4328fbb39ab7b67263c",
+          "trailingWhitespace": 0
+        },
+        {
+          "length": 8192,
+          "sha256": "429ddc28ed0d82ed4d8e77f25db9d2c1b9ebba461be131f6b96683d95bc68eed",
+          "trailingWhitespace": 8192
+        }
+      ],
+      "finish": false
+    },
+    {
+      "name": "prefix-cancel",
+      "deltas": [
+        {
+          "length": 6,
+          "sha256": "15c1dc806689456a6eadb35204f45c3cca963731d8d3d4328fbb39ab7b67263c",
+          "trailingWhitespace": 0
+        },
+        {
+          "length": 8192,
+          "sha256": "429ddc28ed0d82ed4d8e77f25db9d2c1b9ebba461be131f6b96683d95bc68eed",
+          "trailingWhitespace": 8192
+        }
+      ],
+      "finish": false,
+      "cancel": true
+    },
+    {
+      "name": "retained-9-synthetic-finish",
+      "deltas": [
+        {
+          "length": 11000,
+          "sha256": "96c6bee59baca06b5b6b746fef9280b3d945ec5042f107c5734827c06c7a0cec",
+          "trailingWhitespace": 839
+        },
+        {
+          "length": 1130943,
+          "sha256": "217cc2b936181e12171a338df8dc2c1554957e21b0ec2cce021133671ec49ede",
+          "trailingWhitespace": 1130943
+        }
+      ],
+      "finish": true,
+      "retainedPath": "/home/abdwhb/.cache/workbench-evaluations/framing-fidelity-method-v3-20261121/shared-material-prepared/lots/lot-1/observations/before-cleanup-8facecc3-e50c-4911-967d-c96630c144b0/nvidia-sources-capture-handoff/invocations-9.json"
+    }
+  ],
+  "records": [
+    {
+      "fixture": "valid",
+      "channel": "text",
+      "sdk": "pi",
+      "input": {
+        "length": 11,
+        "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "trailingWhitespace": 0
+      },
+      "wire": {
+        "length": 512,
+        "sha256": "9af6137e2eea7649b3e48ba66d299ee71615a5c13601a39bf96b20630f6c0f07",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 11,
+        "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "trailingWhitespace": 0
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "store": false,
+        "max_completion_tokens": 16384
+      },
+      "events": [
+        "start",
+        "text_start",
+        "text_delta",
+        "text_delta",
+        "text_end",
+        "done"
+      ],
+      "outcome": {
+        "stopReason": "stop",
+        "content": [
+          {
+            "type": "text",
+            "text": {
+              "length": 11,
+              "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+              "trailingWhitespace": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fixture": "valid",
+      "channel": "text",
+      "sdk": "ai",
+      "input": {
+        "length": 11,
+        "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "trailingWhitespace": 0
+      },
+      "wire": {
+        "length": 512,
+        "sha256": "9af6137e2eea7649b3e48ba66d299ee71615a5c13601a39bf96b20630f6c0f07",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 11,
+        "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "trailingWhitespace": 0
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "max_tokens": 16384,
+        "response_format": {
+          "type": "json_schema",
+          "json_schema": {
+            "schema": {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "type": "object",
+              "properties": {
+                "ok": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "ok"
+              ],
+              "additionalProperties": false
+            },
+            "strict": true,
+            "name": "response"
+          }
+        },
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "stream": true
+      },
+      "events": [
+        "start",
+        "start-step",
+        "text-start",
+        "text-delta",
+        "text-delta",
+        "text-end",
+        "finish-step",
+        "finish"
+      ],
+      "outcome": {
+        "text": {
+          "length": 11,
+          "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+          "trailingWhitespace": 0
+        },
+        "finish": {
+          "ok": true,
+          "value": "stop"
+        },
+        "toolCalls": {
+          "ok": true,
+          "value": []
+        },
+        "output": {
+          "ok": true,
+          "value": {
+            "ok": true
+          }
+        }
+      }
+    },
+    {
+      "fixture": "valid",
+      "channel": "text",
+      "sdk": "ai-adapter",
+      "input": {
+        "length": 11,
+        "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "trailingWhitespace": 0
+      },
+      "wire": {
+        "length": 512,
+        "sha256": "9af6137e2eea7649b3e48ba66d299ee71615a5c13601a39bf96b20630f6c0f07",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 11,
+        "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "trailingWhitespace": 0
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "response_format": {
+          "type": "json_schema",
+          "json_schema": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "ok": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "ok"
+              ],
+              "additionalProperties": false
+            },
+            "strict": true,
+            "name": "response"
+          }
+        },
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "stream": true
+      },
+      "events": [
+        "stream-start",
+        "response-metadata",
+        "response-metadata",
+        "text-start",
+        "text-delta",
+        "response-metadata",
+        "response-metadata",
+        "text-delta",
+        "response-metadata",
+        "response-metadata",
+        "text-end",
+        "finish"
+      ],
+      "outcome": {
+        "finishReason": {
+          "unified": "stop",
+          "raw": "stop"
+        }
+      }
+    },
+    {
+      "fixture": "valid",
+      "channel": "tool",
+      "sdk": "pi",
+      "input": {
+        "length": 11,
+        "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "trailingWhitespace": 0
+      },
+      "wire": {
+        "length": 656,
+        "sha256": "f0c784d21245c26a8d9c5ea1bfecd78d977ec25779b103238b893ec4d04f5e68",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 11,
+        "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "trailingWhitespace": 0
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "store": false,
+        "max_completion_tokens": 16384,
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "submit",
+              "description": "Submit result",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        ]
+      },
+      "events": [
+        "start",
+        "toolcall_start",
+        "toolcall_delta",
+        "toolcall_delta",
+        "toolcall_end",
+        "done"
+      ],
+      "outcome": {
+        "stopReason": "toolUse",
+        "content": [
+          {
+            "type": "toolCall",
+            "id": "call_offline",
+            "name": "submit",
+            "arguments": {
+              "ok": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fixture": "valid",
+      "channel": "tool",
+      "sdk": "ai",
+      "input": {
+        "length": 11,
+        "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "trailingWhitespace": 0
+      },
+      "wire": {
+        "length": 656,
+        "sha256": "f0c784d21245c26a8d9c5ea1bfecd78d977ec25779b103238b893ec4d04f5e68",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 11,
+        "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "trailingWhitespace": 0
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "max_tokens": 16384,
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "submit",
+              "description": "Submit result",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        ],
+        "tool_choice": "auto",
+        "stream": true
+      },
+      "events": [
+        "start",
+        "start-step",
+        "tool-input-start",
+        "tool-input-delta",
+        "tool-input-delta",
+        "tool-input-end",
+        "tool-call",
+        "finish-step",
+        "finish"
+      ],
+      "outcome": {
+        "text": {
+          "length": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "trailingWhitespace": 0
+        },
+        "finish": {
+          "ok": true,
+          "value": "tool-calls"
+        },
+        "toolCalls": {
+          "ok": true,
+          "value": [
+            {
+              "type": "tool-call",
+              "toolCallId": "call_offline",
+              "toolName": "submit",
+              "input": {
+                "ok": true
+              },
+              "providerMetadata": {
+                "openrouter": {
+                  "reasoning_details": []
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fixture": "valid",
+      "channel": "tool",
+      "sdk": "ai-adapter",
+      "input": {
+        "length": 11,
+        "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "trailingWhitespace": 0
+      },
+      "wire": {
+        "length": 656,
+        "sha256": "f0c784d21245c26a8d9c5ea1bfecd78d977ec25779b103238b893ec4d04f5e68",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 11,
+        "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "trailingWhitespace": 0
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "submit",
+              "description": "Submit result",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        ],
+        "stream": true
+      },
+      "events": [
+        "stream-start",
+        "response-metadata",
+        "response-metadata",
+        "response-metadata",
+        "response-metadata",
+        "tool-input-start",
+        "tool-input-delta",
+        "tool-input-delta",
+        "tool-input-end",
+        "tool-call",
+        "response-metadata",
+        "response-metadata",
+        "finish"
+      ],
+      "outcome": {
+        "toolCall": {
+          "type": "tool-call",
+          "toolCallId": "call_offline",
+          "toolName": "submit",
+          "input": {
+            "length": 11,
+            "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+            "trailingWhitespace": 0
+          },
+          "providerMetadata": {
+            "openrouter": {
+              "reasoning_details": []
+            }
+          }
+        },
+        "finishReason": {
+          "unified": "tool-calls",
+          "raw": "tool_calls"
+        }
+      }
+    },
+    {
+      "fixture": "complete-whitespace",
+      "channel": "text",
+      "sdk": "pi",
+      "input": {
+        "length": 16395,
+        "sha256": "5369c3e97ada0699ff59719291788f4ac0fad015b84362506c35427211a36671",
+        "trailingWhitespace": 16384
+      },
+      "wire": {
+        "length": 25253,
+        "sha256": "938d0bd8ce7bb0de00b9b7cb088c5174e34020f1de851586f62ef278b3a32ded",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 16395,
+        "sha256": "5369c3e97ada0699ff59719291788f4ac0fad015b84362506c35427211a36671",
+        "trailingWhitespace": 16384
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "store": false,
+        "max_completion_tokens": 16384
+      },
+      "events": [
+        "start",
+        "text_start",
+        "text_delta",
+        "text_delta",
+        "text_delta",
+        "text_end",
+        "done"
+      ],
+      "outcome": {
+        "stopReason": "stop",
+        "content": [
+          {
+            "type": "text",
+            "text": {
+              "length": 16395,
+              "sha256": "5369c3e97ada0699ff59719291788f4ac0fad015b84362506c35427211a36671",
+              "trailingWhitespace": 16384
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fixture": "complete-whitespace",
+      "channel": "text",
+      "sdk": "ai",
+      "input": {
+        "length": 16395,
+        "sha256": "5369c3e97ada0699ff59719291788f4ac0fad015b84362506c35427211a36671",
+        "trailingWhitespace": 16384
+      },
+      "wire": {
+        "length": 25253,
+        "sha256": "938d0bd8ce7bb0de00b9b7cb088c5174e34020f1de851586f62ef278b3a32ded",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 16395,
+        "sha256": "5369c3e97ada0699ff59719291788f4ac0fad015b84362506c35427211a36671",
+        "trailingWhitespace": 16384
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "max_tokens": 16384,
+        "response_format": {
+          "type": "json_schema",
+          "json_schema": {
+            "schema": {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "type": "object",
+              "properties": {
+                "ok": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "ok"
+              ],
+              "additionalProperties": false
+            },
+            "strict": true,
+            "name": "response"
+          }
+        },
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "stream": true
+      },
+      "events": [
+        "start",
+        "start-step",
+        "text-start",
+        "text-delta",
+        "text-delta",
+        "text-end",
+        "finish-step",
+        "finish"
+      ],
+      "outcome": {
+        "text": {
+          "length": 16395,
+          "sha256": "5369c3e97ada0699ff59719291788f4ac0fad015b84362506c35427211a36671",
+          "trailingWhitespace": 16384
+        },
+        "finish": {
+          "ok": true,
+          "value": "stop"
+        },
+        "toolCalls": {
+          "ok": true,
+          "value": []
+        },
+        "output": {
+          "ok": true,
+          "value": {
+            "ok": true
+          }
+        }
+      }
+    },
+    {
+      "fixture": "complete-whitespace",
+      "channel": "text",
+      "sdk": "ai-adapter",
+      "input": {
+        "length": 16395,
+        "sha256": "5369c3e97ada0699ff59719291788f4ac0fad015b84362506c35427211a36671",
+        "trailingWhitespace": 16384
+      },
+      "wire": {
+        "length": 25253,
+        "sha256": "938d0bd8ce7bb0de00b9b7cb088c5174e34020f1de851586f62ef278b3a32ded",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 16395,
+        "sha256": "5369c3e97ada0699ff59719291788f4ac0fad015b84362506c35427211a36671",
+        "trailingWhitespace": 16384
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "response_format": {
+          "type": "json_schema",
+          "json_schema": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "ok": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "ok"
+              ],
+              "additionalProperties": false
+            },
+            "strict": true,
+            "name": "response"
+          }
+        },
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "stream": true
+      },
+      "events": [
+        "stream-start",
+        "response-metadata",
+        "response-metadata",
+        "text-start",
+        "text-delta",
+        "response-metadata",
+        "response-metadata",
+        "text-delta",
+        "response-metadata",
+        "response-metadata",
+        "text-delta",
+        "response-metadata",
+        "response-metadata",
+        "text-end",
+        "finish"
+      ],
+      "outcome": {
+        "finishReason": {
+          "unified": "stop",
+          "raw": "stop"
+        }
+      }
+    },
+    {
+      "fixture": "complete-whitespace",
+      "channel": "tool",
+      "sdk": "pi",
+      "input": {
+        "length": 16395,
+        "sha256": "5369c3e97ada0699ff59719291788f4ac0fad015b84362506c35427211a36671",
+        "trailingWhitespace": 16384
+      },
+      "wire": {
+        "length": 25439,
+        "sha256": "fa32376d359e36c573da4885d3dbefa4b669f6e6a03605101a1be14e470f41b8",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 16395,
+        "sha256": "5369c3e97ada0699ff59719291788f4ac0fad015b84362506c35427211a36671",
+        "trailingWhitespace": 16384
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "store": false,
+        "max_completion_tokens": 16384,
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "submit",
+              "description": "Submit result",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        ]
+      },
+      "events": [
+        "start",
+        "toolcall_start",
+        "toolcall_delta",
+        "toolcall_delta",
+        "toolcall_delta",
+        "toolcall_end",
+        "done"
+      ],
+      "outcome": {
+        "stopReason": "toolUse",
+        "content": [
+          {
+            "type": "toolCall",
+            "id": "call_offline",
+            "name": "submit",
+            "arguments": {
+              "ok": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fixture": "complete-whitespace",
+      "channel": "tool",
+      "sdk": "ai",
+      "input": {
+        "length": 16395,
+        "sha256": "5369c3e97ada0699ff59719291788f4ac0fad015b84362506c35427211a36671",
+        "trailingWhitespace": 16384
+      },
+      "wire": {
+        "length": 25439,
+        "sha256": "fa32376d359e36c573da4885d3dbefa4b669f6e6a03605101a1be14e470f41b8",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 16395,
+        "sha256": "5369c3e97ada0699ff59719291788f4ac0fad015b84362506c35427211a36671",
+        "trailingWhitespace": 16384
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "max_tokens": 16384,
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "submit",
+              "description": "Submit result",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        ],
+        "tool_choice": "auto",
+        "stream": true
+      },
+      "events": [
+        "start",
+        "start-step",
+        "tool-input-start",
+        "tool-input-delta",
+        "tool-input-end",
+        "tool-call",
+        "tool-input-delta",
+        "tool-input-delta",
+        "finish-step",
+        "finish"
+      ],
+      "outcome": {
+        "text": {
+          "length": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "trailingWhitespace": 0
+        },
+        "finish": {
+          "ok": true,
+          "value": "tool-calls"
+        },
+        "toolCalls": {
+          "ok": true,
+          "value": [
+            {
+              "type": "tool-call",
+              "toolCallId": "call_offline",
+              "toolName": "submit",
+              "input": {
+                "ok": true
+              },
+              "providerMetadata": {
+                "openrouter": {
+                  "reasoning_details": []
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fixture": "complete-whitespace",
+      "channel": "tool",
+      "sdk": "ai-adapter",
+      "input": {
+        "length": 16395,
+        "sha256": "5369c3e97ada0699ff59719291788f4ac0fad015b84362506c35427211a36671",
+        "trailingWhitespace": 16384
+      },
+      "wire": {
+        "length": 25439,
+        "sha256": "fa32376d359e36c573da4885d3dbefa4b669f6e6a03605101a1be14e470f41b8",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 16395,
+        "sha256": "5369c3e97ada0699ff59719291788f4ac0fad015b84362506c35427211a36671",
+        "trailingWhitespace": 16384
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "submit",
+              "description": "Submit result",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        ],
+        "stream": true
+      },
+      "events": [
+        "stream-start",
+        "response-metadata",
+        "response-metadata",
+        "tool-input-start",
+        "tool-input-delta",
+        "tool-input-end",
+        "tool-call",
+        "response-metadata",
+        "response-metadata",
+        "tool-input-delta",
+        "response-metadata",
+        "response-metadata",
+        "tool-input-delta",
+        "response-metadata",
+        "response-metadata",
+        "finish"
+      ],
+      "outcome": {
+        "toolCall": {
+          "type": "tool-call",
+          "toolCallId": "call_offline",
+          "toolName": "submit",
+          "input": {
+            "length": 11,
+            "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+            "trailingWhitespace": 0
+          },
+          "providerMetadata": {
+            "openrouter": {
+              "reasoning_details": []
+            }
+          }
+        },
+        "finishReason": {
+          "unified": "tool-calls",
+          "raw": "tool_calls"
+        }
+      }
+    },
+    {
+      "fixture": "prefix-whitespace",
+      "channel": "text",
+      "sdk": "pi",
+      "input": {
+        "length": 16390,
+        "sha256": "faa6a1ca3773540bedc818b1ee119a29a900f16dbc893cefe1b4b87aff5dba34",
+        "trailingWhitespace": 16384
+      },
+      "wire": {
+        "length": 25248,
+        "sha256": "7e37259fd01cb1c7f503aa93c8dd2f0c4608d0b22d3a9fb74278d68e70442e50",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 16390,
+        "sha256": "faa6a1ca3773540bedc818b1ee119a29a900f16dbc893cefe1b4b87aff5dba34",
+        "trailingWhitespace": 16384
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "store": false,
+        "max_completion_tokens": 16384
+      },
+      "events": [
+        "start",
+        "text_start",
+        "text_delta",
+        "text_delta",
+        "text_delta",
+        "text_end",
+        "done"
+      ],
+      "outcome": {
+        "stopReason": "stop",
+        "content": [
+          {
+            "type": "text",
+            "text": {
+              "length": 16390,
+              "sha256": "faa6a1ca3773540bedc818b1ee119a29a900f16dbc893cefe1b4b87aff5dba34",
+              "trailingWhitespace": 16384
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fixture": "prefix-whitespace",
+      "channel": "text",
+      "sdk": "ai",
+      "input": {
+        "length": 16390,
+        "sha256": "faa6a1ca3773540bedc818b1ee119a29a900f16dbc893cefe1b4b87aff5dba34",
+        "trailingWhitespace": 16384
+      },
+      "wire": {
+        "length": 25248,
+        "sha256": "7e37259fd01cb1c7f503aa93c8dd2f0c4608d0b22d3a9fb74278d68e70442e50",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 16390,
+        "sha256": "faa6a1ca3773540bedc818b1ee119a29a900f16dbc893cefe1b4b87aff5dba34",
+        "trailingWhitespace": 16384
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "max_tokens": 16384,
+        "response_format": {
+          "type": "json_schema",
+          "json_schema": {
+            "schema": {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "type": "object",
+              "properties": {
+                "ok": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "ok"
+              ],
+              "additionalProperties": false
+            },
+            "strict": true,
+            "name": "response"
+          }
+        },
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "stream": true
+      },
+      "events": [
+        "start",
+        "start-step",
+        "text-start",
+        "text-delta",
+        "text-delta",
+        "text-end",
+        "finish-step",
+        "finish"
+      ],
+      "outcome": {
+        "text": {
+          "length": 16390,
+          "sha256": "faa6a1ca3773540bedc818b1ee119a29a900f16dbc893cefe1b4b87aff5dba34",
+          "trailingWhitespace": 16384
+        },
+        "finish": {
+          "ok": true,
+          "value": "stop"
+        },
+        "toolCalls": {
+          "ok": true,
+          "value": []
+        },
+        "output": {
+          "ok": false,
+          "error": "No object generated: could not parse the response.",
+          "name": "AI_NoObjectGeneratedError"
+        }
+      }
+    },
+    {
+      "fixture": "prefix-whitespace",
+      "channel": "text",
+      "sdk": "ai-adapter",
+      "input": {
+        "length": 16390,
+        "sha256": "faa6a1ca3773540bedc818b1ee119a29a900f16dbc893cefe1b4b87aff5dba34",
+        "trailingWhitespace": 16384
+      },
+      "wire": {
+        "length": 25248,
+        "sha256": "7e37259fd01cb1c7f503aa93c8dd2f0c4608d0b22d3a9fb74278d68e70442e50",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 16390,
+        "sha256": "faa6a1ca3773540bedc818b1ee119a29a900f16dbc893cefe1b4b87aff5dba34",
+        "trailingWhitespace": 16384
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "response_format": {
+          "type": "json_schema",
+          "json_schema": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "ok": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "ok"
+              ],
+              "additionalProperties": false
+            },
+            "strict": true,
+            "name": "response"
+          }
+        },
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "stream": true
+      },
+      "events": [
+        "stream-start",
+        "response-metadata",
+        "response-metadata",
+        "text-start",
+        "text-delta",
+        "response-metadata",
+        "response-metadata",
+        "text-delta",
+        "response-metadata",
+        "response-metadata",
+        "text-delta",
+        "response-metadata",
+        "response-metadata",
+        "text-end",
+        "finish"
+      ],
+      "outcome": {
+        "finishReason": {
+          "unified": "stop",
+          "raw": "stop"
+        }
+      }
+    },
+    {
+      "fixture": "prefix-whitespace",
+      "channel": "tool",
+      "sdk": "pi",
+      "input": {
+        "length": 16390,
+        "sha256": "faa6a1ca3773540bedc818b1ee119a29a900f16dbc893cefe1b4b87aff5dba34",
+        "trailingWhitespace": 16384
+      },
+      "wire": {
+        "length": 25434,
+        "sha256": "02686be0acd219ea9fc5657720ed664a3648571ea81c168951d6223eefa276ad",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 16390,
+        "sha256": "faa6a1ca3773540bedc818b1ee119a29a900f16dbc893cefe1b4b87aff5dba34",
+        "trailingWhitespace": 16384
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "store": false,
+        "max_completion_tokens": 16384,
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "submit",
+              "description": "Submit result",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        ]
+      },
+      "events": [
+        "start",
+        "toolcall_start",
+        "toolcall_delta",
+        "toolcall_delta",
+        "toolcall_delta",
+        "toolcall_end",
+        "done"
+      ],
+      "outcome": {
+        "stopReason": "toolUse",
+        "content": [
+          {
+            "type": "toolCall",
+            "id": "call_offline",
+            "name": "submit",
+            "arguments": {},
+            "argumentsError": {
+              "length": 16440,
+              "sha256": "44acdff4bd5b520b0a4fdf9114e1df10c0281d63be277aad610dc4a3ec0b764c",
+              "trailingWhitespace": 16384,
+              "preview": "Unexpected end of JSON input\n\nReceived arguments:\n{\"ok\":                                            "
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fixture": "prefix-whitespace",
+      "channel": "tool",
+      "sdk": "ai",
+      "input": {
+        "length": 16390,
+        "sha256": "faa6a1ca3773540bedc818b1ee119a29a900f16dbc893cefe1b4b87aff5dba34",
+        "trailingWhitespace": 16384
+      },
+      "wire": {
+        "length": 25434,
+        "sha256": "02686be0acd219ea9fc5657720ed664a3648571ea81c168951d6223eefa276ad",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 16390,
+        "sha256": "faa6a1ca3773540bedc818b1ee119a29a900f16dbc893cefe1b4b87aff5dba34",
+        "trailingWhitespace": 16384
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "max_tokens": 16384,
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "submit",
+              "description": "Submit result",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        ],
+        "tool_choice": "auto",
+        "stream": true
+      },
+      "events": [
+        "start",
+        "start-step",
+        "tool-input-start",
+        "tool-input-delta",
+        "tool-input-delta",
+        "tool-input-delta",
+        "tool-input-end",
+        "tool-call",
+        "tool-error",
+        "finish-step",
+        "finish"
+      ],
+      "outcome": {
+        "text": {
+          "length": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "trailingWhitespace": 0
+        },
+        "finish": {
+          "ok": true,
+          "value": "tool-calls"
+        },
+        "toolCalls": {
+          "ok": true,
+          "value": [
+            {
+              "type": "tool-call",
+              "toolCallId": "call_offline",
+              "toolName": "submit",
+              "input": {},
+              "dynamic": true,
+              "invalid": true,
+              "error": {
+                "name": "AI_InvalidToolInputError",
+                "cause": {
+                  "name": "AI_TypeValidationError",
+                  "cause": {
+                    "name": "ZodError",
+                    "message": "[\n  {\n    \"expected\": \"boolean\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"ok\"\n    ],\n    \"message\": \"Invalid input: expected boolean, received undefined\"\n  }\n]"
+                  },
+                  "value": {}
+                },
+                "toolInput": "{}",
+                "toolName": "submit"
+              },
+              "providerMetadata": {
+                "openrouter": {
+                  "reasoning_details": []
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fixture": "prefix-whitespace",
+      "channel": "tool",
+      "sdk": "ai-adapter",
+      "input": {
+        "length": 16390,
+        "sha256": "faa6a1ca3773540bedc818b1ee119a29a900f16dbc893cefe1b4b87aff5dba34",
+        "trailingWhitespace": 16384
+      },
+      "wire": {
+        "length": 25434,
+        "sha256": "02686be0acd219ea9fc5657720ed664a3648571ea81c168951d6223eefa276ad",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 16390,
+        "sha256": "faa6a1ca3773540bedc818b1ee119a29a900f16dbc893cefe1b4b87aff5dba34",
+        "trailingWhitespace": 16384
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "submit",
+              "description": "Submit result",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        ],
+        "stream": true
+      },
+      "events": [
+        "stream-start",
+        "response-metadata",
+        "response-metadata",
+        "response-metadata",
+        "response-metadata",
+        "tool-input-start",
+        "tool-input-delta",
+        "tool-input-delta",
+        "response-metadata",
+        "response-metadata",
+        "tool-input-delta",
+        "response-metadata",
+        "response-metadata",
+        "tool-input-end",
+        "tool-call",
+        "finish"
+      ],
+      "outcome": {
+        "toolCall": {
+          "type": "tool-call",
+          "toolCallId": "call_offline",
+          "toolName": "submit",
+          "input": {
+            "length": 2,
+            "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "trailingWhitespace": 0
+          },
+          "providerMetadata": {
+            "openrouter": {
+              "reasoning_details": []
+            }
+          }
+        },
+        "finishReason": {
+          "unified": "tool-calls",
+          "raw": "tool_calls"
+        }
+      }
+    },
+    {
+      "fixture": "complete-eof",
+      "channel": "text",
+      "sdk": "pi",
+      "input": {
+        "length": 11,
+        "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "trailingWhitespace": 0
+      },
+      "wire": {
+        "length": 192,
+        "sha256": "04f152cff3f216e6483cb0467a46f4f9b65515f10dc36d7c89e263b755edd04e",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 11,
+        "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "trailingWhitespace": 0
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "store": false,
+        "max_completion_tokens": 16384
+      },
+      "events": [
+        "start",
+        "text_start",
+        "text_delta",
+        "text_end",
+        "error"
+      ],
+      "outcome": {
+        "stopReason": "error",
+        "errorMessage": "Stream ended without finish_reason",
+        "content": [
+          {
+            "type": "text",
+            "text": {
+              "length": 11,
+              "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+              "trailingWhitespace": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fixture": "complete-eof",
+      "channel": "text",
+      "sdk": "ai",
+      "input": {
+        "length": 11,
+        "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "trailingWhitespace": 0
+      },
+      "wire": {
+        "length": 192,
+        "sha256": "04f152cff3f216e6483cb0467a46f4f9b65515f10dc36d7c89e263b755edd04e",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 11,
+        "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "trailingWhitespace": 0
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "max_tokens": 16384,
+        "response_format": {
+          "type": "json_schema",
+          "json_schema": {
+            "schema": {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "type": "object",
+              "properties": {
+                "ok": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "ok"
+              ],
+              "additionalProperties": false
+            },
+            "strict": true,
+            "name": "response"
+          }
+        },
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "stream": true
+      },
+      "events": [
+        "start",
+        "start-step",
+        "text-start",
+        "text-delta",
+        "text-end",
+        "finish-step",
+        "finish"
+      ],
+      "outcome": {
+        "text": {
+          "length": 11,
+          "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+          "trailingWhitespace": 0
+        },
+        "finish": {
+          "ok": true,
+          "value": "other"
+        },
+        "toolCalls": {
+          "ok": true,
+          "value": []
+        },
+        "output": {
+          "ok": true,
+          "value": {
+            "ok": true
+          }
+        }
+      }
+    },
+    {
+      "fixture": "complete-eof",
+      "channel": "text",
+      "sdk": "ai-adapter",
+      "input": {
+        "length": 11,
+        "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "trailingWhitespace": 0
+      },
+      "wire": {
+        "length": 192,
+        "sha256": "04f152cff3f216e6483cb0467a46f4f9b65515f10dc36d7c89e263b755edd04e",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 11,
+        "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "trailingWhitespace": 0
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "response_format": {
+          "type": "json_schema",
+          "json_schema": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "ok": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "ok"
+              ],
+              "additionalProperties": false
+            },
+            "strict": true,
+            "name": "response"
+          }
+        },
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "stream": true
+      },
+      "events": [
+        "stream-start",
+        "response-metadata",
+        "response-metadata",
+        "text-start",
+        "text-delta",
+        "text-end",
+        "finish"
+      ],
+      "outcome": {
+        "finishReason": {
+          "unified": "other"
+        }
+      }
+    },
+    {
+      "fixture": "complete-eof",
+      "channel": "tool",
+      "sdk": "pi",
+      "input": {
+        "length": 11,
+        "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "trailingWhitespace": 0
+      },
+      "wire": {
+        "length": 288,
+        "sha256": "10033ca7555a75ff805129ee09d969f09acc8e492da589f27cc023c74463ad5f",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 11,
+        "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "trailingWhitespace": 0
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "store": false,
+        "max_completion_tokens": 16384,
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "submit",
+              "description": "Submit result",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        ]
+      },
+      "events": [
+        "start",
+        "toolcall_start",
+        "toolcall_delta",
+        "toolcall_end",
+        "error"
+      ],
+      "outcome": {
+        "stopReason": "error",
+        "errorMessage": "Stream ended without finish_reason",
+        "content": [
+          {
+            "type": "toolCall",
+            "id": "call_offline",
+            "name": "submit",
+            "arguments": {
+              "ok": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fixture": "complete-eof",
+      "channel": "tool",
+      "sdk": "ai",
+      "input": {
+        "length": 11,
+        "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "trailingWhitespace": 0
+      },
+      "wire": {
+        "length": 288,
+        "sha256": "10033ca7555a75ff805129ee09d969f09acc8e492da589f27cc023c74463ad5f",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 11,
+        "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "trailingWhitespace": 0
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "max_tokens": 16384,
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "submit",
+              "description": "Submit result",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        ],
+        "tool_choice": "auto",
+        "stream": true
+      },
+      "events": [
+        "start",
+        "start-step",
+        "tool-input-start",
+        "tool-input-delta",
+        "tool-input-end",
+        "tool-call",
+        "finish-step",
+        "finish"
+      ],
+      "outcome": {
+        "text": {
+          "length": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "trailingWhitespace": 0
+        },
+        "finish": {
+          "ok": true,
+          "value": "tool-calls"
+        },
+        "toolCalls": {
+          "ok": true,
+          "value": [
+            {
+              "type": "tool-call",
+              "toolCallId": "call_offline",
+              "toolName": "submit",
+              "input": {
+                "ok": true
+              },
+              "providerMetadata": {
+                "openrouter": {
+                  "reasoning_details": []
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fixture": "complete-eof",
+      "channel": "tool",
+      "sdk": "ai-adapter",
+      "input": {
+        "length": 11,
+        "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "trailingWhitespace": 0
+      },
+      "wire": {
+        "length": 288,
+        "sha256": "10033ca7555a75ff805129ee09d969f09acc8e492da589f27cc023c74463ad5f",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 11,
+        "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "trailingWhitespace": 0
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "submit",
+              "description": "Submit result",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        ],
+        "stream": true
+      },
+      "events": [
+        "stream-start",
+        "response-metadata",
+        "response-metadata",
+        "tool-input-start",
+        "tool-input-delta",
+        "tool-input-end",
+        "tool-call",
+        "finish"
+      ],
+      "outcome": {
+        "toolCall": {
+          "type": "tool-call",
+          "toolCallId": "call_offline",
+          "toolName": "submit",
+          "input": {
+            "length": 11,
+            "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+            "trailingWhitespace": 0
+          },
+          "providerMetadata": {
+            "openrouter": {
+              "reasoning_details": []
+            }
+          }
+        },
+        "finishReason": {
+          "unified": "tool-calls"
+        }
+      }
+    },
+    {
+      "fixture": "prefix-eof",
+      "channel": "text",
+      "sdk": "pi",
+      "input": {
+        "length": 8198,
+        "sha256": "46a8a2d89d095da8dc5c9ac7fa7e6cc0add3a96ed3d644d3be9f201a6189aeb3",
+        "trailingWhitespace": 8192
+      },
+      "wire": {
+        "length": 8544,
+        "sha256": "47edc3df6bf6e6164b1d31801309716d9e3b66d906eabc44c302bbe2e098eb67",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 8198,
+        "sha256": "46a8a2d89d095da8dc5c9ac7fa7e6cc0add3a96ed3d644d3be9f201a6189aeb3",
+        "trailingWhitespace": 8192
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "store": false,
+        "max_completion_tokens": 16384
+      },
+      "events": [
+        "start",
+        "text_start",
+        "text_delta",
+        "text_delta",
+        "text_end",
+        "error"
+      ],
+      "outcome": {
+        "stopReason": "error",
+        "errorMessage": "Stream ended without finish_reason",
+        "content": [
+          {
+            "type": "text",
+            "text": {
+              "length": 8198,
+              "sha256": "46a8a2d89d095da8dc5c9ac7fa7e6cc0add3a96ed3d644d3be9f201a6189aeb3",
+              "trailingWhitespace": 8192
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fixture": "prefix-eof",
+      "channel": "text",
+      "sdk": "ai",
+      "input": {
+        "length": 8198,
+        "sha256": "46a8a2d89d095da8dc5c9ac7fa7e6cc0add3a96ed3d644d3be9f201a6189aeb3",
+        "trailingWhitespace": 8192
+      },
+      "wire": {
+        "length": 8544,
+        "sha256": "47edc3df6bf6e6164b1d31801309716d9e3b66d906eabc44c302bbe2e098eb67",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 8198,
+        "sha256": "46a8a2d89d095da8dc5c9ac7fa7e6cc0add3a96ed3d644d3be9f201a6189aeb3",
+        "trailingWhitespace": 8192
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "max_tokens": 16384,
+        "response_format": {
+          "type": "json_schema",
+          "json_schema": {
+            "schema": {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "type": "object",
+              "properties": {
+                "ok": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "ok"
+              ],
+              "additionalProperties": false
+            },
+            "strict": true,
+            "name": "response"
+          }
+        },
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "stream": true
+      },
+      "events": [
+        "start",
+        "start-step",
+        "text-start",
+        "text-delta",
+        "text-delta",
+        "text-end",
+        "finish-step",
+        "finish"
+      ],
+      "outcome": {
+        "text": {
+          "length": 8198,
+          "sha256": "46a8a2d89d095da8dc5c9ac7fa7e6cc0add3a96ed3d644d3be9f201a6189aeb3",
+          "trailingWhitespace": 8192
+        },
+        "finish": {
+          "ok": true,
+          "value": "other"
+        },
+        "toolCalls": {
+          "ok": true,
+          "value": []
+        },
+        "output": {
+          "ok": false,
+          "error": "No object generated: could not parse the response.",
+          "name": "AI_NoObjectGeneratedError"
+        }
+      }
+    },
+    {
+      "fixture": "prefix-eof",
+      "channel": "text",
+      "sdk": "ai-adapter",
+      "input": {
+        "length": 8198,
+        "sha256": "46a8a2d89d095da8dc5c9ac7fa7e6cc0add3a96ed3d644d3be9f201a6189aeb3",
+        "trailingWhitespace": 8192
+      },
+      "wire": {
+        "length": 8544,
+        "sha256": "47edc3df6bf6e6164b1d31801309716d9e3b66d906eabc44c302bbe2e098eb67",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 8198,
+        "sha256": "46a8a2d89d095da8dc5c9ac7fa7e6cc0add3a96ed3d644d3be9f201a6189aeb3",
+        "trailingWhitespace": 8192
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "response_format": {
+          "type": "json_schema",
+          "json_schema": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "ok": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "ok"
+              ],
+              "additionalProperties": false
+            },
+            "strict": true,
+            "name": "response"
+          }
+        },
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "stream": true
+      },
+      "events": [
+        "stream-start",
+        "response-metadata",
+        "response-metadata",
+        "text-start",
+        "text-delta",
+        "response-metadata",
+        "response-metadata",
+        "text-delta",
+        "text-end",
+        "finish"
+      ],
+      "outcome": {
+        "finishReason": {
+          "unified": "other"
+        }
+      }
+    },
+    {
+      "fixture": "prefix-eof",
+      "channel": "tool",
+      "sdk": "pi",
+      "input": {
+        "length": 8198,
+        "sha256": "46a8a2d89d095da8dc5c9ac7fa7e6cc0add3a96ed3d644d3be9f201a6189aeb3",
+        "trailingWhitespace": 8192
+      },
+      "wire": {
+        "length": 8682,
+        "sha256": "eda4c7edfd19b13812f058f9bc507137da66b0d6d8d54a900263d6600447057f",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 8198,
+        "sha256": "46a8a2d89d095da8dc5c9ac7fa7e6cc0add3a96ed3d644d3be9f201a6189aeb3",
+        "trailingWhitespace": 8192
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "store": false,
+        "max_completion_tokens": 16384,
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "submit",
+              "description": "Submit result",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        ]
+      },
+      "events": [
+        "start",
+        "toolcall_start",
+        "toolcall_delta",
+        "toolcall_delta",
+        "toolcall_end",
+        "error"
+      ],
+      "outcome": {
+        "stopReason": "error",
+        "errorMessage": "Stream ended without finish_reason",
+        "content": [
+          {
+            "type": "toolCall",
+            "id": "call_offline",
+            "name": "submit",
+            "arguments": {},
+            "argumentsError": {
+              "length": 8248,
+              "sha256": "abee85a9be9aff1aa6aac009c254ed5d8f7e96b60b1110a9df9200a7e5466a7b",
+              "trailingWhitespace": 8192,
+              "preview": "Unexpected end of JSON input\n\nReceived arguments:\n{\"ok\":                                            "
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fixture": "prefix-eof",
+      "channel": "tool",
+      "sdk": "ai",
+      "input": {
+        "length": 8198,
+        "sha256": "46a8a2d89d095da8dc5c9ac7fa7e6cc0add3a96ed3d644d3be9f201a6189aeb3",
+        "trailingWhitespace": 8192
+      },
+      "wire": {
+        "length": 8682,
+        "sha256": "eda4c7edfd19b13812f058f9bc507137da66b0d6d8d54a900263d6600447057f",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 8198,
+        "sha256": "46a8a2d89d095da8dc5c9ac7fa7e6cc0add3a96ed3d644d3be9f201a6189aeb3",
+        "trailingWhitespace": 8192
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "max_tokens": 16384,
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "submit",
+              "description": "Submit result",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        ],
+        "tool_choice": "auto",
+        "stream": true
+      },
+      "events": [
+        "start",
+        "start-step",
+        "tool-input-start",
+        "tool-input-delta",
+        "tool-input-delta",
+        "tool-input-end",
+        "tool-call",
+        "tool-error",
+        "finish-step",
+        "finish"
+      ],
+      "outcome": {
+        "text": {
+          "length": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "trailingWhitespace": 0
+        },
+        "finish": {
+          "ok": true,
+          "value": "tool-calls"
+        },
+        "toolCalls": {
+          "ok": true,
+          "value": [
+            {
+              "type": "tool-call",
+              "toolCallId": "call_offline",
+              "toolName": "submit",
+              "input": {},
+              "dynamic": true,
+              "invalid": true,
+              "error": {
+                "name": "AI_InvalidToolInputError",
+                "cause": {
+                  "name": "AI_TypeValidationError",
+                  "cause": {
+                    "name": "ZodError",
+                    "message": "[\n  {\n    \"expected\": \"boolean\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"ok\"\n    ],\n    \"message\": \"Invalid input: expected boolean, received undefined\"\n  }\n]"
+                  },
+                  "value": {}
+                },
+                "toolInput": "{}",
+                "toolName": "submit"
+              },
+              "providerMetadata": {
+                "openrouter": {
+                  "reasoning_details": []
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fixture": "prefix-eof",
+      "channel": "tool",
+      "sdk": "ai-adapter",
+      "input": {
+        "length": 8198,
+        "sha256": "46a8a2d89d095da8dc5c9ac7fa7e6cc0add3a96ed3d644d3be9f201a6189aeb3",
+        "trailingWhitespace": 8192
+      },
+      "wire": {
+        "length": 8682,
+        "sha256": "eda4c7edfd19b13812f058f9bc507137da66b0d6d8d54a900263d6600447057f",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 8198,
+        "sha256": "46a8a2d89d095da8dc5c9ac7fa7e6cc0add3a96ed3d644d3be9f201a6189aeb3",
+        "trailingWhitespace": 8192
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "submit",
+              "description": "Submit result",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        ],
+        "stream": true
+      },
+      "events": [
+        "stream-start",
+        "response-metadata",
+        "response-metadata",
+        "response-metadata",
+        "response-metadata",
+        "tool-input-start",
+        "tool-input-delta",
+        "tool-input-delta",
+        "tool-input-end",
+        "tool-call",
+        "finish"
+      ],
+      "outcome": {
+        "toolCall": {
+          "type": "tool-call",
+          "toolCallId": "call_offline",
+          "toolName": "submit",
+          "input": {
+            "length": 2,
+            "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "trailingWhitespace": 0
+          },
+          "providerMetadata": {
+            "openrouter": {
+              "reasoning_details": []
+            }
+          }
+        },
+        "finishReason": {
+          "unified": "tool-calls"
+        }
+      }
+    },
+    {
+      "fixture": "prefix-cancel",
+      "channel": "text",
+      "sdk": "pi",
+      "input": {
+        "length": 8198,
+        "sha256": "46a8a2d89d095da8dc5c9ac7fa7e6cc0add3a96ed3d644d3be9f201a6189aeb3",
+        "trailingWhitespace": 8192
+      },
+      "wire": {
+        "length": 8530,
+        "sha256": "39b9637766d4b6085d2a94e4f270c33929d756b7415049134aeb3123347ad239",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 8198,
+        "sha256": "46a8a2d89d095da8dc5c9ac7fa7e6cc0add3a96ed3d644d3be9f201a6189aeb3",
+        "trailingWhitespace": 8192
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "store": false,
+        "max_completion_tokens": 16384
+      },
+      "events": [
+        "start",
+        "text_start",
+        "text_delta",
+        "text_delta",
+        "text_end",
+        "error"
+      ],
+      "outcome": {
+        "stopReason": "aborted",
+        "errorMessage": "Request was aborted",
+        "content": [
+          {
+            "type": "text",
+            "text": {
+              "length": 8198,
+              "sha256": "46a8a2d89d095da8dc5c9ac7fa7e6cc0add3a96ed3d644d3be9f201a6189aeb3",
+              "trailingWhitespace": 8192
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fixture": "prefix-cancel",
+      "channel": "text",
+      "sdk": "ai",
+      "input": {
+        "length": 8198,
+        "sha256": "46a8a2d89d095da8dc5c9ac7fa7e6cc0add3a96ed3d644d3be9f201a6189aeb3",
+        "trailingWhitespace": 8192
+      },
+      "wire": {
+        "length": 8530,
+        "sha256": "39b9637766d4b6085d2a94e4f270c33929d756b7415049134aeb3123347ad239",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 6,
+        "sha256": "15c1dc806689456a6eadb35204f45c3cca963731d8d3d4328fbb39ab7b67263c",
+        "trailingWhitespace": 0
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "max_tokens": 16384,
+        "response_format": {
+          "type": "json_schema",
+          "json_schema": {
+            "schema": {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "type": "object",
+              "properties": {
+                "ok": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "ok"
+              ],
+              "additionalProperties": false
+            },
+            "strict": true,
+            "name": "response"
+          }
+        },
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "stream": true
+      },
+      "events": [
+        "start",
+        "start-step",
+        "text-start",
+        "text-delta",
+        "abort"
+      ],
+      "outcome": {
+        "text": {
+          "ok": false,
+          "error": "Offline fixture cancellation",
+          "name": "AbortError"
+        },
+        "finish": {
+          "ok": false,
+          "error": "Offline fixture cancellation",
+          "name": "AbortError"
+        },
+        "toolCalls": {
+          "ok": false,
+          "error": "Offline fixture cancellation",
+          "name": "AbortError"
+        },
+        "output": {
+          "ok": false,
+          "error": "Offline fixture cancellation",
+          "name": "AbortError"
+        }
+      }
+    },
+    {
+      "fixture": "prefix-cancel",
+      "channel": "text",
+      "sdk": "ai-adapter",
+      "input": {
+        "length": 8198,
+        "sha256": "46a8a2d89d095da8dc5c9ac7fa7e6cc0add3a96ed3d644d3be9f201a6189aeb3",
+        "trailingWhitespace": 8192
+      },
+      "wire": {
+        "length": 8530,
+        "sha256": "39b9637766d4b6085d2a94e4f270c33929d756b7415049134aeb3123347ad239",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 8198,
+        "sha256": "46a8a2d89d095da8dc5c9ac7fa7e6cc0add3a96ed3d644d3be9f201a6189aeb3",
+        "trailingWhitespace": 8192
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "response_format": {
+          "type": "json_schema",
+          "json_schema": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "ok": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "ok"
+              ],
+              "additionalProperties": false
+            },
+            "strict": true,
+            "name": "response"
+          }
+        },
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "stream": true
+      },
+      "events": [
+        "stream-start",
+        "response-metadata",
+        "response-metadata",
+        "text-start",
+        "text-delta",
+        "response-metadata",
+        "response-metadata",
+        "text-delta",
+        "error",
+        "text-end",
+        "finish"
+      ],
+      "outcome": {
+        "finishReason": {
+          "unified": "error"
+        }
+      }
+    },
+    {
+      "fixture": "prefix-cancel",
+      "channel": "tool",
+      "sdk": "pi",
+      "input": {
+        "length": 8198,
+        "sha256": "46a8a2d89d095da8dc5c9ac7fa7e6cc0add3a96ed3d644d3be9f201a6189aeb3",
+        "trailingWhitespace": 8192
+      },
+      "wire": {
+        "length": 8668,
+        "sha256": "96d21e7ed6f170c68f6525640d4533d21e8654bf8611f9dac4a2fae2a918e50f",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 8198,
+        "sha256": "46a8a2d89d095da8dc5c9ac7fa7e6cc0add3a96ed3d644d3be9f201a6189aeb3",
+        "trailingWhitespace": 8192
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "store": false,
+        "max_completion_tokens": 16384,
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "submit",
+              "description": "Submit result",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        ]
+      },
+      "events": [
+        "start",
+        "toolcall_start",
+        "toolcall_delta",
+        "toolcall_delta",
+        "toolcall_end",
+        "error"
+      ],
+      "outcome": {
+        "stopReason": "aborted",
+        "errorMessage": "Request was aborted",
+        "content": [
+          {
+            "type": "toolCall",
+            "id": "call_offline",
+            "name": "submit",
+            "arguments": {},
+            "argumentsError": {
+              "length": 8248,
+              "sha256": "abee85a9be9aff1aa6aac009c254ed5d8f7e96b60b1110a9df9200a7e5466a7b",
+              "trailingWhitespace": 8192,
+              "preview": "Unexpected end of JSON input\n\nReceived arguments:\n{\"ok\":                                            "
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fixture": "prefix-cancel",
+      "channel": "tool",
+      "sdk": "ai",
+      "input": {
+        "length": 8198,
+        "sha256": "46a8a2d89d095da8dc5c9ac7fa7e6cc0add3a96ed3d644d3be9f201a6189aeb3",
+        "trailingWhitespace": 8192
+      },
+      "wire": {
+        "length": 8668,
+        "sha256": "96d21e7ed6f170c68f6525640d4533d21e8654bf8611f9dac4a2fae2a918e50f",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 8198,
+        "sha256": "46a8a2d89d095da8dc5c9ac7fa7e6cc0add3a96ed3d644d3be9f201a6189aeb3",
+        "trailingWhitespace": 8192
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "max_tokens": 16384,
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "submit",
+              "description": "Submit result",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        ],
+        "tool_choice": "auto",
+        "stream": true
+      },
+      "events": [
+        "start",
+        "start-step",
+        "tool-input-start",
+        "tool-input-delta",
+        "tool-input-delta",
+        "abort"
+      ],
+      "outcome": {
+        "text": {
+          "ok": false,
+          "error": "Offline fixture cancellation",
+          "name": "AbortError"
+        },
+        "finish": {
+          "ok": false,
+          "error": "Offline fixture cancellation",
+          "name": "AbortError"
+        },
+        "toolCalls": {
+          "ok": false,
+          "error": "Offline fixture cancellation",
+          "name": "AbortError"
+        }
+      }
+    },
+    {
+      "fixture": "prefix-cancel",
+      "channel": "tool",
+      "sdk": "ai-adapter",
+      "input": {
+        "length": 8198,
+        "sha256": "46a8a2d89d095da8dc5c9ac7fa7e6cc0add3a96ed3d644d3be9f201a6189aeb3",
+        "trailingWhitespace": 8192
+      },
+      "wire": {
+        "length": 8668,
+        "sha256": "96d21e7ed6f170c68f6525640d4533d21e8654bf8611f9dac4a2fae2a918e50f",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 8198,
+        "sha256": "46a8a2d89d095da8dc5c9ac7fa7e6cc0add3a96ed3d644d3be9f201a6189aeb3",
+        "trailingWhitespace": 8192
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "submit",
+              "description": "Submit result",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        ],
+        "stream": true
+      },
+      "events": [
+        "stream-start",
+        "response-metadata",
+        "response-metadata",
+        "response-metadata",
+        "response-metadata",
+        "tool-input-start",
+        "tool-input-delta",
+        "tool-input-delta",
+        "error",
+        "finish"
+      ],
+      "outcome": {
+        "finishReason": {
+          "unified": "error"
+        }
+      }
+    },
+    {
+      "fixture": "retained-9-synthetic-finish",
+      "channel": "text",
+      "sdk": "pi",
+      "input": {
+        "length": 1141943,
+        "sha256": "7798c7096b96cbe5028cb34ff916dfc219290bf39712c56d6a76484957d7b4fa",
+        "trailingWhitespace": 1131782
+      },
+      "wire": {
+        "length": 1369105,
+        "sha256": "e09505072bdf2c1716a0216c581f4a27c256ef5f83589eca755d7faea4cf6a5e",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 1141943,
+        "sha256": "7798c7096b96cbe5028cb34ff916dfc219290bf39712c56d6a76484957d7b4fa",
+        "trailingWhitespace": 1131782
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "store": false,
+        "max_completion_tokens": 16384
+      },
+      "events": [
+        "start",
+        "text_start",
+        "text_delta",
+        "text_delta",
+        "text_end",
+        "done"
+      ],
+      "outcome": {
+        "stopReason": "stop",
+        "content": [
+          {
+            "type": "text",
+            "text": {
+              "length": 1141943,
+              "sha256": "7798c7096b96cbe5028cb34ff916dfc219290bf39712c56d6a76484957d7b4fa",
+              "trailingWhitespace": 1131782
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fixture": "retained-9-synthetic-finish",
+      "channel": "text",
+      "sdk": "ai",
+      "input": {
+        "length": 1141943,
+        "sha256": "7798c7096b96cbe5028cb34ff916dfc219290bf39712c56d6a76484957d7b4fa",
+        "trailingWhitespace": 1131782
+      },
+      "wire": {
+        "length": 1369105,
+        "sha256": "e09505072bdf2c1716a0216c581f4a27c256ef5f83589eca755d7faea4cf6a5e",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 1141943,
+        "sha256": "7798c7096b96cbe5028cb34ff916dfc219290bf39712c56d6a76484957d7b4fa",
+        "trailingWhitespace": 1131782
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "max_tokens": 16384,
+        "response_format": {
+          "type": "json_schema",
+          "json_schema": {
+            "schema": {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "type": "object",
+              "properties": {
+                "ok": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "ok"
+              ],
+              "additionalProperties": false
+            },
+            "strict": true,
+            "name": "response"
+          }
+        },
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "stream": true
+      },
+      "events": [
+        "start",
+        "start-step",
+        "text-start",
+        "text-delta",
+        "text-delta",
+        "text-end",
+        "finish-step",
+        "finish"
+      ],
+      "outcome": {
+        "text": {
+          "length": 1141943,
+          "sha256": "7798c7096b96cbe5028cb34ff916dfc219290bf39712c56d6a76484957d7b4fa",
+          "trailingWhitespace": 1131782
+        },
+        "finish": {
+          "ok": true,
+          "value": "stop"
+        },
+        "toolCalls": {
+          "ok": true,
+          "value": []
+        },
+        "output": {
+          "ok": false,
+          "error": "No object generated: could not parse the response.",
+          "name": "AI_NoObjectGeneratedError"
+        }
+      }
+    },
+    {
+      "fixture": "retained-9-synthetic-finish",
+      "channel": "text",
+      "sdk": "ai-adapter",
+      "input": {
+        "length": 1141943,
+        "sha256": "7798c7096b96cbe5028cb34ff916dfc219290bf39712c56d6a76484957d7b4fa",
+        "trailingWhitespace": 1131782
+      },
+      "wire": {
+        "length": 1369105,
+        "sha256": "e09505072bdf2c1716a0216c581f4a27c256ef5f83589eca755d7faea4cf6a5e",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 1141943,
+        "sha256": "7798c7096b96cbe5028cb34ff916dfc219290bf39712c56d6a76484957d7b4fa",
+        "trailingWhitespace": 1131782
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "response_format": {
+          "type": "json_schema",
+          "json_schema": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "ok": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "ok"
+              ],
+              "additionalProperties": false
+            },
+            "strict": true,
+            "name": "response"
+          }
+        },
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "stream": true
+      },
+      "events": [
+        "stream-start",
+        "response-metadata",
+        "response-metadata",
+        "text-start",
+        "text-delta",
+        "response-metadata",
+        "response-metadata",
+        "text-delta",
+        "response-metadata",
+        "response-metadata",
+        "text-end",
+        "finish"
+      ],
+      "outcome": {
+        "finishReason": {
+          "unified": "stop",
+          "raw": "stop"
+        }
+      }
+    },
+    {
+      "fixture": "retained-9-synthetic-finish",
+      "channel": "tool",
+      "sdk": "pi",
+      "input": {
+        "length": 1141943,
+        "sha256": "7798c7096b96cbe5028cb34ff916dfc219290bf39712c56d6a76484957d7b4fa",
+        "trailingWhitespace": 1131782
+      },
+      "wire": {
+        "length": 1369249,
+        "sha256": "fbd92c2ed8e54df6c4f27a3f9c53134590b70a82b7f0466b0afc040648a082f8",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 1141943,
+        "sha256": "7798c7096b96cbe5028cb34ff916dfc219290bf39712c56d6a76484957d7b4fa",
+        "trailingWhitespace": 1131782
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "store": false,
+        "max_completion_tokens": 16384,
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "submit",
+              "description": "Submit result",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        ]
+      },
+      "events": [
+        "start",
+        "toolcall_start",
+        "toolcall_delta",
+        "toolcall_delta",
+        "toolcall_end",
+        "done"
+      ],
+      "outcome": {
+        "stopReason": "toolUse",
+        "content": [
+          {
+            "type": "toolCall",
+            "id": "call_offline",
+            "name": "submit",
+            "arguments": {},
+            "argumentsError": {
+              "length": 1141993,
+              "sha256": "9ee8f91ea79a3f2d2e07920913ccff6b64d3254e686852743b16c8d49adef99b",
+              "trailingWhitespace": 1131782,
+              "preview": "Unexpected end of JSON input\n\nReceived arguments:\n{\n  \"findings\": {\n    \"9b249b279278caafe4df4dc641c"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fixture": "retained-9-synthetic-finish",
+      "channel": "tool",
+      "sdk": "ai",
+      "input": {
+        "length": 1141943,
+        "sha256": "7798c7096b96cbe5028cb34ff916dfc219290bf39712c56d6a76484957d7b4fa",
+        "trailingWhitespace": 1131782
+      },
+      "wire": {
+        "length": 1369249,
+        "sha256": "fbd92c2ed8e54df6c4f27a3f9c53134590b70a82b7f0466b0afc040648a082f8",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 1141943,
+        "sha256": "7798c7096b96cbe5028cb34ff916dfc219290bf39712c56d6a76484957d7b4fa",
+        "trailingWhitespace": 1131782
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "max_tokens": 16384,
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "submit",
+              "description": "Submit result",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        ],
+        "tool_choice": "auto",
+        "stream": true
+      },
+      "events": [
+        "start",
+        "start-step",
+        "tool-input-start",
+        "tool-input-delta",
+        "tool-input-delta",
+        "tool-input-end",
+        "tool-call",
+        "tool-error",
+        "finish-step",
+        "finish"
+      ],
+      "outcome": {
+        "text": {
+          "length": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "trailingWhitespace": 0
+        },
+        "finish": {
+          "ok": true,
+          "value": "tool-calls"
+        },
+        "toolCalls": {
+          "ok": true,
+          "value": [
+            {
+              "type": "tool-call",
+              "toolCallId": "call_offline",
+              "toolName": "submit",
+              "input": {},
+              "dynamic": true,
+              "invalid": true,
+              "error": {
+                "name": "AI_InvalidToolInputError",
+                "cause": {
+                  "name": "AI_TypeValidationError",
+                  "cause": {
+                    "name": "ZodError",
+                    "message": "[\n  {\n    \"expected\": \"boolean\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"ok\"\n    ],\n    \"message\": \"Invalid input: expected boolean, received undefined\"\n  }\n]"
+                  },
+                  "value": {}
+                },
+                "toolInput": "{}",
+                "toolName": "submit"
+              },
+              "providerMetadata": {
+                "openrouter": {
+                  "reasoning_details": []
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fixture": "retained-9-synthetic-finish",
+      "channel": "tool",
+      "sdk": "ai-adapter",
+      "input": {
+        "length": 1141943,
+        "sha256": "7798c7096b96cbe5028cb34ff916dfc219290bf39712c56d6a76484957d7b4fa",
+        "trailingWhitespace": 1131782
+      },
+      "wire": {
+        "length": 1369249,
+        "sha256": "fbd92c2ed8e54df6c4f27a3f9c53134590b70a82b7f0466b0afc040648a082f8",
+        "trailingWhitespace": 2
+      },
+      "received": {
+        "length": 1141943,
+        "sha256": "7798c7096b96cbe5028cb34ff916dfc219290bf39712c56d6a76484957d7b4fa",
+        "trailingWhitespace": 1131782
+      },
+      "calls": 1,
+      "request": {
+        "model": "offline/model",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return ok true."
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "submit",
+              "description": "Submit result",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        ],
+        "stream": true
+      },
+      "events": [
+        "stream-start",
+        "response-metadata",
+        "response-metadata",
+        "response-metadata",
+        "response-metadata",
+        "tool-input-start",
+        "tool-input-delta",
+        "tool-input-delta",
+        "response-metadata",
+        "response-metadata",
+        "tool-input-end",
+        "tool-call",
+        "finish"
+      ],
+      "outcome": {
+        "toolCall": {
+          "type": "tool-call",
+          "toolCallId": "call_offline",
+          "toolName": "submit",
+          "input": {
+            "length": 2,
+            "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "trailingWhitespace": 0
+          },
+          "providerMetadata": {
+            "openrouter": {
+              "reasoning_details": []
+            }
+          }
+        },
+        "finishReason": {
+          "unified": "tool-calls",
+          "raw": "tool_calls"
+        }
+      }
+    }
+  ]
+}

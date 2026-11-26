@@ -8,6 +8,7 @@ import { createModels } from "@earendil-works/pi-ai";
 import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { getFunctionName } from "convex/server";
 import { afterEach, assert, beforeEach, expect, test, vi } from "vitest";
+import { readConversationPageWithBodies } from "@/__tests__/setup/retained-messages";
 import { activateSourcesMission } from "@/__tests__/setup/sources-mission";
 import {
     client,
@@ -45,7 +46,7 @@ test("a slash command records the actual unstarted status without a response mis
         (await client.query(api.workbench.snapshot, { runId })).research.actions
             .start.applicable,
     ).toBe(false);
-    const page = await client.query(api.execution.conversations.listMessages, {
+    const page = await readConversationPageWithBodies(client, {
         runId,
         paginationOpts: { numItems: 20, cursor: null },
     });
@@ -157,10 +158,10 @@ test("replaying a command retains its original receipt and never repeats a later
             expectedGeneration: 2,
         }),
     ).rejects.toThrow("message_identity_conflict");
-    const messages = await client.query(
-        api.execution.conversations.listMessages,
-        { runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
+    const messages = await readConversationPageWithBodies(client, {
+        runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(messages.page.filter((m) => m.text === "/pause")).toHaveLength(1);
 });
 
@@ -237,7 +238,7 @@ test("authentication and the native conversation contract are required before re
     );
     expect(
         (
-            await client.query(api.execution.conversations.listMessages, {
+            await readConversationPageWithBodies(client, {
                 runId,
                 paginationOpts: { numItems: 20, cursor: null },
             })
@@ -699,10 +700,31 @@ test("an approval decision is recorded as a control exchange for the native hist
     expect(pending.entries).toHaveLength(1);
     const entry = pending.entries[0];
     assert(entry);
-    expect(entry).toMatchObject({
-        command: "Continue preparation: always for this dossier",
-        text: approvalOutcomeText(view),
-    });
+    const fragments = internal.execution.piStore.nativeInputFragment;
+    for (const [body, expected] of [
+        [entry.command, "Continue preparation: always for this dossier"],
+        [entry.confirmation, approvalOutcomeText(view)],
+    ] as const) {
+        assert("contentHash" in body);
+        await expect(
+            f.t.query(fragments, {
+                ...lease,
+                ...body,
+                controlMessageId: entry.messageId,
+                index: 0,
+            }),
+        ).resolves.toMatchObject({ content: expected, fragmentCount: 1 });
+    }
+    const confirmation = entry.confirmation;
+    assert("contentHash" in confirmation);
+    await expect(
+        f.t.query(fragments, {
+            ...lease,
+            ...confirmation,
+            controlMessageId: confirmation.messageId,
+            index: 0,
+        }),
+    ).rejects.toThrow("native_control_unavailable");
 
     await f.t.mutation(internal.execution.piStore.recordControlInputs, {
         ...lease,
@@ -763,10 +785,10 @@ test.each([
         definitionId: "workbench_v1",
         definitionVersion: version,
     });
-    const messages = await client.query(
-        api.execution.conversations.listMessages,
-        { runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
+    const messages = await readConversationPageWithBodies(client, {
+        runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(
         messages.page.filter(
             (message) => message.role === "user" && message.text === "/pause",

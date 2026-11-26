@@ -1,6 +1,6 @@
 import {
     hasKnownNonDispatch,
-    invocationResponses,
+    invocationResponseManifest,
 } from "@convex/execution/journal";
 import {
     ADMIN_BACKFILL_PAGE_MAX_ITEMS,
@@ -16,6 +16,7 @@ import {
     paginationResultValidator,
 } from "convex/server";
 import { type Infer, v } from "convex/values";
+import type { Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
 import { requireAdmin } from "./administrationAuthority";
@@ -777,8 +778,13 @@ export const listRunJournalEventsPage = query({
     },
 });
 
-const journalInvocationValidator =
-    schema.tables.agentInvocations.validator.pick(
+const journalResponseReference = v.object({
+    contentHash: v.string(),
+    sizeBytes: v.number(),
+});
+
+const journalInvocationValidator = schema.tables.agentInvocations.validator
+    .pick(
         "generationBackend",
         "journalVersion",
         "provenance",
@@ -792,12 +798,17 @@ const journalInvocationValidator =
         "outputJson",
         "receivedOutputJson",
         "receivedWhileAuthorized",
-    );
+    )
+    .extend({
+        output: v.optional(journalResponseReference),
+        receivedOutput: v.optional(journalResponseReference),
+    });
 
 export const inspectJournalEvent = query({
     args: {
         runId: v.id("researchRuns"),
         eventId: v.id("agentExecutionEvents"),
+        bodyAccess: v.optional(v.literal("separate")),
     },
     returns: v.object({
         event: schema.doc("agentExecutionEvents"),
@@ -866,6 +877,26 @@ export const inspectJournalEvent = query({
                     providerCall.invocationId !== invocation?._id))
         )
             throw new Error("Journal correlation mismatch");
+        const responseReference = async (
+            textId: Id<"retainedTexts"> | undefined,
+        ) => {
+            if (!invocation || !textId) return undefined;
+            const text = await invocationResponseManifest(
+                ctx,
+                invocation,
+                textId,
+                "response",
+            );
+            return { contentHash: text.contentHash, sizeBytes: text.sizeBytes };
+        };
+        const receivedOutput = await responseReference(
+            invocation?.receivedOutputTextId,
+        );
+        const output =
+            invocation?.outputTextId &&
+            invocation.outputTextId === invocation.receivedOutputTextId
+                ? receivedOutput
+                : await responseReference(invocation?.outputTextId);
         return {
             event,
             request,
@@ -882,7 +913,12 @@ export const inspectJournalEvent = query({
                       createdAt: invocation.createdAt,
                       completedAt: invocation.completedAt,
                       blockCode: invocation.blockCode,
-                      ...(await invocationResponses(ctx, invocation)),
+                      output,
+                      receivedOutput,
+                      outputJson: output ? undefined : invocation.outputJson,
+                      receivedOutputJson: receivedOutput
+                          ? undefined
+                          : invocation.receivedOutputJson,
                       receivedWhileAuthorized:
                           invocation.receivedWhileAuthorized,
                   }
@@ -989,13 +1025,44 @@ async function readJournalPayload(
 export const listInvocationPayloadFragmentsPage = query({
     args: {
         ...invocationPayloadArgs.fields,
+        part: v.union(
+            v.literal("request"),
+            v.literal("reply"),
+            v.literal("received"),
+            v.literal("adopted"),
+        ),
+        contentHash: v.optional(v.string()),
         paginationOpts: paginationOptsValidator,
     },
     returns: paginationResultValidator(
         v.object({ index: v.number(), content: v.string() }),
     ),
     handler: async (ctx, args) => {
-        const result = await readJournalPayload(ctx, args);
+        if (args.part === "received" || args.part === "adopted") {
+            await requireAdmin(ctx);
+            const invocation = await ctx.db.get(args.invocationId);
+            if (!invocation || invocation.runId !== args.runId)
+                throw new Error("Journal entry not found");
+            const textId =
+                args.part === "received"
+                    ? invocation.receivedOutputTextId
+                    : invocation.outputTextId;
+            if (!textId)
+                throw new Error("Complete fragmented snapshot not found");
+            const text = await invocationResponseManifest(
+                ctx,
+                invocation,
+                textId,
+                "response",
+            );
+            if (text.contentHash !== args.contentHash)
+                throw new Error("Journal correlation mismatch");
+            return retainedTextPage(ctx, text, args.paginationOpts);
+        }
+        const result = await readJournalPayload(ctx, {
+            ...args,
+            part: args.part,
+        });
         if (
             result.kind !== "recorded" ||
             result.payload.state !== "complete" ||

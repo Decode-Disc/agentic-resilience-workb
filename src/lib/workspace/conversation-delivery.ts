@@ -4,6 +4,8 @@ import type { OptimisticLocalStore } from "convex/browser";
 import { insertAtTop } from "convex/react";
 import type { FunctionArgs } from "convex/server";
 
+export const WORKBENCH_HISTORY_BODY_ACCESS = "separate";
+
 /** Shows the submitted instruction in Convex's cache; native reconciliation and rollback remain SDK-owned. */
 export function insertOptimisticConversationMessage(
     localStore: OptimisticLocalStore,
@@ -25,6 +27,7 @@ export function insertOptimisticConversationMessage(
         pages.some(
             (page) =>
                 page.args.runId === args.runId &&
+                page.args.bodyAccess === WORKBENCH_HISTORY_BODY_ACCESS &&
                 page.value?.page.some(
                     (message) => message.requestKey === args.requestKey,
                 ),
@@ -33,7 +36,10 @@ export function insertOptimisticConversationMessage(
         return;
     insertAtTop({
         paginatedQuery: api.workbench.history,
-        argsToMatch: { runId: args.runId },
+        argsToMatch: {
+            runId: args.runId,
+            bodyAccess: WORKBENCH_HISTORY_BODY_ACCESS,
+        },
         localQueryStore: localStore,
         item: {
             _id: `optimistic:${args.requestKey}` as Id<"agentMessageDeliveries">,

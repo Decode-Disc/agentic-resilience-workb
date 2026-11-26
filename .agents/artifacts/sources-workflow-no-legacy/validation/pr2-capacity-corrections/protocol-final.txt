@@ -1,0 +1,400 @@
+$ node --experimental-strip-types --test src/__tests__/config/*.test.mjs
+✔ native skill packaging is deterministic and excludes developer resources (4523.819534ms)
+✔ packaging rejects metadata, resource escapes and immutable package replacement (12369.376806ms)
+✔ overflowing API pricing returns a validation refusal rather than throwing (12.030882ms)
+✔ subscription authority cannot carry implicit API pricing metadata (5.197954ms)
+✔ native API authority funds full capacity including cache writes and pricing tiers (5.093724ms)
+✔ new analysis mandates require independent finite allowances and leave old mandates unchanged (24.190133ms)
+✔ native review mandates use SDK capacity without a required input proxy while API bounds remain explicit (1.995476ms)
+✔ a campaign cannot silently default its spending allowance or expiration (2.057214ms)
+✔ prepare retains a reviewable mandate without authorizing a lot or contacting a service (103.568312ms)
+✔ a mechanical completion still needs a judgment bound to unchanged evidence (26.698595ms)
+✔ automated assessments identify their reviewer and reject evidence outside the frozen index (5.438703ms)
+✔ retained automated review survives cleanup updating current evidence (64.863025ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-RFEyAf/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"d19fb0de0f7a63c8a382660f0690f63a01ea34de23f7341d1790bb78cd1b0034","reportHash":"ad065b1ee48a0effff37c3c65801ff3d28e342fa44597f05a753961f56e86923","attempt":1,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+✔ campaign command review handles retained (1389.535434ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-fDxEZF/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"248f34432c140e3255aa26163334547ba273cb2ec938cc16fb527dae4338eef8","reportHash":"653a5083e79ce43ab05f2f3bfd9e4c67dc60a394a0313df9dd92a2a0b7dd14e2","attempt":1,"summary":"Synthetic diagnostic handoff for offline boundary verification.","assessment":"pending","complete":true}}
+{"status":"campaign_failed","diagnostics":[{"step":"submit-assessment","category":"operation_failed","code":"ECONNRESET"}],"path":"/tmp/campaign-command-recovery-fDxEZF/lots/lot-1/campaign-diagnostic-6a677608-5a87-4168-a5ec-f6f8882aea84.json"}
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-fDxEZF/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"248f34432c140e3255aa26163334547ba273cb2ec938cc16fb527dae4338eef8","reportHash":"653a5083e79ce43ab05f2f3bfd9e4c67dc60a394a0313df9dd92a2a0b7dd14e2","attempt":1,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+✔ campaign command review handles retained-assessment-failure (199.213799ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-rm2YZH/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"d208b2888d45ec80d53feb21db0597e20022528864f6a148e680cd50377b1c2a","reportHash":"fe13715b1ccdeae0c80346700751c40a9f906b45c1cb7aeb56254b25d54a003b","attempt":1,"summary":"Synthetic diagnostic handoff for offline boundary verification.","assessment":"pending","complete":true}}
+{"status":"campaign_failed","diagnostics":[{"step":"archive-assessment","category":"operation_failed","code":"ENOSPC"}],"path":"/tmp/campaign-command-recovery-rm2YZH/lots/lot-1/campaign-diagnostic-396e0ef1-3eaa-4345-8d7c-7fe2711fcf84.json"}
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-rm2YZH/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"d208b2888d45ec80d53feb21db0597e20022528864f6a148e680cd50377b1c2a","reportHash":"fe13715b1ccdeae0c80346700751c40a9f906b45c1cb7aeb56254b25d54a003b","attempt":1,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+✔ campaign command review handles retained-archive-failure (169.368998ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-q2mMWD/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"acf5f08aa9baa5aaeab80336fbe55b9d580376c4d85835336535807bbba6b04d","reportHash":"4f7653070b8cabc4f6b60fdb60e6d091dc1b0b5931b9d68947daee540554d171","attempt":1,"summary":"Synthetic diagnostic handoff for offline boundary verification.","assessment":"pending","complete":true}}
+{"status":"campaign_failed","diagnostics":[{"step":"archive-assessment","category":"operation_failed","code":"ENOSPC"},{"step":"archive-diagnostic","category":"operation_failed","code":"EACCES"}],"path":"/tmp/campaign-command-recovery-q2mMWD/lots/lot-1/campaign-diagnostic-53c242ba-5b3f-43b8-a112-ebae8a12788e.json"}
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-q2mMWD/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"acf5f08aa9baa5aaeab80336fbe55b9d580376c4d85835336535807bbba6b04d","reportHash":"4f7653070b8cabc4f6b60fdb60e6d091dc1b0b5931b9d68947daee540554d171","attempt":1,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+✔ campaign command review handles retained-archive-and-diagnostic-failure (184.04794ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-XCOLQw/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"607c4e1af50a194526e4c40014791fdfe3db8691515d7263928aed1975866576","reportHash":"c479e05f3be7488764b3bd39421d320efc0b1898466ebe2011948562236be248","attempt":2,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+✔ campaign command review handles none (425.707595ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-edHR28/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"f771cbf28630f90b75b7b59cefaa102fcec707f77d253354c1fb87b0a3bc1469","reportHash":"f071c797925b88f50389eafea7760755390a30bc8476879de3554ae59280c510","attempt":2,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+✔ campaign command review handles settlement (335.43863ms)
+✔ campaign command review handles settlement-expired (251.534719ms)
+✔ campaign command review handles settlement-unsupported (291.225227ms)
+✔ campaign command review handles settlement-expired-subscription (280.347104ms)
+✔ campaign command review handles settlement-expired-no-auth (287.536838ms)
+{"status":"campaign_failed","diagnostics":[{"step":"review","category":"assertion_failed","code":"ERR_ASSERTION"}],"path":"/tmp/campaign-command-recovery-EcvUOi/lots/lot-1/campaign-diagnostic-4cc86861-b637-401a-b478-9732c327509e.json"}
+✔ campaign command review handles settlement-expired-tampered (183.866573ms)
+✔ campaign command review handles unknown-expired (270.682109ms)
+✔ campaign command review handles legacy-reasoning (185.644325ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-p1uOX0/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"a563b7a37ee1a9f127258be31538f7910eccf3d72f4e35903bf16de94e9d2815","reportHash":"c8a02cb09f65058f0b2f0423ec2745146bf4fa46c5f27f6a863237345af43ab6","attempt":2,"summary":"Synthetic diagnostic handoff for offline boundary verification.","assessment":"pending","complete":true}}
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-p1uOX0/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"a563b7a37ee1a9f127258be31538f7910eccf3d72f4e35903bf16de94e9d2815","reportHash":"c8a02cb09f65058f0b2f0423ec2745146bf4fa46c5f27f6a863237345af43ab6","attempt":2,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+✔ campaign command review handles settlement-revision (381.370975ms)
+✔ campaign command review handles unknown (220.439524ms)
+✔ campaign command review handles denied (200.010607ms)
+✔ campaign command review handles 503 (234.560073ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-W5aHkW/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"443bc30912ac1b6303f3b81b3bf9926b863ea82cab23714846b1abfe55c67357","reportHash":"9942fae0d08188372876471086c12c54e6342eb268bd6518c8084236bd4c3a22","attempt":2,"summary":"Synthetic diagnostic handoff for offline boundary verification.","assessment":"pending","complete":true}}
+{"status":"campaign_failed","diagnostics":[{"step":"submit-assessment","category":"operation_failed"}],"path":"/tmp/campaign-command-recovery-W5aHkW/lots/lot-1/campaign-diagnostic-64d9d6d2-dfd1-4249-8011-2acb32c77eab.json"}
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-W5aHkW/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"443bc30912ac1b6303f3b81b3bf9926b863ea82cab23714846b1abfe55c67357","reportHash":"9942fae0d08188372876471086c12c54e6342eb268bd6518c8084236bd4c3a22","attempt":2,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+✔ campaign command review handles assess-ack (485.318063ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-qAgIbo/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"f0f004db6b733d59199e05f404e7ef810be4876bede7099bc1c2f032356b4a34","reportHash":"09de9d4dff613f673488fe48161ed181bf9d75223bf207fce029a68283dd8272","attempt":2,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+{
+  "campaign": {
+    "manifest": {
+      "version": 3,
+      "key": "prepared",
+      "objective": "Qualify the protected Workbench path",
+      "capability": "workbench",
+      "mode": "deterministic",
+      "batteryHash": "985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618",
+      "expectations": [
+        {
+          "id": "initial-framing",
+          "checks": [
+            "proposed-framing-is-saved"
+          ]
+        }
+      ],
+      "correctionPaths": [
+        "convex/execution"
+      ],
+      "maximumLots": 2,
+      "repetitionsPerCandidate": 1,
+      "expiresAt": 1795607721113,
+      "perLot": {
+        "model": 0,
+        "search": 0,
+        "acquisition": 0,
+        "costUsd": 0
+      },
+      "total": {
+        "model": 0,
+        "search": 0,
+        "acquisition": 0,
+        "costUsd": 0
+      },
+      "executionSurface": "backend",
+      "configurations": [
+        {
+          "id": "main",
+          "purpose": "quality",
+          "models": {
+            "workbench": {
+              "model": "fixture",
+              "reasoning": "recommended"
+            }
+          }
+        }
+      ],
+      "scenarios": [
+        {
+          "id": "initial-framing",
+          "company": {
+            "cik": "1",
+            "name": "Fixture",
+            "ticker": "FIX",
+            "websiteUrl": "https://example.com"
+          },
+          "framing": {
+            "scope": "Fixture",
+            "questions": [
+              {
+                "id": "position",
+                "text": "What changed?",
+                "shortLabel": "Position",
+                "rationale": "Review the evidence."
+              }
+            ]
+          },
+          "steps": [
+            {
+              "id": "save",
+              "action": "save_framing"
+            }
+          ]
+        }
+      ],
+      "analysis": {
+        "scope": "evidence_review",
+        "routes": [
+          {
+            "provider": "openai",
+            "model": "gpt-4o-mini"
+          }
+        ],
+        "perLot": {
+          "requests": 3,
+          "costMicros": 300000
+        },
+        "total": {
+          "requests": 6,
+          "costMicros": 600000
+        },
+        "maxRequestCostMicros": 100000,
+        "maxInputTokens": 32000,
+        "maxOutputTokens": 1000,
+        "timeoutMs": 10000
+      }
+    }
+  },
+  "lots": [
+    {
+      "candidateHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "_id": "lot-fixture",
+      "key": "lot-1",
+      "status": "finished",
+      "createdAt": 1
+    }
+  ],
+  "continueCursor": null,
+  "coverage": [],
+  "diagnosticReports": [
+    {
+      "path": "/tmp/campaign-command-recovery-qAgIbo/lots/lot-1/automated-review-report.md",
+      "candidateHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "batteryHash": "985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618",
+      "evidenceHash": "f0f004db6b733d59199e05f404e7ef810be4876bede7099bc1c2f032356b4a34",
+      "reportHash": "09de9d4dff613f673488fe48161ed181bf9d75223bf207fce029a68283dd8272",
+      "attempt": 2,
+      "summary": "The saved framing matches the captured evidence.",
+      "assessment": "assessed",
+      "complete": true,
+      "verdict": "passed",
+      "lot": "lot-1"
+    }
+  ]
+}
+✔ campaign command review handles report-ack-status (291.714303ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-zHYZzP/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"309f381e45573618fc683ea1621943f0f71db6e58c08ae05c8df77807618b932","reportHash":"c58023c3acd4fa3c693991c79f08a5a870676424dba733dcad15454edffea6b7","attempt":2,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+✔ campaign command review handles report-ack-close (369.08396ms)
+✔ campaign command review handles unqualified (87.767204ms)
+{"status":"campaign_failed","diagnostics":[{"step":"review","category":"assertion_failed","code":"ERR_ASSERTION"}],"path":"/tmp/campaign-command-recovery-6KbLxs/lots/lot-1/campaign-diagnostic-0975dba0-d434-4479-a815-753e3198d4cb.json"}
+✔ campaign command review handles tampered (243.878781ms)
+✔ campaign command review handles foreign-candidate (136.081871ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-12prfL/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"f336f2281cae0f0bca923bd57a2066949a5bb5a53fa3c57266a126e3e5a6c99d","reportHash":"3c578b27d6294a731c711c6ce2a8a4250d3d31ee20dfab2082d8547ed36c7b9a","attempt":2,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+✔ campaign command review handles auth-key (355.871099ms)
+✔ campaign command review handles auth-oauth (125.531886ms)
+✔ campaign command review handles auth-missing (182.779167ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-S9bILC/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"e5bc8347894419a60aa692a3a5f9fb6f6e60b86205ea5d9d47f90fc2818cd443","reportHash":"ed10bf21e37ebb234e4d503b9b2ed781215720497ba952b175ac60b3bc5be201","attempt":2,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+✔ campaign command review handles auth-codex (299.282064ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-efYsvQ/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"acfeb434bda2de1f21b6db019c5429246162f1b194442fa91f7ebbd094f6a933","reportHash":"553698bdf92624b867a6be6383215a1ed9592fb97c6c6989c4e50d29a49269e9","attempt":2,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+✔ campaign command review handles auth-codex-reasoning (471.238772ms)
+✔ campaign command review handles auth-codex-legacy-reasoning (297.17275ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-MdT5Q3/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"5ffd39c8d330436f642270d49d7c975be1ebc24f293624d8fb345af63a2b5e2d","reportHash":"19c4f06eb2a22f0d68f30b34ad7d8d4e7ff135060d8a8ac2f23cd382e55c4962","attempt":2,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+✔ campaign command review handles auth-subscription (269.350424ms)
+✔ campaign command review handles auth-subscription-key (115.612525ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-ztfRbh/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"746e3b47dac963569c6c36711b75b8109436363e515884342e0652b2def68c1b","reportHash":"9bf3cb94bd3d699d8c46c2475f7f7cfdcd1b8af5b74adf91ac253079469b7c17","attempt":2,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+✔ campaign command review handles isolated-lock (330.937515ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-SVoVQb/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"975608076fd2cebc5cf6949d0a2c2d20e1bf42f58bbd2dd403eb639eac59753d","reportHash":"1daa6ce4d2348af2ddc123b66b4071ecbd620f5b7a4df829ed702b5742a622e6","attempt":3,"summary":"Synthetic diagnostic handoff for offline boundary verification.","assessment":"pending","complete":true}}
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-SVoVQb/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"975608076fd2cebc5cf6949d0a2c2d20e1bf42f58bbd2dd403eb639eac59753d","reportHash":"1daa6ce4d2348af2ddc123b66b4071ecbd620f5b7a4df829ed702b5742a622e6","attempt":3,"summary":"Synthetic diagnostic handoff for offline boundary verification.","assessment":"pending","complete":true}}
+✔ campaign command review handles invalid-verdict (368.747152ms)
+✔ automated review resumes an interrupted snapshot before dispatch (52.364709ms)
+✔ snapshot recovery never writes through a replaced destination directory (18.08624ms)
+✔ automated review rejects an invalid evidence revision before filesystem access (3.940733ms)
+✔ retained automated review rejects changed frozen snapshot evidence (48.024489ms)
+✔ Pi review stage resumes its retained result and completes reconciled assessment (90.856921ms)
+✔ unavailable transport leaves evidence untouched and avoids creating a snapshot (2.748928ms)
+✔ blocked automated review is retained as pending without changing mechanical result (3.193225ms)
+✔ assessment handoff rejects a retained receipt without a retained review (5.368338ms)
+✔ report projection refuses mismatched acknowledged artifacts (foreign-identity) (13.683275ms)
+✔ report projection refuses mismatched acknowledged artifacts (changed-assessment) (10.553315ms)
+✔ legacy assessment recovery preserves committed identity (property-order) (35.337956ms)
+✔ legacy assessment recovery preserves committed identity (extra-field) (27.899783ms)
+✔ assessment handoff retries the same retained assessment after interruption (38.381839ms)
+✔ automated review survives reconciliation delay and hands off only once (36.267821ms)
+✔ automated review rejects references absent from its frozen evidence revision (4.92312ms)
+✔ reviewer discovers indexed evidence and reads bounded windows of large verified files (9.166743ms)
+✔ investigator search finds archived source beyond the first inventory page (28.337244ms)
+✔ newline-heavy evidence returns and resumes within a bounded search heap (4577.987825ms)
+✔ case-insensitive evidence search returns a read-ready Unicode byte locator (3.085232ms)
+✔ investigator search excludes unindexed data and rejects changed, escaped or cancelled reads (5.359657ms)
+✔ automated evidence reading permits only unchanged indexed files within its byte limit (4.738585ms)
+✔ automated evidence reading rejects symlinked parent directories (5.094476ms)
+✔ automated evidence reading rejects a symlinked evidence root (2.560393ms)
+✔ Pi reviewer reads frozen evidence and reports integrity failures (changed=false) (65.998664ms)
+✔ Pi reviewer reads frozen evidence and reports integrity failures (changed=true) (69.396046ms)
+✔ a rejected assessment retains a developer report while reconciliation is blocked (64.070622ms)
+✔ Pi publishes provisional findings before request exhaustion without accepting an assessment (settlementLost=false) (51.447654ms)
+✔ Pi publishes provisional findings before request exhaustion without accepting an assessment (settlementLost=true) (52.594809ms)
+✔ Pi receives its original remaining request authority on every investigation call (68.157217ms)
+✔ native report writes preserve revisions outside frozen evidence and refuse other paths (95.840183ms)
+✔ retained investigator v1 keeps its read-only request contract and original deadline (32.634107ms)
+✔ a length-limited diagnostic remains available without accepting assessment (44.098853ms)
+✔ a completed diagnostic survives a lost reviewer settlement acknowledgement without another call (49.367533ms)
+✔ report filesystem failure stays explicit and cannot prevent known usage settlement (30.496217ms)
+✔ new investigator requires a developer handoff before accepting assessment (bare-json) (54.379916ms)
+✔ new investigator requires a developer handoff before accepting assessment (assessment-only) (38.466187ms)
+✔ malformed assessment formatting stays within its review deadline (58.044659ms)
+✔ Pi corrects assessment format in its existing session without losing the original report (56.517706ms)
+✔ Pi corrects annotated evidence filenames without losing its diagnostic or repeating workflow effects (51.989519ms)
+✔ Pi never treats changed indexed evidence as correctable model formatting (47.390719ms)
+✔ Pi never treats missing indexed evidence as correctable model formatting (37.070024ms)
+✔ fresh preparation refuses a subscription draft when a shared API key is configured (91.241137ms)
+✔ fresh preparation resolves native credentials and pricing (shared) (94.013041ms)
+✔ fresh preparation resolves native credentials and pricing (process) (75.130423ms)
+✔ fresh preparation resolves native credentials and pricing (native) (81.586415ms)
+✔ fresh preparation resolves native credentials and pricing (subscription) (78.448826ms)
+✔ fresh preparation resolves native credentials and pricing (empty) (79.550937ms)
+✔ fresh preparation resolves native credentials and pricing (unreadable) (109.711881ms)
+✔ fresh preparation resolves native credentials and pricing (malformed) (76.041654ms)
+✔ fresh preparation resolves native credentials and pricing (legacy-accounting) (87.245391ms)
+✔ fresh preparation resolves native credentials and pricing (pricing-drift) (82.5098ms)
+✔ fresh preparation resolves native credentials and pricing (unknown-model) (80.033913ms)
+✔ fresh preparation resolves native credentials and pricing (future-pricing) (79.75544ms)
+✔ fresh preparation resolves native credentials and pricing (native-auth-error) (92.05389ms)
+✔ fresh preparation resolves native credentials and pricing (native-stored-empty) (88.962964ms)
+✔ fresh preparation resolves native credentials and pricing (native-stored-unresolved) (94.290548ms)
+✔ fresh preparation resolves native credentials and pricing (native-runtime-empty) (100.491707ms)
+✔ retained reviewer pin with missing policy blocks continuation without rewriting evidence or dispatching (87.858982ms)
+✔ retained reviewer pin with unsupported policy blocks continuation without rewriting evidence or dispatching (92.030462ms)
+✔ retained reviewer pin with missing reasoning blocks continuation without rewriting evidence or dispatching (86.431703ms)
+✔ retained reviewer pin with missing deadline blocks continuation without rewriting evidence or dispatching (92.898836ms)
+✔ retained reviewer pin with expired deadline blocks continuation without rewriting evidence or dispatching (69.753342ms)
+✔ retained reviewer pin with missing model blocks continuation without rewriting evidence or dispatching (72.670938ms)
+✔ retained reviewer pin with changed model capacity blocks continuation without rewriting evidence or dispatching (69.136907ms)
+✔ reviewer reasoning defaults to high in the native Codex request (100.842612ms)
+✔ reviewer reasoning defaults with an unrelated shared setting without loading it (64.278347ms)
+✔ reviewer reasoning uses process configuration before the shared file (52.822927ms)
+✔ reviewer reasoning reads the shared main-worktree file from a linked checkout (133.892394ms)
+✔ reviewer reasoning reports shared configuration I/O failure without dispatch (38.403651ms)
+✔ reviewer reasoning blocks invalid or unsupported selection "" (31.251916ms)
+✔ reviewer reasoning blocks invalid or unsupported selection "hgh" (28.267604ms)
+✔ reviewer reasoning blocks invalid or unsupported selection "off" (32.46734ms)
+✔ investigator receives its mission and searches archived source through Pi (openai) (48.373923ms)
+✔ investigator receives its mission and searches archived source through Pi (openai-codex) (38.725909ms)
+✔ real Pi OpenAI transport does not retry a mocked HTTP 503 when retries are disabled (13.840164ms)
+✔ Pi reviewer does not continue after settlement fails (51.915324ms)
+✔ Pi reviewer fails closed when a later model reservation is denied (23.786139ms)
+✔ automated review rejects a symlink even when it was indexed (2.95337ms)
+✔ recovery excludes automated review artifacts from the next evidence revision (4.422918ms)
+✔ the qualification lock stays held until cleanup releases it (124.598169ms)
+✔ recovery freezes a new evidence revision and preserves failed history (legacy=false) (8.724969ms)
+✔ recovery freezes a new evidence revision and preserves failed history (legacy=true) (7.262301ms)
+✔ a Sources protocol records lower search and acquisition allowances without claiming the maxima (0.996978ms)
+✔ a retained execution failure blocks acceptance even when an earlier completion flag is true (1.936723ms)
+✔ preparation stores one complete filing for four independent scenarios (217.758354ms)
+✔ preparation pins the accounting policy before mandate authorization (118.071613ms)
+✔ new Sources preparation requires explicit research authority without changing historical parsing (8.594234ms)
+✔ prepare retains the explicit campaign context duration (124.748754ms)
+✔ prepare freezes three free scenarios and two configurations with allowances above the former lot caps (81.160142ms)
+✔ prepare freezes an explicitly selected documentary starting fixture without changing ordinary scenarios (74.36288ms)
+✔ prepare refuses a documentary starting fixture outside Sources capability (4.357845ms)
+✔ an unavailable retained capture fails export while preserving its metadata (4.215466ms)
+✔ a terminal scenario failure remains failed while a quiet independent scenario is evaluated (48.776877ms)
+✔ backend failures preserve failure and continue quiet independent cases (23.636456ms)
+✔ a saved framing milestone survives a later blocked turn (17.389461ms)
+✔ a quiet local generation block continues independent scenarios while retaining the failed dossier (20.48889ms)
+✔ unsettled work, uncertain accounting, publication holds and interruption prevent independent continuation (222.297909ms)
+✔ scenario preparation uses the declared duration instead of the former forty-minute cap (5.568257ms)
+✔ context duration respects mandate expiry and the server maximum before setup (11.021378ms)
+✔ explicit browser preparation may use the editable default battery and retain explicit steps (99.170369ms)
+✔ unsupported fault combinations and executable configuration are refused before setup (5.53162ms)
+✔ the selected shared-model profile changes one catalogue default and restores it once (21.665602ms)
+✔ campaign cleanup follows every owned context page beyond the legacy 25-page loop (0.901803ms)
+✔ campaign cleanup refuses a stalled backend cursor instead of looping silently (1.497216ms)
+✔ backend campaigns retain an explicit execution boundary without changing historical mandates (6.904145ms)
+✔ backend execution retains public-operation effects and snapshots without a browser (18.970856ms)
+✔ backend execution retains public-operation effects and snapshots without a browser from a prepared fixture (12.985578ms)
+✔ backend admission uses real public auth and invitation APIs and signs out after a failed callback (4.848583ms)
+✔ backend preparation refuses an implicit full browser battery (1.594685ms)
+✔ backend authentication refreshes expiring credentials before protected requests (2.050836ms)
+✔ research handoff stops on terminal failed state before another scenario (17.62065ms)
+✔ research handoff stops on terminal cancelled state before another scenario (16.554783ms)
+✔ research handoff accepts a blocked Sources mission after its idle partial handoff (17.232854ms)
+✔ unsafe backend execution records the first failure without starting another scenario (16.823373ms)
+✔ a blocked conversation stops qualification after its worker has stopped (28.976375ms)
+✔ a blocked conversation waits for its active worker (514.726896ms)
+✔ new campaign preparation defaults to backend and freezes the choice without changing historical manifests (84.015913ms)
+✔ a first dispatched Sources request is hydrated once and survives blocked preparation (516.350881ms)
+✔ campaign preparation freezes Sources replay bytes and refuses a changed corpus (84.430074ms)
+✔ Sources retained-material pause: terminal without material=false (2533.8236ms)
+✔ Sources retained-material pause: terminal without material=true (14.487377ms)
+✔ a held-out framing corpus is frozen separately from historical case identities (88.663511ms)
+✔ Sources coverage handoff preserves the following consultation only for matching omitted default coverage (18.734869ms)
+✔ Sources coverage handoff preserves the following consultation only for matching explicit nondefault coverage (19.395322ms)
+✔ Sources coverage handoff preserves the following consultation only for matching changed default coverage (12.179929ms)
+✔ Sources coverage handoff preserves the following consultation only for matching changed explicit coverage (15.099476ms)
+✔ stale profiles are refreshed via the existing bounded continuation without model reassignment (6.252653ms)
+✔ disabled selection remains blocked rather than enabled by qualification (5.034866ms)
+✔ incomplete refresh and concurrent revision changes stop before inference authorization (2.213889ms)
+✔ stalled continuations cannot loop indefinitely (6.487299ms)
+✔ reaching the continuation bound remains blocked even if the current revision is already compatible (1.114396ms)
+✔ profile preparation follows more than twenty retained revisions within the catalogue bound (3.769395ms)
+✔ campaign configuration prepares an unassigned model before assignment (11.760766ms)
+✔ campaign model preflight prepares declared choices without changing role assignments (10.363212ms)
+✔ campaign model preflight rejects incompatible controllerModel before lot admission (4.727842ms)
+✔ candidate identity includes authored policy enforcement and generated preview policy (174.205196ms)
+✔ one failed prerequisite blocks validation before later checks can run (31.319607ms)
+✔ source changes while checks run invalidate their result (8.8259ms)
+✔ validation returns only after all checks passed on the frozen candidate (7.728617ms)
+✔ the actual browser battery preserves ten unique cases and identifies unavailable continuity coverage (4.416057ms)
+✔ offline assessment covers all expectations and preserves the original result (30.779756ms)
+✔ a changed response or missing review criterion cannot reuse an approval (49.230144ms)
+✔ a material failed expectation blocks acceptance despite completed missions (17.699457ms)
+✔ repeated validation of identical source bytes and tools reuses its successful checks (14.138706ms)
+✔ Sources simulation requires an explicit zero-provider battery; live defaults cannot accept zero allowances (5.118557ms)
+✔ zero paid attempts still permit bounded inspection of simulated invocations (2.810466ms)
+✔ resuming an unfinished scenario preserves its identity and refuses another dispatch (20.565167ms)
+✔ analysis attempts retain legacy_numeric intent and receipt across recovery without redispatch (23.946119ms)
+✔ analysis attempts retain legacy_api intent and receipt across recovery without redispatch (27.714569ms)
+✔ analysis attempts retain api_cost intent and receipt across recovery without redispatch (29.397633ms)
+✔ analysis attempts retain native_subscription intent and receipt across recovery without redispatch (19.086089ms)
+✔ analysis settlement acknowledgements survive reopening without acknowledging unknown work (12.594219ms)
+✔ analysis journal treats reordered identities as the same and rejects invalid records (9.489495ms)
+✔ a completed scenario is retained on resume and is never submitted again (9.183482ms)
+✔ disk exhaustion cannot prevent any revocation, even when closing the browser also fails (3.008488ms)
+✔ malformed-response qualification requires the injection and a refusal without forbidden effects (0.747464ms)
+✔ recovery verdict excludes an older failed mission even when it sorts after the recovery (0.818231ms)
+✔ diagnostics preserve the stage and known error code but discard arbitrary errors (1.496052ms)
+✔ typed configuration refusals remain actionable without logging backend exception text (0.228609ms)
+✔ completed missions with unreviewed task outcomes cannot qualify the capability (0.310214ms)
+✔ missing mandatory cases remain inconclusive rather than an application failure (0.154001ms)
+✔ a demonstrated failure blocks acceptance even with complete coverage (0.137757ms)
+✔ unknown charges remain inconclusive and a reconciliation mismatch blocks even reviewed successful cases (0.181728ms)
+✔ dated fresh-framing mandates refuse scripted programs and documentary seeding (28.975516ms)
+✔ prepared directed-framing comparisons keep fresh requests, shared material and zero paid authority (13.12634ms)
+✔ campaign preparation freezes retrieval material for a future real-model mandate without dispatch (1224.223377ms)
+✔ relay rejects a malformed retained protocol before any provider call (6.830288ms)
+✔ normal qualification forwards the first SSE frame before upstream EOF (113.888739ms)
+✔ local refusal retains exact non-dispatch proof before acknowledging it (35.363112ms)
+✔ relay carries remaining native authority and full prepared capacity into dispatch (38.836453ms)
+✔ relay refuses retained policy undefined without inference (7.62166ms)
+✔ relay refuses retained policy unsupported without inference (4.848934ms)
+✔ relay rejects exhausted absolute authority before upstream I/O (17.127435ms)
+✔ relay forwards the Workbench price ceiling even when the catalogue price is lower (29.290484ms)
+✔ relay admits against settled charges and retains unknown charges across restart (53.53517ms)
+✔ contradictory final costs for one dispatch remain blocked after ledger replay (33.452339ms)
+✔ a received 429 survives restart and permits an independent scenario without erasing its charge reservation (27.27174ms)
+✔ a missing charge is retained without preventing a later completed scenario (17.891823ms)
+✔ an ambiguous dispatch cannot replay its scenario after restart but retains budget for independent work (33.285926ms)
+✔ a scenario respects Retry-After and admits at most one controlled recovery (39.98219ms)
+✔ the cumulative twenty-request ceiling survives relay restart (185.844374ms)
+✔ a reported charge outside its reserved envelope stops further dispatch (26.92483ms)
+✔ EOF without a terminal SSE event remains an uncertain execution (15.698104ms)
+✔ closing after terminal SSE retains the completed response and charge without waiting for HTTP EOF (52.731928ms)
+✔ a smaller authorized request allowance stops before another upstream call (31.115717ms)
+✔ a versioned qualification refuses inference before a passing validation of these fingerprints (39.520683ms)
+✔ a v2 campaign relay accepts its frozen route and allowance above legacy samples (118.495119ms)
+✔ a v3 campaign relay accepts its frozen route and allowance above legacy samples (127.869654ms)
+✔ contradictory terminal costs remain conflicted when the client closes before EOF (19.187945ms)
+✔ upstream transport cannot supply the relay's private non-dispatch acknowledgement (11.773665ms)
+✔ relay forwards and settles a streaming SSE response above 1 MiB without halting (86.677756ms)
+✔ relay rejects an oversized non-streaming upstream body above the non-streaming byte bound (24.256822ms)
+ℹ tests 237
+ℹ suites 0
+ℹ pass 237
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 20707.135733

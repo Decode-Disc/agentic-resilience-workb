@@ -6,11 +6,34 @@ import {
 } from "@convex/_generated/server";
 import { cancelRunExecution } from "@convex/domain/runCancellation";
 import { cancelAgentMissionsForRun } from "@convex/execution/cancellation";
+import { retainedDeliveryKey } from "@convex/execution/conversationBodies";
+import { executionError } from "@convex/execution/errors";
+import {
+    contextObservationTextKey,
+    purgeInvocationJournalBatch,
+} from "@convex/execution/journal";
+import { textualOutcomeKey } from "@convex/execution/missionData";
 import { purgeDossierOperationBatch } from "@convex/execution/operations";
 import { deleteRetainedTextBatch } from "@convex/execution/retainedText";
-import { DOSSIER_PURGE_BATCH } from "@convex/resourcePolicy";
+import {
+    CONVEX_MAX_DOCUMENT_BYTES,
+    DOSSIER_PURGE_BATCH,
+    DOSSIER_PURGE_PARENT_SCAN_BYTES,
+} from "@convex/resourcePolicy";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+
+const purgeParentPage = {
+    cursor: null,
+    numItems: DOSSIER_PURGE_BATCH,
+    maximumBytesRead: DOSSIER_PURGE_PARENT_SCAN_BYTES,
+} as const;
+
+// Nested scans can visit several parents in a step. A matching child batch
+// stops traversal, with read capacity reserved for cleanup of its records.
+const purgePayloadChildren = Math.floor(
+    DOSSIER_PURGE_PARENT_SCAN_BYTES / CONVEX_MAX_DOCUMENT_BYTES,
+);
 
 type RunId = Id<"researchRuns">;
 
@@ -47,15 +70,41 @@ async function releaseStorage(ctx: MutationCtx, storageId?: Id<"_storage">) {
     if (!capture && !lease && !version) await ctx.storage.delete(storageId);
 }
 
-/** Removes a batch of a Pi session's commits, then the session itself once it has none. */
+/** The session owns its commit keys from the first fragment, including unpublished commits. */
 async function dropSession(ctx: MutationCtx, sessionId: Id<"piSessions">) {
-    const commits = await ctx.db
+    const commit = await ctx.db
         .query("piCommits")
         .withIndex("by_session_and_sequence", (q) =>
             q.eq("sessionId", sessionId),
         )
-        .take(DOSSIER_PURGE_BATCH);
-    if (commits.length) await drop(ctx, commits);
+        .first();
+    if (commit) {
+        if (
+            commit.textId &&
+            !(await deleteRetainedTextBatch(
+                ctx,
+                commit.textId,
+                `${sessionId}:${commit.key}`,
+                DOSSIER_PURGE_BATCH,
+            ))
+        )
+            return true;
+        await ctx.db.delete(commit._id);
+        return true;
+    }
+    const staged = await ctx.db
+        .query("retainedTexts")
+        .withIndex("by_key", (q) =>
+            q.gte("key", `${sessionId}:`).lt("key", `${sessionId};`),
+        )
+        .first();
+    if (staged)
+        await deleteRetainedTextBatch(
+            ctx,
+            staged._id,
+            staged.key,
+            DOSSIER_PURGE_BATCH,
+        );
     else await ctx.db.delete(sessionId);
     return true;
 }
@@ -65,19 +114,6 @@ const steps: Record<
     string,
     (ctx: MutationCtx, runId: RunId) => Promise<boolean>
 > = {
-    claimEvidence: async (ctx, runId) => {
-        for (const claim of await ctx.db
-            .query("claims")
-            .withIndex("by_run", (q) => q.eq("runId", runId))
-            .take(DOSSIER_PURGE_BATCH)) {
-            const rows = await ctx.db
-                .query("claimEvidence")
-                .withIndex("by_claim", (q) => q.eq("claimId", claim._id))
-                .take(DOSSIER_PURGE_BATCH);
-            if (rows.length) return drop(ctx, rows).then(() => true);
-        }
-        return false;
-    },
     claimDimensionLinks: async (ctx, runId) =>
         drop(
             ctx,
@@ -96,19 +132,26 @@ const steps: Record<
                 .withIndex("by_run", (q) => q.eq("runId", runId))
                 .take(DOSSIER_PURGE_BATCH),
         ),
-    claims: async (ctx, runId) =>
-        drop(
-            ctx,
-            await ctx.db
-                .query("claims")
-                .withIndex("by_run", (q) => q.eq("runId", runId))
-                .take(DOSSIER_PURGE_BATCH),
-        ),
-    sourcePassages: async (ctx, runId) => {
-        for (const version of await ctx.db
+    claims: async (ctx, runId) => {
+        const parents = await ctx.db
+            .query("claims")
+            .withIndex("by_run", (q) => q.eq("runId", runId))
+            .take(DOSSIER_PURGE_BATCH);
+        for (const claim of parents) {
+            const rows = await ctx.db
+                .query("claimEvidence")
+                .withIndex("by_claim", (q) => q.eq("claimId", claim._id))
+                .take(DOSSIER_PURGE_BATCH);
+            if (rows.length) return drop(ctx, rows).then(() => true);
+        }
+        return drop(ctx, parents);
+    },
+    sourceVersions: async (ctx, runId) => {
+        const parents = await ctx.db
             .query("sourceVersions")
             .withIndex("by_run", (q) => q.eq("runId", runId))
-            .take(DOSSIER_PURGE_BATCH)) {
+            .take(DOSSIER_PURGE_BATCH);
+        for (const version of parents) {
             const rows = await ctx.db
                 .query("sourcePassages")
                 .withIndex("by_source_version_and_order", (q) =>
@@ -117,17 +160,8 @@ const steps: Record<
                 .take(DOSSIER_PURGE_BATCH);
             if (rows.length) return drop(ctx, rows).then(() => true);
         }
-        return false;
+        return drop(ctx, parents, (row) => releaseStorage(ctx, row.storageId));
     },
-    sourceVersions: async (ctx, runId) =>
-        drop(
-            ctx,
-            await ctx.db
-                .query("sourceVersions")
-                .withIndex("by_run", (q) => q.eq("runId", runId))
-                .take(DOSSIER_PURGE_BATCH),
-            (row) => releaseStorage(ctx, row.storageId),
-        ),
     evidenceSourceStatuses: async (ctx, runId) =>
         drop(
             ctx,
@@ -170,64 +204,12 @@ const steps: Record<
                 )
                 .take(DOSSIER_PURGE_BATCH),
         ),
-    proposalItemsAndReviewItems: async (ctx, runId) => {
-        for (const revision of await ctx.db
-            .query("corpusRevisions")
-            .withIndex("by_run_and_revision", (q) => q.eq("runId", runId))
-            .take(DOSSIER_PURGE_BATCH)) {
-            const reviewItems = await ctx.db
-                .query("sourceReviewItems")
-                .withIndex("by_revision_and_source", (q) =>
-                    q.eq("corpusRevisionId", revision._id),
-                )
-                .take(DOSSIER_PURGE_BATCH);
-            if (reviewItems.length)
-                return drop(ctx, reviewItems).then(() => true);
-            for (const proposal of await ctx.db
-                .query("sourceSelectionProposals")
-                .withIndex("by_corpus_revision_id_and_version", (q) =>
-                    q.eq("corpusRevisionId", revision._id),
-                )
-                .take(DOSSIER_PURGE_BATCH)) {
-                const items = await ctx.db
-                    .query("sourceSelectionProposalItems")
-                    .withIndex("by_proposal_and_source", (q) =>
-                        q.eq("proposalId", proposal._id),
-                    )
-                    .take(DOSSIER_PURGE_BATCH);
-                if (items.length) return drop(ctx, items).then(() => true);
-            }
-        }
-        return false;
-    },
-    proposalsAndPreparations: async (ctx, runId) => {
-        for (const revision of await ctx.db
-            .query("corpusRevisions")
-            .withIndex("by_run_and_revision", (q) => q.eq("runId", runId))
-            .take(DOSSIER_PURGE_BATCH)) {
-            const proposals = await ctx.db
-                .query("sourceSelectionProposals")
-                .withIndex("by_corpus_revision_id_and_version", (q) =>
-                    q.eq("corpusRevisionId", revision._id),
-                )
-                .take(DOSSIER_PURGE_BATCH);
-            if (proposals.length) return drop(ctx, proposals).then(() => true);
-            const preparations = await ctx.db
-                .query("sourceSelectionProposalRebuilds")
-                .withIndex("by_revision_and_created_at", (q) =>
-                    q.eq("corpusRevisionId", revision._id),
-                )
-                .take(DOSSIER_PURGE_BATCH);
-            if (preparations.length)
-                return drop(ctx, preparations).then(() => true);
-        }
-        return false;
-    },
-    sourceCapturesAndPreviews: async (ctx, runId) => {
-        for (const source of await ctx.db
+    sources: async (ctx, runId) => {
+        const parents = await ctx.db
             .query("sources")
             .withIndex("by_run_and_url", (q) => q.eq("runId", runId))
-            .take(DOSSIER_PURGE_BATCH)) {
+            .take(DOSSIER_PURGE_BATCH);
+        for (const source of parents) {
             const previews = await ctx.db
                 .query("previewCaches")
                 .withIndex("by_source", (q) => q.eq("sourceId", source._id))
@@ -238,22 +220,14 @@ const steps: Record<
                 .withIndex("by_source_and_updated_at", (q) =>
                     q.eq("sourceId", source._id),
                 )
-                .take(DOSSIER_PURGE_BATCH);
+                .take(purgePayloadChildren);
             if (captures.length)
                 return drop(ctx, captures, (row) =>
                     releaseStorage(ctx, row.storageId),
                 ).then(() => true);
         }
-        return false;
+        return drop(ctx, parents);
     },
-    sources: async (ctx, runId) =>
-        drop(
-            ctx,
-            await ctx.db
-                .query("sources")
-                .withIndex("by_run_and_url", (q) => q.eq("runId", runId))
-                .take(DOSSIER_PURGE_BATCH),
-        ),
     sourceDecisions: async (ctx, runId) =>
         drop(
             ctx,
@@ -264,98 +238,97 @@ const steps: Record<
                 )
                 .take(DOSSIER_PURGE_BATCH),
         ),
-    corpusRevisions: async (ctx, runId) =>
-        drop(
-            ctx,
-            await ctx.db
-                .query("corpusRevisions")
-                .withIndex("by_run_and_revision", (q) => q.eq("runId", runId))
-                .take(DOSSIER_PURGE_BATCH),
-        ),
-    aiTaskResults: async (ctx, runId) =>
-        drop(
-            ctx,
-            await ctx.db
-                .query("aiTaskResults")
-                .withIndex("by_run", (q) => q.eq("runId", runId))
-                .take(DOSSIER_PURGE_BATCH),
-        ),
-    providerCalls: async (ctx, runId) =>
-        drop(
-            ctx,
-            await ctx.db
-                .query("providerCalls")
-                .withIndex("by_run", (q) => q.eq("runId", runId))
-                .take(DOSSIER_PURGE_BATCH),
-        ),
-    piCommitsAndSessions: async (ctx, runId) => {
-        for (const mission of await ctx.db
-            .query("agentMissions")
-            .withIndex("by_run_and_status", (q) => q.eq("runId", runId))
-            .take(DOSSIER_PURGE_BATCH)) {
-            const session = await ctx.db
-                .query("piSessions")
-                .withIndex("by_mission", (q) => q.eq("missionId", mission._id))
-                .first();
-            if (session) return dropSession(ctx, session._id);
-        }
-        for (const conversation of await ctx.db
-            .query("agentConversations")
-            .withIndex("by_run", (q) => q.eq("runId", runId))
-            .take(DOSSIER_PURGE_BATCH)) {
-            const session = await ctx.db
-                .query("piSessions")
-                .withIndex("by_conversation", (q) =>
-                    q.eq("conversationId", conversation._id),
+    corpusRevisions: async (ctx, runId) => {
+        const revisions = await ctx.db
+            .query("corpusRevisions")
+            .withIndex("by_run_and_revision", (q) => q.eq("runId", runId))
+            .take(DOSSIER_PURGE_BATCH);
+        for (const revision of revisions) {
+            const reviewItems = await ctx.db
+                .query("sourceReviewItems")
+                .withIndex("by_revision_and_source", (q) =>
+                    q.eq("corpusRevisionId", revision._id),
                 )
-                .first();
-            if (session) return dropSession(ctx, session._id);
-        }
-        return false;
-    },
-    agentInvocationPayloads: async (ctx, runId) => {
-        for (const invocation of await ctx.db
-            .query("agentInvocations")
-            .withIndex("by_run_and_task_key", (q) => q.eq("runId", runId))
-            .take(DOSSIER_PURGE_BATCH)) {
-            const rows = await ctx.db
-                .query("agentInvocationPayloads")
-                .withIndex("by_invocation_and_part", (q) =>
-                    q.eq("invocationId", invocation._id),
+                .take(purgePayloadChildren);
+            if (reviewItems.length)
+                return drop(ctx, reviewItems).then(() => true);
+            const proposals = await ctx.db
+                .query("sourceSelectionProposals")
+                .withIndex("by_corpus_revision_id_and_version", (q) =>
+                    q.eq("corpusRevisionId", revision._id),
                 )
                 .take(DOSSIER_PURGE_BATCH);
-            for (const payload of rows) {
-                if (
-                    payload.textId &&
-                    !(await deleteRetainedTextBatch(
-                        ctx,
-                        payload.textId,
-                        `${invocation._id}:${payload.part}`,
-                        DOSSIER_PURGE_BATCH,
-                    ))
-                )
-                    return true;
+            for (const proposal of proposals) {
+                const items = await ctx.db
+                    .query("sourceSelectionProposalItems")
+                    .withIndex("by_proposal_and_source", (q) =>
+                        q.eq("proposalId", proposal._id),
+                    )
+                    .take(DOSSIER_PURGE_BATCH);
+                if (items.length) return drop(ctx, items).then(() => true);
             }
-            if (rows.length) return drop(ctx, rows).then(() => true);
+            if (proposals.length) return drop(ctx, proposals).then(() => true);
+            const preparations = await ctx.db
+                .query("sourceSelectionProposalRebuilds")
+                .withIndex("by_revision_and_created_at", (q) =>
+                    q.eq("corpusRevisionId", revision._id),
+                )
+                .take(purgePayloadChildren);
+            if (preparations.length)
+                return drop(ctx, preparations).then(() => true);
         }
-        return false;
+        return drop(ctx, revisions);
     },
-    agentExecutionEvents: async (ctx, runId) =>
-        drop(
-            ctx,
-            await ctx.db
-                .query("agentExecutionEvents")
-                .withIndex("by_run", (q) => q.eq("runId", runId))
-                .take(DOSSIER_PURGE_BATCH),
-        ),
+    aiTaskResults: async (ctx, runId) => {
+        const { page, isDone } = await ctx.db
+            .query("aiTaskResults")
+            .withIndex("by_run", (q) => q.eq("runId", runId))
+            .paginate(purgeParentPage);
+        await drop(ctx, page);
+        return !isDone;
+    },
+    providerCalls: async (ctx, runId) => {
+        const { page, isDone } = await ctx.db
+            .query("providerCalls")
+            .withIndex("by_run", (q) => q.eq("runId", runId))
+            .paginate(purgeParentPage);
+        await drop(ctx, page);
+        return !isDone;
+    },
+    agentExecutionEvents: async (ctx, runId) => {
+        const { page: events, isDone } = await ctx.db
+            .query("agentExecutionEvents")
+            .withIndex("by_run", (q) => q.eq("runId", runId))
+            .paginate(purgeParentPage);
+        for (const event of events) {
+            if (!event.contextObservation) continue;
+            if (event.nativeInputSequence === undefined)
+                throw executionError("journal_payload_invalid");
+            if (
+                !(await deleteRetainedTextBatch(
+                    ctx,
+                    event.contextObservation.textId,
+                    contextObservationTextKey(runId, event.nativeInputSequence),
+                    DOSSIER_PURGE_BATCH,
+                ))
+            )
+                return true;
+            await ctx.db.delete(event._id);
+            return true;
+        }
+        await drop(ctx, events);
+        return !isDone;
+    },
     agentOperationRequests: (ctx, runId) =>
         purgeDossierOperationBatch(ctx, runId, DOSSIER_PURGE_BATCH),
     agentInvocations: async (ctx, runId) => {
-        const invocations = await ctx.db
+        const { page: invocations, isDone } = await ctx.db
             .query("agentInvocations")
             .withIndex("by_run_and_task_key", (q) => q.eq("runId", runId))
-            .take(DOSSIER_PURGE_BATCH);
+            .paginate(purgeParentPage);
         for (const invocation of invocations) {
+            if (await purgeInvocationJournalBatch(ctx, invocation._id))
+                return true;
             for (const field of [
                 "receivedOutputTextId",
                 "outputTextId",
@@ -395,7 +368,8 @@ const steps: Record<
             await ctx.db.patch(invocation._id, { visibleOutput: undefined });
             return true;
         }
-        return drop(ctx, invocations);
+        await drop(ctx, invocations);
+        return !isDone;
     },
     workbenchInstructions: async (ctx, runId) =>
         drop(
@@ -405,34 +379,97 @@ const steps: Record<
                 .withIndex("by_run", (q) => q.eq("runId", runId))
                 .take(DOSSIER_PURGE_BATCH),
         ),
-    agentMessageDeliveries: async (ctx, runId) =>
-        drop(
-            ctx,
-            await ctx.db
-                .query("agentMessageDeliveries")
-                .withIndex("by_run", (q) => q.eq("runId", runId))
-                .take(DOSSIER_PURGE_BATCH),
-        ),
-    agentConversationTurns: async (ctx, runId) =>
-        drop(
-            ctx,
-            await ctx.db
-                .query("agentConversationTurns")
-                .withIndex("by_run", (q) => q.eq("runId", runId))
-                .take(DOSSIER_PURGE_BATCH),
-        ),
-    agentMissions: async (ctx, runId) => {
-        const missions = await ctx.db
-            .query("agentMissions")
-            .withIndex("by_run_and_status", (q) => q.eq("runId", runId))
-            .take(DOSSIER_PURGE_BATCH);
-        for (const mission of missions) {
-            if (!("protocolVersion" in mission) || !mission.resultTextId)
-                continue;
+    agentMessageDeliveries: async (ctx, runId) => {
+        const { page: deliveries, isDone } = await ctx.db
+            .query("agentMessageDeliveries")
+            .withIndex("by_run", (q) => q.eq("runId", runId))
+            .paginate(purgeParentPage);
+        for (const delivery of deliveries) {
+            if (!delivery.bodyTextId) continue;
+            const turn = delivery.turnId
+                ? await ctx.db.get(delivery.turnId)
+                : null;
+            const mission = turn?.missionId
+                ? await ctx.db.get(turn.missionId)
+                : null;
+            if (
+                mission &&
+                "protocolVersion" in mission &&
+                mission.textualOutcome?.textId === delivery.bodyTextId
+            ) {
+                await ctx.db.delete(delivery._id);
+                return true;
+            }
             if (
                 !(await deleteRetainedTextBatch(
                     ctx,
-                    mission.resultTextId,
+                    delivery.bodyTextId,
+                    retainedDeliveryKey(delivery),
+                    DOSSIER_PURGE_BATCH,
+                ))
+            )
+                return true;
+            await ctx.db.delete(delivery._id);
+            return true;
+        }
+        await drop(ctx, deliveries);
+        return !isDone;
+    },
+    agentConversationTurns: async (ctx, runId) => {
+        const { page, isDone } = await ctx.db
+            .query("agentConversationTurns")
+            .withIndex("by_run", (q) => q.eq("runId", runId))
+            .paginate(purgeParentPage);
+        await drop(ctx, page);
+        return !isDone;
+    },
+    agentMissions: async (ctx, runId) => {
+        const { page: missions, isDone } = await ctx.db
+            .query("agentMissions")
+            .withIndex("by_run_and_status", (q) => q.eq("runId", runId))
+            .paginate(purgeParentPage);
+        for (const mission of missions) {
+            const session = await ctx.db
+                .query("piSessions")
+                .withIndex("by_mission", (q) => q.eq("missionId", mission._id))
+                .first();
+            if (session) return dropSession(ctx, session._id);
+
+            if ("protocolVersion" in mission && mission.textualOutcome) {
+                const textId = mission.textualOutcome.textId;
+                const delivery = await ctx.db
+                    .query("agentMessageDeliveries")
+                    .withIndex("by_body_text", (q) =>
+                        q.eq("bodyTextId", textId),
+                    )
+                    .first();
+                if (
+                    !delivery &&
+                    !(await deleteRetainedTextBatch(
+                        ctx,
+                        textId,
+                        textualOutcomeKey(mission),
+                        DOSSIER_PURGE_BATCH,
+                    ))
+                )
+                    return true;
+                await ctx.db.patch(mission._id, { textualOutcome: undefined });
+                return true;
+            }
+            if (!("protocolVersion" in mission)) continue;
+            const resultText = mission.resultTextId
+                ? await ctx.db.get(mission.resultTextId)
+                : await ctx.db
+                      .query("retainedTexts")
+                      .withIndex("by_key", (q) =>
+                          q.eq("key", `${mission._id}:result`),
+                      )
+                      .unique();
+            if (!resultText) continue;
+            if (
+                !(await deleteRetainedTextBatch(
+                    ctx,
+                    resultText._id,
                     `${mission._id}:result`,
                     DOSSIER_PURGE_BATCH,
                 ))
@@ -441,16 +478,25 @@ const steps: Record<
             await ctx.db.patch(mission._id, { resultTextId: undefined });
             return true;
         }
-        return drop(ctx, missions);
+        await drop(ctx, missions);
+        return !isDone;
     },
-    agentConversations: async (ctx, runId) =>
-        drop(
-            ctx,
-            await ctx.db
-                .query("agentConversations")
-                .withIndex("by_run", (q) => q.eq("runId", runId))
-                .take(DOSSIER_PURGE_BATCH),
-        ),
+    agentConversations: async (ctx, runId) => {
+        const conversations = await ctx.db
+            .query("agentConversations")
+            .withIndex("by_run", (q) => q.eq("runId", runId))
+            .take(DOSSIER_PURGE_BATCH);
+        for (const conversation of conversations) {
+            const session = await ctx.db
+                .query("piSessions")
+                .withIndex("by_conversation", (q) =>
+                    q.eq("conversationId", conversation._id),
+                )
+                .first();
+            if (session) return dropSession(ctx, session._id);
+        }
+        return drop(ctx, conversations);
+    },
     researchPlanQuestions: async (ctx, runId) =>
         drop(
             ctx,

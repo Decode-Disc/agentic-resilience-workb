@@ -389,7 +389,7 @@ for (const width of [390, 1440]) {
             await expect(
                 page
                     .locator(".chat-context-card")
-                    .getByRole("button", { name, exact: true }),
+                    .getByRole("heading", { name, exact: true }),
             ).toBeVisible();
         await expect(
             page.getByRole("region", { name: "Outputs", exact: true }),
@@ -582,8 +582,10 @@ for (const width of [390, 1440])
         ).toBeVisible();
         await context.click();
         await expect(
-            page.getByText("No active work", { exact: true }),
-        ).toBeVisible();
+            page
+                .locator(".chat-context-card")
+                .getByRole("region", { name: "Work", exact: true }),
+        ).toHaveCount(0);
         await expect(
             page.getByText("Workbench response", { exact: true }),
         ).toHaveCount(0);

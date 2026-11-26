@@ -305,6 +305,8 @@ export const SOURCES_READER_OPENING_PASSAGES = 12;
 
 /** Records removed per dossier-purge transaction; a byte-safe batch under Convex write limits, not a purge allowance. */
 export const DOSSIER_PURGE_BATCH = 100;
+// Leave transaction capacity for journal children and retained fragments.
+export const DOSSIER_PURGE_PARENT_SCAN_BYTES = 2 * 1024 * 1024;
 
 export const SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS = 15;
 
@@ -314,6 +316,10 @@ export const DOCUMENTARY_SEARCH_QUERY_MAX_CHARS = 512;
 export const MAX_EXA_DISCOVERY_ATTEMPTS = 2;
 
 export const EXA_DISCOVERY_TIMEOUT_MS = 10_000;
+
+// Convex database representation limits, independent of generation and provider budgets.
+export const CONVEX_MAX_DOCUMENT_BYTES = 1_048_576;
+export const CONVEX_MAX_ARRAY_VALUES = 8192;
 
 // A fragment stays comfortably below Convex's document and argument limits.
 export const TEXT_FRAGMENT_CHARACTERS = 60 * 1024;
@@ -407,6 +413,9 @@ export const NATIVE_WORKER_POLICY = {
 
 /** Runner wait/capture capacities, separate from generation deadlines and immutable campaign authority. */
 export const QUALIFICATION_TOOLING_POLICY = {
+    observationExportConcurrency: 4,
+    assessmentSubmitMaxAttempts: 3,
+    assessmentSubmitRetryDelayMs: 500,
     // Browser fixture OCC retries; exhaustion rethrows the last conflict.
     fixtureConflictMaxAttempts: 6,
     fixtureConflictRetryBaseMs: 100,
@@ -457,6 +466,7 @@ export const SOURCE_PUBLIC_ADDRESS_TIMEOUT_MS = 20_000;
 
 /** Independent cursor-backed database pages. A page size is not a total-work cutoff. */
 export const PERSISTENCE_PAGE_SIZE = {
+    transcriptFragments: 4,
     sourceRetrieval: 64,
     runContextCleanup: 20,
     nativeInputs: 20,
@@ -465,6 +475,7 @@ export const PERSISTENCE_PAGE_SIZE = {
     qualificationFixtures: 32,
     researchResumeRequests: 20,
     nativeRebind: 20,
+    modelRevisionRefreshScan: 128,
 } as const;
 export const SOURCES_HANDOFF_BASE_READ_RESERVE_BYTES = 64 * 1024;
 

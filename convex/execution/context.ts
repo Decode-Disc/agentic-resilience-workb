@@ -1,8 +1,7 @@
-import { invocationResponses } from "./journal";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { internalQuery, type QueryCtx } from "@convex/_generated/server";
 import { stableStringify } from "@convex/domain/sourcePassages";
-import { readConversationMessages } from "@convex/integrations/agentStorage";
+import { readConversationWording } from "@convex/execution/conversationBodies";
 import { agentInputByteLength } from "@convex/integrations/modelInput";
 import { SIMULATION_MODEL_ROUTE } from "@convex/integrations/modelRouting";
 import { missionModel, revisionRoute } from "@convex/modelConfiguration";
@@ -26,8 +25,10 @@ import {
     contextObservationSequence,
     invocationHistoryReference,
     latestNativeControl,
+    matchInvocationResponse,
     operationContextObservation,
     operationHistoryReference,
+    retainedNativeCalls,
 } from "./journal";
 import { missionScope } from "./missionData";
 import {
@@ -38,6 +39,7 @@ import {
 async function requestContext(
     ctx: QueryCtx,
     request: Doc<"agentOperationRequests">,
+    instructionTexts: Map<Id<"agentMessageDeliveries">, string>,
     callId?: string,
     causeId?: Id<"agentExecutionEvents">,
 ) {
@@ -72,10 +74,10 @@ async function requestContext(
             conversation.runId !== message.runId
         )
             throw executionError("conversation_message_unavailable");
-        const [originalText] = await readConversationMessages(
+        const [originalText] = await readConversationWording(
             ctx,
-            conversation.storageRef,
-            [message.storageMessageRef],
+            [message],
+            instructionTexts,
         );
         if (originalText === undefined)
             throw executionError("conversation_message_unavailable");
@@ -101,6 +103,7 @@ export async function buildMissionContext(
     ctx: QueryCtx,
     missionId: Id<"agentMissions">,
     expectedGeneration: number,
+    correctionAdmission?: true,
 ) {
     const { mission, run } = await requireMissionAuthority(
         ctx,
@@ -111,28 +114,51 @@ export async function buildMissionContext(
         mission.definitionId,
         mission.definitionVersion,
     );
-    const domainContext = await definition.context(ctx, mission, run);
+    const instructionTexts = new Map<Id<"agentMessageDeliveries">, string>();
+    const domainContext = await definition.context(ctx, mission, run, {
+        instructionTexts,
+        correctionAdmission:
+            mission.executionRuntime === "pi-durable"
+                ? correctionAdmission
+                : undefined,
+    });
     if (domainContext.kind === "blocked") return domainContext;
     const previousInvocation = mission.lastInvocationId
         ? await ctx.db.get(mission.lastInvocationId)
         : null;
-    const previousOutput = previousInvocation
-        ? (await invocationResponses(ctx, previousInvocation)).outputJson
+    const nativeCalls = previousInvocation
+        ? await retainedNativeCalls(ctx, previousInvocation)
         : undefined;
+    const previousOutput =
+        previousInvocation &&
+        (mission.executionRuntime !== "pi-durable" ||
+            (previousInvocation.requestIds?.length &&
+                nativeCalls === undefined))
+            ? previousInvocation.outputJson
+            : undefined;
     const previousResponse: unknown = previousOutput
         ? JSON.parse(previousOutput)
         : null;
-    const previousRequests =
-        validate(invocationResponseValidator, previousResponse) &&
+    if (previousOutput && previousInvocation)
+        await matchInvocationResponse(
+            ctx,
+            previousInvocation,
+            "adopted",
+            previousOutput,
+        );
+    let previousRequests: { callId: string }[] =
+        nativeCalls ??
+        (validate(invocationResponseValidator, previousResponse) &&
         previousResponse.kind === "operations"
             ? previousResponse.requests
-            : [];
+            : []);
     const causeKinds = [
         "operation_requested",
         "operation_reused",
         "operation_refused",
     ] as const;
     const invocationCauses = new Map<string, Id<"agentExecutionEvents">>();
+    const admissionCalls = new Map<string, Doc<"agentExecutionEvents">>();
     if (previousInvocation?.requestIds) {
         for (const kind of causeKinds) {
             const causes = await ctx.db
@@ -152,14 +178,40 @@ export async function buildMissionContext(
                 causes.length > MAX_BATCH_REQUESTS
             )
                 throw executionError("continuation_capacity");
-            for (const cause of causes)
+            for (const cause of causes) {
                 invocationCauses.set(cause.cause, cause._id);
+                const previous = admissionCalls.get(cause.cause);
+                if (previous && previous.requestId !== cause.requestId)
+                    throw executionError("operation_correlation_invalid");
+                if (
+                    !previous ||
+                    (cause.sequence ?? Infinity) <
+                        (previous.sequence ?? Infinity)
+                )
+                    admissionCalls.set(cause.cause, cause);
+            }
         }
         if (
             mission.executionRuntime !== "pi-durable" &&
             invocationCauses.size > MAX_BATCH_REQUESTS
         )
             throw executionError("continuation_capacity");
+    }
+    if (!previousRequests.length && previousInvocation?.requestIds?.length) {
+        const calls = [...admissionCalls.values()].sort(
+            (a, b) =>
+                (a.sequence ?? a._creationTime) -
+                (b.sequence ?? b._creationTime),
+        );
+        if (
+            calls.length !== previousInvocation.requestIds.length ||
+            calls.some(
+                (call, index) =>
+                    call.requestId !== previousInvocation.requestIds?.[index],
+            )
+        )
+            throw executionError("operation_correlation_invalid");
+        previousRequests = calls.map((call) => ({ callId: call.cause }));
     }
     const triggeringRequests = [];
     if (previousInvocation?.requestIds) {
@@ -206,7 +258,13 @@ export async function buildMissionContext(
         callId?: string,
         causeId?: Id<"agentExecutionEvents">,
     ) => {
-        const view = await requestContext(ctx, request, callId, causeId);
+        const view = await requestContext(
+            ctx,
+            request,
+            instructionTexts,
+            callId,
+            causeId,
+        );
         const useKey = stableStringify(view);
         if (includedUses.has(useKey)) return true;
         resultBytes += new TextEncoder().encode(JSON.stringify(view)).length;
@@ -266,7 +324,11 @@ export async function buildMissionContext(
         ReturnType<typeof conversationInstructions>
     >;
     try {
-        activeInstructions = await conversationInstructions(ctx, mission);
+        activeInstructions = await conversationInstructions(
+            ctx,
+            mission,
+            instructionTexts,
+        );
     } catch (error) {
         const code = executionFailureCode(error);
         if (!code) throw error;
@@ -429,15 +491,34 @@ export async function buildMissionContext(
         inputBytes > MAX_CONTEXT_BYTES
     )
         return { kind: "blocked" as const, code: "context_capacity" };
-    return { kind: "ready" as const, inputJson };
+    return {
+        kind: "ready" as const,
+        inputJson,
+        nativeMessageIds: assembled.conversationInstructions?.messages.map(
+            ({ messageId }) => messageId,
+        ),
+    };
 }
 
 export const build = internalQuery({
-    args: { missionId: v.id("agentMissions"), expectedGeneration: v.number() },
+    args: {
+        missionId: v.id("agentMissions"),
+        expectedGeneration: v.number(),
+        correctionAdmission: v.optional(v.literal(true)),
+    },
     returns: v.union(
         v.object({ kind: v.literal("ready"), inputJson: v.string() }),
         v.object({ kind: v.literal("blocked"), code: v.string() }),
     ),
-    handler: (ctx, args) =>
-        buildMissionContext(ctx, args.missionId, args.expectedGeneration),
+    handler: async (ctx, args) => {
+        const context = await buildMissionContext(
+            ctx,
+            args.missionId,
+            args.expectedGeneration,
+            args.correctionAdmission,
+        );
+        return context.kind === "ready"
+            ? { kind: context.kind, inputJson: context.inputJson }
+            : context;
+    },
 });

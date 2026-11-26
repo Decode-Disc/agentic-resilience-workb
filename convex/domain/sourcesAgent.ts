@@ -1,5 +1,6 @@
 import { internal } from "@convex/_generated/api";
-import type { Doc } from "@convex/_generated/dataModel";
+import type { Doc, Id } from "@convex/_generated/dataModel";
+import type { QueryCtx } from "@convex/_generated/server";
 import {
     type AgentDefinition,
     domainSnapshot,
@@ -16,12 +17,13 @@ import {
     retainedMethodVersion,
 } from "@convex/qualificationAgentMethods";
 import {
+    CONVEX_MAX_DOCUMENT_BYTES,
     SOURCES_HANDOFF_READ_CAPACITY,
     SOURCES_MAX_EVIDENCE_REFERENCES,
     SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS,
 } from "@convex/resourcePolicy";
 import { sourcesSimulationEnabled } from "@convex/sourcesSimulation";
-import { ConvexError, v } from "convex/values";
+import { ConvexError, getDocumentSize, type Infer, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { readResearchContext } from "./researchContext";
 import { documentaryInventory } from "./savedMaterial";
@@ -36,6 +38,7 @@ import {
     savedMaterialBinding,
     savedMaterialWireContract,
 } from "./savedMaterialOperations";
+import { sha256Hex, stableStringify } from "./sourcePassages";
 import { preparationFailureCode } from "./sourcePreparationAuthority";
 import {
     sourceDocumentMetadata,
@@ -43,8 +46,8 @@ import {
 } from "./sourceRetrievalPolicy";
 import { SourceReviewReads } from "./sourceReviewReads";
 import {
-    completeSources,
     coveragePresetGuidance,
+    prepareSourcesMaterial,
     projectSourcesPreparationProgress,
     readEngagedSourcesWork,
     requireSourcesPreparation,
@@ -61,9 +64,11 @@ import {
     discoveryResult,
     documentaryCheckInput,
     documentarySubmissionResult,
+    qualificationObservations,
     qualificationSubmissionInput,
+    sourcesCompletionAdmission,
     sourcesCompletionProposalValidator,
-    sourcesPreparationValidator,
+    sourcesOperationAdmission,
     sourcesSchemas,
 } from "./sourcesContracts";
 import { sourcesSimulation } from "./sourcesSimulation";
@@ -73,6 +78,45 @@ import {
     projectWorkbenchInstructions,
     readWorkbenchInstructions,
 } from "./workbenchInstructions";
+
+/** Retains only the admitted work identities used to settle a Sources proposal. */
+export function projectSourcesCompletionAdmission(snapshot: unknown) {
+    if (
+        !snapshot ||
+        typeof snapshot !== "object" ||
+        !("activeWork" in snapshot)
+    )
+        return undefined;
+    const work = snapshot.activeWork;
+    if (
+        !work ||
+        typeof work !== "object" ||
+        !("preparationId" in work) ||
+        !("needsRevision" in work) ||
+        typeof work.needsRevision !== "number" ||
+        !Number.isSafeInteger(work.needsRevision) ||
+        !("work" in work) ||
+        !Array.isArray(work.work)
+    )
+        return undefined;
+    const admitted = {
+        activeWork: {
+            preparationId: work.preparationId,
+            needsRevision: work.needsRevision,
+            work: work.work.map((item: unknown) =>
+                item &&
+                typeof item === "object" &&
+                "requestId" in item &&
+                "needIds" in item
+                    ? { requestId: item.requestId, needIds: item.needIds }
+                    : null,
+            ),
+        },
+    };
+    return validate(sourcesCompletionAdmission, admitted)
+        ? admitted
+        : undefined;
+}
 
 const operation = (
     description: string,
@@ -169,17 +213,31 @@ const modelQualificationInput = qualificationSubmissionInput
         ),
     });
 
-const qualificationObservations = v.object({
-    contributionObservations: v.array(
-        v.object({
-            taskId: v.id("aiTaskResults"),
-            captureId: v.id("sourceCaptures"),
-            contributions: v.array(
-                v.object({ id: v.string(), version: v.number() }),
+/** Retains the exact qualification identities presented in the admitted Sources snapshot. */
+export function projectSourcesOperationAdmission(snapshot: unknown) {
+    const work = domainSnapshot(snapshot).activeWork;
+    if (
+        !validate(sourcesOperationAdmission.fields.activeWork, work, {
+            allowUnknownFields: true,
+        })
+    )
+        return undefined;
+    return {
+        activeWork: {
+            qualificationInputVersion: work.qualificationInputVersion,
+            contributionObservations: work.contributionObservations.map(
+                ({ taskId, captureId, contributions }) => ({
+                    taskId,
+                    captureId,
+                    contributions: contributions.map(({ id, version }) => ({
+                        id,
+                        version,
+                    })),
+                }),
             ),
-        }),
-    ),
-});
+        },
+    };
+}
 
 /** A retained response keeps the model contract of its immutable admitted snapshot. */
 function qualificationModelInput(snapshot?: unknown) {
@@ -191,6 +249,78 @@ function qualificationModelInput(snapshot?: unknown) {
     if (version === undefined) return qualificationSubmissionInput;
     if (version === "observed_v1") return modelQualificationInput;
     throw executionError("qualification_input_version_unavailable");
+}
+
+function completionNeeds(
+    proposal: Infer<typeof sourcesCompletionProposalValidator>,
+    work: Infer<typeof sourcesCompletionAdmission>["activeWork"]["work"] = [],
+) {
+    return proposal.needs.map(({ readRequestIds, ...need }) => ({
+        ...need,
+        workRequestIds: [
+            ...work
+                .filter((entry) => entry.needIds.includes(need.needId))
+                .map((entry) => entry.requestId),
+            ...(readRequestIds ?? []),
+        ],
+    }));
+}
+
+async function readSourcesCompletionCandidate(
+    ctx: QueryCtx,
+    mission: Doc<"agentMissions">,
+    preparationId: Id<"sourceSelectionProposalRebuilds">,
+    proposal: Infer<typeof sourcesCompletionProposalValidator>,
+    admittedInput: unknown,
+    invocation: Doc<"agentInvocations">,
+    reads: SourceReviewReads,
+) {
+    const current = await requireSourcesPreparation(ctx, preparationId);
+    const admitted = projectSourcesCompletionAdmission(admittedInput);
+    if (
+        !validate(sourcesCompletionAdmission, admitted, {
+            db: ctx.db,
+        }) ||
+        admitted.activeWork.preparationId !== preparationId
+    )
+        throw executionError("sources_context_invalid");
+    if (admitted.activeWork.needsRevision < current.data.needsRevision)
+        return { kind: "continue" as const };
+    if (admitted.activeWork.needsRevision !== current.data.needsRevision)
+        throw executionError("sources_context_invalid");
+    const admittedWork = admitted.activeWork.work;
+    const response = {
+        kind: "complete" as const,
+        needsRevision: admitted.activeWork.needsRevision,
+        needs: completionNeeds(proposal, admittedWork),
+    };
+    const accounting = sourcesCompletionAccounting(
+        current.data,
+        response,
+        admitted.activeWork.work,
+    );
+    if (!accounting.issues.length && accounting.stale)
+        return { kind: "continue" as const };
+    const prepared = await prepareSourcesMaterial(
+        ctx,
+        preparationId,
+        response,
+        reads,
+        {
+            type: "agent",
+            missionId: mission._id,
+            invocationId: invocation._id,
+        },
+    );
+    return {
+        kind: "prepared" as const,
+        adopt: prepared.adopt,
+        result: {
+            kind: "sources_v1" as const,
+            preparationId: preparationId,
+            material: prepared.material,
+        },
+    };
 }
 
 export const sourcesV4Definition: AgentDefinition & { id: "sources_v1" } = {
@@ -496,7 +626,69 @@ export const sourcesV4Definition: AgentDefinition & { id: "sources_v1" } = {
     progress(_mission, outcome) {
         return { facts: operationProgressKeys(outcome) };
     },
-    async complete(ctx, mission, proposal, admittedInput, invocation) {
+    preparedResult: {
+        proposalCapacity(proposal) {
+            if (!validate(sourcesCompletionProposalValidator, proposal))
+                return undefined;
+            // These needs are retained in full before material and preparation metadata are added.
+            return getDocumentSize({ needs: completionNeeds(proposal) }) >
+                CONVEX_MAX_DOCUMENT_BYTES
+                ? "sources_result_capacity"
+                : undefined;
+        },
+        async preview(ctx, mission, proposal, admittedInput, invocation) {
+            if (
+                !("scope" in mission) ||
+                mission.scope.kind !== "sources_v1" ||
+                !validate(sourcesCompletionProposalValidator, proposal, {
+                    db: ctx.db,
+                })
+            )
+                return null;
+            try {
+                const reads = new SourceReviewReads(
+                    ctx.db,
+                    mission.runId,
+                    SOURCES_HANDOFF_READ_CAPACITY,
+                );
+                if (
+                    (
+                        await readEngagedSourcesWork(
+                            reads,
+                            mission.scope.preparationId,
+                        )
+                    ).length
+                )
+                    return null;
+                const candidate = await readSourcesCompletionCandidate(
+                    ctx,
+                    mission,
+                    mission.scope.preparationId,
+                    proposal,
+                    admittedInput,
+                    invocation,
+                    reads,
+                );
+                return candidate.kind === "prepared" ? candidate.result : null;
+            } catch (error) {
+                if (
+                    executionFailureCode(error) ||
+                    preparationFailureCode(error)
+                )
+                    return null;
+                throw error;
+            }
+        },
+    },
+    async complete(
+        ctx,
+        mission,
+        proposal,
+        admittedInput,
+        invocation,
+        _preparedReviewDraft,
+        preparedResultHash,
+    ) {
         if (
             !("scope" in mission) ||
             mission.scope.kind !== "sources_v1" ||
@@ -533,82 +725,24 @@ export const sourcesV4Definition: AgentDefinition & { id: "sources_v1" } = {
             );
             if (await hasWaitingWorkbenchInstructions(ctx, mission.runId))
                 return { kind: "blocked", code: "pending_operations" };
-            const current = await requireSourcesPreparation(
+            const candidate = await readSourcesCompletionCandidate(
                 ctx,
+                mission,
                 mission.scope.preparationId,
-            );
-            if (
-                typeof admittedInput !== "object" ||
-                admittedInput === null ||
-                !("activeWork" in admittedInput) ||
-                typeof admittedInput.activeWork !== "object" ||
-                admittedInput.activeWork === null ||
-                !("preparationId" in admittedInput.activeWork) ||
-                admittedInput.activeWork.preparationId !==
-                    mission.scope.preparationId ||
-                !("needsRevision" in admittedInput.activeWork) ||
-                typeof admittedInput.activeWork.needsRevision !== "number" ||
-                !Number.isSafeInteger(admittedInput.activeWork.needsRevision) ||
-                !("work" in admittedInput.activeWork) ||
-                !validate(
-                    sourcesPreparationValidator.fields.work,
-                    admittedInput.activeWork.work,
-                    { db: ctx.db },
-                )
-            )
-                throw executionError("sources_context_invalid");
-            if (
-                admittedInput.activeWork.needsRevision <
-                current.data.needsRevision
-            )
-                return { kind: "continue" };
-            if (
-                admittedInput.activeWork.needsRevision !==
-                current.data.needsRevision
-            )
-                throw executionError("sources_context_invalid");
-            const admittedWork = admittedInput.activeWork.work;
-            const response = {
-                kind: "complete" as const,
-                needsRevision: admittedInput.activeWork.needsRevision,
-                needs: proposal.needs.map(({ readRequestIds, ...need }) => ({
-                    ...need,
-                    workRequestIds: [
-                        ...admittedWork
-                            .filter((work) =>
-                                work.needIds.includes(need.needId),
-                            )
-                            .map((work) => work.requestId),
-                        ...(readRequestIds ?? []),
-                    ],
-                })),
-            };
-            const accounting = sourcesCompletionAccounting(
-                current.data,
-                response,
-                admittedInput.activeWork.work,
-            );
-            if (!accounting.issues.length && accounting.stale)
-                return { kind: "continue" };
-            const material = await completeSources(
-                ctx,
-                mission.scope.preparationId,
-                response,
+                proposal,
+                admittedInput,
+                invocation,
                 reads,
-                {
-                    type: "agent",
-                    missionId: mission._id,
-                    invocationId: invocation._id,
-                },
             );
-            return {
-                kind: "completed",
-                result: {
-                    kind: "sources_v1",
-                    preparationId: mission.scope.preparationId,
-                    material,
-                },
-            };
+            if (candidate.kind === "continue") return candidate;
+            if (
+                preparedResultHash !== undefined &&
+                sha256Hex(stableStringify(candidate.result)) !==
+                    preparedResultHash
+            )
+                return { kind: "continue" };
+            await candidate.adopt(ctx);
+            return { kind: "completed", result: candidate.result };
         } catch (error) {
             const code =
                 executionFailureCode(error) ?? preparationFailureCode(error);

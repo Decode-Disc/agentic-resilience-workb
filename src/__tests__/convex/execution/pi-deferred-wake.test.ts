@@ -1,6 +1,7 @@
 import { api, internal } from "@convex/_generated/api";
 import { afterEach, expect, test, vi } from "vitest";
 import { seedConversation } from "@/__tests__/setup/agent-harness";
+import { readMessageBodies } from "@/__tests__/setup/retained-messages";
 
 afterEach(() => {
     vi.restoreAllMocks();
@@ -108,8 +109,22 @@ test("a deferred result wakes Pi immediately while unchanged waiting work has a 
     });
     expect(await f.t.run((ctx) => ctx.db.get(f.missionId))).toMatchObject({
         status: "completed",
-        result: { text: "The confirmed result is 14." },
+        textualOutcome: { version: 1 },
     });
+    const history = await f.client.query(
+        api.execution.conversations.listMessages,
+        {
+            runId: f.runId,
+            paginationOpts: { numItems: 20, cursor: null },
+        },
+    );
+    expect(
+        (await readMessageBodies(f.client, history.page)).filter(
+            (message) => message.role === "assistant",
+        ),
+    ).toEqual([
+        expect.objectContaining({ text: "The confirmed result is 14." }),
+    ]);
     expect(await f.t.run((ctx) => ctx.db.get(f.requestId))).toMatchObject({
         status: "completed",
         outcome: { kind: "success", valueJson: '{"value":14}' },

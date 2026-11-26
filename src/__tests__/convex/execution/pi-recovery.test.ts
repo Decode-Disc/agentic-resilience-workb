@@ -1,8 +1,30 @@
 import { api, internal } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
+import { getAgentDefinition } from "@convex/execution/agentCatalog";
+import { agentToolSchemas } from "@convex/execution/agentDefinition";
+import { invokeControlledGeneration } from "@convex/execution/invokeAgentModel";
+import { contextObservationSequence } from "@convex/execution/journal";
+import { stageObservedBody } from "@convex/execution/observedReply";
+import {
+    retainedTextParts,
+    stageRetainedText,
+} from "@convex/execution/retainedText";
+import {
+    agentToolSetKey,
+    piInstructionSection,
+} from "@convex/integrations/modelInput";
+import { NATIVE_MODEL_SERIALIZER } from "@convex/integrations/modelRouting";
+import {
+    lookupPiOperation,
+    recoverHistoricalCompletion,
+} from "@convex/integrations/piInvocation";
 import { openMissionPiStorage } from "@convex/integrations/piStorage";
 import { PI_SESSION_MAX_BYTES } from "@convex/resourcePolicy";
+import schema from "@convex/schema";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { ROOT_CONVERSATION_ID } from "@earendil-works/pi-durable";
+import { convexTest } from "convex-test";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedPiMission } from "@/__tests__/setup/pi-mission";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
@@ -12,6 +34,108 @@ afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
+});
+
+test("native operation lookup skips a large historical completion that has no requests", async () => {
+    const { t, missionId } = await seedPiMission(
+        convexTest({
+            schema,
+            modules: import.meta.glob("/convex/**/*.ts"),
+            transactionLimits: { bytesRead: 128 * 1024 },
+        }),
+    );
+    const scope = { missionId, expectedGeneration: 4 };
+    const begun = await t.mutation(internal.execution.invocations.begin, {
+        ...scope,
+        taskKey: "historical-no-requests",
+        provenance: "simulation",
+    });
+    assert(begun.kind === "ready");
+    const { manifest, parts } = retainedTextParts(
+        JSON.stringify({
+            kind: "complete",
+            text: "a".repeat(175_000),
+        }),
+    );
+    let textId: Id<"retainedTexts"> | undefined;
+    for (const [index, content] of parts.entries())
+        textId = await t.run((ctx) =>
+            stageRetainedText(
+                ctx,
+                `${begun.invocationId}:response:${manifest.contentHash}`,
+                { ...manifest, index, content },
+            ),
+        );
+    assert(textId);
+    await t.run((ctx) =>
+        ctx.db.patch(begun.invocationId, {
+            status: "returned",
+            requestIds: [],
+            outputTextId: textId,
+        }),
+    );
+    await expect(
+        t.query(internal.execution.piControl.operation, {
+            ...scope,
+            callId: "no-associated-operation",
+        }),
+    ).resolves.toBeNull();
+});
+
+test("compaction settlement preserves an oversized historical refusal through its recovered digest", async () => {
+    const { t, missionId } = await seedPiMission(
+        convexTest({
+            schema,
+            modules: import.meta.glob("/convex/**/*.ts"),
+            transactionLimits: { bytesRead: 128 * 1024 },
+        }),
+    );
+    const begun = await t.mutation(internal.execution.invocations.begin, {
+        missionId,
+        expectedGeneration: 4,
+        taskKey: "historical-compaction",
+        purpose: "compaction",
+        provenance: "simulation",
+    });
+    assert(begun.kind === "ready");
+    const response = `{"kind":"blocked",${" ".repeat(175_000)}"code":"invalid_output"}`;
+    const { manifest, parts } = retainedTextParts(response);
+    let textId: Id<"retainedTexts"> | undefined;
+    for (const [index, content] of parts.entries())
+        textId = await t.run((ctx) =>
+            stageRetainedText(
+                ctx,
+                `${begun.invocationId}:response:${manifest.contentHash}`,
+                { ...manifest, index, content },
+            ),
+        );
+    assert(textId);
+    await t.run((ctx) =>
+        ctx.db.patch(begun.invocationId, { receivedOutputTextId: textId }),
+    );
+    const finish = internal.execution.piControl.finishAuxiliary;
+    const args = { invocationId: begun.invocationId, expectedGeneration: 4 };
+    await expect(t.mutation(finish, args)).rejects.toMatchObject({
+        data: { code: "retained_response_invalid" },
+    });
+    await expect(
+        t.mutation(finish, {
+            ...args,
+            recovered: { responseHash: "wrong-response" },
+        }),
+    ).rejects.toMatchObject({ data: { code: "invocation_result_conflict" } });
+    await expect(
+        t.mutation(finish, {
+            ...args,
+            recovered: {
+                responseHash: manifest.contentHash,
+                refusalCode: "invalid_output",
+            },
+        }),
+    ).rejects.toMatchObject({ data: { code: "invalid_output" } });
+    expect(await t.run((ctx) => ctx.db.get(begun.invocationId))).toMatchObject({
+        status: "started",
+    });
 });
 
 test("a late wake closes an expired mission explicitly without provider work", async () => {
@@ -837,6 +961,449 @@ test("cancelled structured settlement fences inspection and cannot settle or sch
     ).toBeUndefined();
 });
 
+test("native recovery correlates mixed calls when original operation arguments exceed one read budget", async () => {
+    const t = convexTest({
+        schema,
+        modules: import.meta.glob("/convex/**/*.ts"),
+        transactionLimits: { bytesRead: 128 * 1024 },
+    });
+    const f = await seedInspectedEvidence({}, t);
+    const missionId = await t.mutation(internal.execution.missions.start, {
+        runId: f.args.runId,
+        corpusRevisionId: f.args.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1",
+        requestKey: "large-native-operations",
+        expectedGeneration: 4,
+    });
+    await t.run((ctx) => ctx.db.patch(missionId, { definitionVersion: 4 }));
+    const scope = { missionId, expectedGeneration: 4 };
+    const context = await t.query(internal.execution.context.build, scope);
+    assert(context.kind === "ready");
+    const material = JSON.parse(context.inputJson).domain.availableMaterials[0];
+    const reference = material.readingReferences[0].reference;
+    const lease = await t.mutation(internal.execution.piStore.claim, {
+        ...scope,
+        writer: "native-operations",
+    });
+    const begun = await t.mutation(internal.execution.invocations.begin, {
+        ...scope,
+        piSessionId: lease.sessionId,
+        taskKey: "large-native-operations",
+        provenance: "simulation",
+    });
+    assert(begun.kind === "ready");
+    const response = {
+        kind: "operations" as const,
+        requests: [
+            {
+                callId: "read",
+                name: "read_in_context",
+                inputJson: `${" ".repeat(160_000)}${JSON.stringify({ reference })}`,
+            },
+            { callId: "mixed", name: "submit_completion", inputJson: "{}" },
+        ],
+    };
+    const observedScope = {
+        invocationId: begun.invocationId,
+        expectedGeneration: 4,
+    };
+    const responseTextId = await t.action((ctx) =>
+        stageObservedBody(
+            ctx,
+            observedScope,
+            "response",
+            stableStringify(response),
+        ),
+    );
+    assert(responseTextId);
+    const observableReplyTextId = await t.action((ctx) =>
+        stageObservedBody(
+            ctx,
+            observedScope,
+            "reply",
+            stableStringify({ version: 1, provenance: "simulation", response }),
+        ),
+    );
+    assert(observableReplyTextId);
+    await t.mutation(internal.execution.invocations.retainOutput, {
+        ...observedScope,
+        responseTextId,
+        observableReplyTextId,
+    });
+    const finished = await t.mutation(internal.execution.invocations.finish, {
+        invocationId: begun.invocationId,
+        expectedGeneration: 4,
+        response,
+    });
+    expect(finished.kind).toBe("waiting");
+    await expect(
+        t.query(internal.execution.piControl.operation, {
+            ...scope,
+            callId: "read",
+        }),
+    ).resolves.toMatchObject({
+        _id: finished.requestIds[0],
+        input: { kind: "read_in_context", reference },
+    });
+    await expect(
+        t.query(internal.execution.piControl.completionDisposition, {
+            ...lease,
+            callId: "mixed",
+        }),
+    ).resolves.toEqual({
+        kind: "operation",
+        requestId: finished.requestIds[1],
+    });
+    await expect(
+        t.query(internal.execution.piControl.completionDisposition, {
+            ...lease,
+            callId: "read",
+        }),
+    ).rejects.toThrow("completion_correlation_invalid");
+    await expect(
+        t.mutation(internal.execution.piControl.retireForRepreparation, {
+            invocationId: begun.invocationId,
+            expectedGeneration: 4,
+        }),
+    ).rejects.toThrow("attempt_outcome_unknown");
+    const next = await t.query(internal.execution.context.build, scope);
+    assert(next.kind === "ready");
+    const retainedContext = JSON.parse(next.inputJson);
+    expect(retainedContext.triggeringRequestsAndResults).toEqual(
+        expect.arrayContaining([
+            expect.objectContaining({
+                callId: "read",
+                requestId: finished.requestIds[0],
+            }),
+            expect.objectContaining({
+                callId: "mixed",
+                requestId: finished.requestIds[1],
+            }),
+        ]),
+    );
+    const historyReference =
+        retainedContext.lastObservableInvocation?.historyReference;
+    expect(historyReference).toBeDefined();
+    await t.run(async (ctx) => {
+        const event = await ctx.db
+            .query("agentExecutionEvents")
+            .withIndex("by_invocation_and_kind", (q) =>
+                q
+                    .eq("invocationId", begun.invocationId)
+                    .eq("kind", "invocation_returned"),
+            )
+            .unique();
+        assert(event?.payload?.json);
+        expect(historyReference).toBe(event._id);
+        expect(JSON.parse(event.payload.json).response).toEqual({
+            kind: "retained_invocation_response",
+            invocationId: begun.invocationId,
+            contentHash: sha256Hex(stableStringify(response)),
+        });
+    });
+    await t.run(async (ctx) => {
+        const invocation = await ctx.db.get(begun.invocationId);
+        assert(invocation?.nativeOperations);
+        await ctx.db.patch(invocation._id, {
+            nativeOperations: {
+                ...invocation.nativeOperations,
+                responseHash: "wrong-response",
+            },
+        });
+    });
+    await expect(
+        t.query(internal.execution.piControl.operation, {
+            ...scope,
+            callId: "read",
+        }),
+    ).rejects.toThrow("invocation_result_conflict");
+    // Re-create the earlier storage shape with a separate adopted operation response.
+    await t.run(async (ctx) => {
+        const invocation = await ctx.db.get(begun.invocationId);
+        assert(invocation?.receivedOutputTextId);
+        await ctx.db.patch(invocation._id, {
+            nativeOperations: undefined,
+            outputTextId: undefined,
+            outputJson: JSON.stringify({
+                ...response,
+                requests: response.requests.map((request) => ({
+                    ...request,
+                    inputJson: request.inputJson.trim(),
+                })),
+            }),
+        });
+    });
+    await expect(
+        t.query(internal.execution.piControl.operation, {
+            ...scope,
+            callId: "read",
+        }),
+    ).resolves.toMatchObject({
+        _id: finished.requestIds[0],
+        input: { kind: "read_in_context", reference },
+    });
+    await expect(
+        t.query(internal.execution.piControl.completionDisposition, {
+            ...lease,
+            callId: "mixed",
+        }),
+    ).rejects.toThrow("completion_correlation_invalid");
+    const historicalContext = await t.query(
+        internal.execution.context.build,
+        scope,
+    );
+    assert(historicalContext.kind === "ready");
+    expect(
+        JSON.parse(historicalContext.inputJson).triggeringRequestsAndResults,
+    ).toEqual(
+        expect.arrayContaining([
+            expect.objectContaining({
+                callId: "read",
+                requestId: finished.requestIds[0],
+            }),
+        ]),
+    );
+    await t.run(async (ctx) => {
+        const invocation = await ctx.db.get(begun.invocationId);
+        assert(invocation?.receivedOutputTextId);
+        await ctx.db.patch(invocation._id, {
+            outputTextId: invocation.receivedOutputTextId,
+            outputJson: undefined,
+        });
+        await ctx.db.patch(missionId, { status: "completed" });
+    });
+    await expect(
+        t.query(internal.execution.piControl.terminalCompletionAccepted, lease),
+    ).resolves.toBe(false);
+    await t.run((ctx) => ctx.db.patch(missionId, { status: "waiting" }));
+    const fragmentedContext = await t.query(
+        internal.execution.context.build,
+        scope,
+    );
+    assert(fragmentedContext.kind === "ready");
+    expect(
+        JSON.parse(
+            fragmentedContext.inputJson,
+        ).triggeringRequestsAndResults.map((r: { callId: string }) => r.callId),
+    ).toEqual(["read", "mixed"]);
+    await expect(
+        t.query(internal.execution.piControl.operation, {
+            ...scope,
+            callId: "read",
+        }),
+    ).resolves.toMatchObject({
+        kind: "historical",
+        invocation: { _id: begun.invocationId },
+    });
+
+    await expect(
+        t.action((ctx) =>
+            lookupPiOperation(ctx, {
+                ...scope,
+                callId: "read",
+            }),
+        ),
+    ).resolves.toMatchObject({
+        _id: finished.requestIds[0],
+        input: { kind: "read_in_context", reference },
+    });
+    await expect(
+        t.query(internal.execution.piControl.operation, {
+            ...scope,
+            callId: "read",
+            historical: {
+                invocationId: begun.invocationId,
+                responseHash: "wrong-response",
+                index: 0,
+            },
+        }),
+    ).rejects.toThrow("invocation_result_conflict");
+    const candidate = await t.query(
+        internal.execution.piControl.completionDisposition,
+        {
+            ...lease,
+            callId: "mixed",
+        },
+    );
+    assert(candidate.kind === "historical");
+    await t.action((ctx) =>
+        recoverHistoricalCompletion(ctx, lease, candidate.invocation),
+    );
+    await expect(
+        t.query(internal.execution.piControl.completionDisposition, {
+            ...lease,
+            callId: "mixed",
+        }),
+    ).resolves.toEqual({
+        kind: "operation",
+        requestId: finished.requestIds[1],
+    });
+});
+
+test("settles a native completion whose original arguments exceed the read transaction budget", async () => {
+    vi.useFakeTimers();
+    const t = convexTest({
+        schema,
+        modules: import.meta.glob("/convex/**/*.ts"),
+        transactionLimits: { bytesRead: 128 * 1024 },
+    });
+    const f = await seedInspectedEvidence({}, t);
+    const missionId = await t.mutation(internal.execution.missions.start, {
+        runId: f.args.runId,
+        corpusRevisionId: f.args.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1",
+        requestKey: "retained-completion-correlation",
+        expectedGeneration: 4,
+    });
+    await t.run((ctx) => ctx.db.patch(missionId, { definitionVersion: 4 }));
+    const context = await t.query(internal.execution.context.build, {
+        missionId,
+        expectedGeneration: 4,
+    });
+    assert(context.kind === "ready");
+    const material = JSON.parse(context.inputJson).domain.availableMaterials[0];
+    const requestId = await t.mutation(internal.execution.operations.enqueue, {
+        missionId,
+        expectedGeneration: 4,
+        cause: "read-for-large-completion",
+        input: {
+            kind: "read_in_context",
+            reference: material.readingReferences[0].reference,
+        },
+    });
+    expect(
+        (
+            await t.action(internal.execution.operations.dispatch, {
+                requestId,
+                expectedGeneration: 4,
+            })
+        ).kind,
+    ).toBe("success");
+    const lease = await t.mutation(internal.execution.piStore.claim, {
+        missionId,
+        expectedGeneration: 4,
+        writer: "completion-correlation",
+    });
+    const begun = await t.mutation(internal.execution.invocations.begin, {
+        missionId,
+        expectedGeneration: 4,
+        piSessionId: lease.sessionId,
+        taskKey: "large-completion",
+        provenance: "simulation",
+    });
+    assert(begun.kind === "ready");
+    const response = {
+        kind: "completion_submission" as const,
+        call: {
+            callId: "completion",
+            inputJson: `${" ".repeat(160_000)}${JSON.stringify({ kind: "complete", captureIds: [material.captureId] })}`,
+        },
+    };
+    const args = { invocationId: begun.invocationId, expectedGeneration: 4 };
+    const responseTextId = await t.action((ctx) =>
+        stageObservedBody(ctx, args, "response", stableStringify(response)),
+    );
+    assert(responseTextId);
+    const observableReplyTextId = await t.action((ctx) =>
+        stageObservedBody(
+            ctx,
+            args,
+            "reply",
+            stableStringify({ version: 1, provenance: "simulation", response }),
+        ),
+    );
+    assert(observableReplyTextId);
+    await t.mutation(internal.execution.invocations.retainOutput, {
+        ...args,
+        responseTextId,
+        observableReplyTextId,
+    });
+    await expect(
+        t.mutation(internal.execution.invocations.finish, {
+            ...args,
+            response,
+        }),
+    ).resolves.toMatchObject({ kind: "completed" });
+    await expect(
+        t.query(internal.execution.piControl.completionDisposition, {
+            ...lease,
+            callId: "completion",
+        }),
+    ).resolves.toEqual({ kind: "accepted" });
+    await expect(
+        t.query(internal.execution.piControl.terminalCompletionAccepted, {
+            ...lease,
+        }),
+    ).resolves.toBe(true);
+    await expect(
+        t.query(internal.execution.piControl.completionDisposition, {
+            ...lease,
+            callId: "unrelated",
+        }),
+    ).rejects.toThrow("completion_correlation_invalid");
+    await t.run((ctx) =>
+        ctx.db.patch(begun.invocationId, { nativeCompletion: undefined }),
+    );
+    const bounded = await t.query(
+        internal.execution.piControl.terminalCompletionAccepted,
+        {
+            ...lease,
+        },
+    );
+    expect(bounded).toMatchObject({
+        kind: "historical",
+        invocation: { _id: begun.invocationId },
+    });
+    assert(typeof bounded === "object");
+    await t.action((ctx) =>
+        recoverHistoricalCompletion(ctx, lease, bounded.invocation),
+    );
+    await expect(
+        t.query(internal.execution.piControl.terminalCompletionAccepted, lease),
+    ).resolves.toBe(true);
+    expect(await t.run((ctx) => ctx.db.get(begun.invocationId))).toMatchObject({
+        nativeCompletion: {
+            callId: "completion",
+            responseHash: sha256Hex(stableStringify(response)),
+        },
+    });
+    const mission = await t.run((ctx) => ctx.db.get(missionId));
+    assert(mission && "protocolVersion" in mission && mission.result);
+    const legacyResult = retainedTextParts(
+        `${" ".repeat(175_000)}${JSON.stringify(mission.result)}`,
+    );
+    let resultTextId: Id<"retainedTexts"> | undefined;
+    for (const [index, content] of legacyResult.parts.entries())
+        resultTextId = await t.run((ctx) =>
+            stageRetainedText(ctx, `${missionId}:result`, {
+                ...legacyResult.manifest,
+                index,
+                content,
+            }),
+        );
+    assert(resultTextId);
+    await t.run((ctx) =>
+        ctx.db.patch(missionId, { result: undefined, resultTextId }),
+    );
+    await expect(
+        t.query(internal.execution.piControl.publicationState, {
+            missionId,
+            expectedGeneration: 4,
+        }),
+    ).resolves.toEqual({ completed: true, staleInstructions: false });
+    await t.run((ctx) =>
+        ctx.db.patch(begun.invocationId, {
+            nativeCompletion: {
+                callId: "completion",
+                responseHash: "wrong-response",
+            },
+        }),
+    );
+    await expect(
+        t.query(internal.execution.piControl.terminalCompletionAccepted, lease),
+    ).resolves.toBe(false);
+});
+
 async function completedStructuredSettlement() {
     vi.useFakeTimers();
     const f = await seedInspectedEvidence();
@@ -1179,4 +1746,218 @@ test.each([
             ),
         ).toHaveLength(1);
     } else expect(observed.session?.settlementFailureCode).toBeUndefined();
+});
+
+test("simulation executes an admitted snapshot above the transaction read limit", async () => {
+    const t = convexTest({
+        schema,
+        modules: import.meta.glob("/convex/**/*.ts"),
+        transactionLimits: { bytesRead: 128 * 1024 },
+    });
+    const { missionId } = await seedPiMission(t);
+    const begun = await t.mutation(internal.execution.invocations.begin, {
+        missionId,
+        expectedGeneration: 4,
+        taskKey: "large-simulation-input",
+        provenance: "simulation",
+    });
+    assert(begun.kind === "ready");
+    const args = { invocationId: begun.invocationId, expectedGeneration: 4 };
+    const expected = await t.action(internal.execution.simulation.invoke, args);
+    const { parts, manifest } = retainedTextParts(
+        JSON.stringify({
+            ...JSON.parse(begun.inputJson),
+            fixturePadding: "x".repeat(175_000),
+        }),
+    );
+    let inputTextId: Id<"retainedTexts"> | undefined;
+    for (const [index, content] of parts.entries())
+        inputTextId = await t.run((ctx) =>
+            stageRetainedText(ctx, `${begun.invocationId}:input`, {
+                ...manifest,
+                index,
+                content,
+            }),
+        );
+    assert(inputTextId);
+    await t.run(async (ctx) => {
+        const mission = await ctx.db.get(missionId);
+        assert(mission);
+        const definition = getAgentDefinition(
+            mission.definitionId,
+            mission.definitionVersion,
+        );
+        await ctx.db.patch(begun.invocationId, {
+            inputTextId,
+            inputJson: "",
+            inputContentHash: manifest.contentHash,
+            nativePreparation: {
+                inputHash: manifest.contentHash,
+                observationSequence: await contextObservationSequence(
+                    ctx,
+                    mission.runId,
+                ),
+                instructionsHash: sha256Hex(
+                    piInstructionSection(definition.instructions),
+                ),
+                toolSetKey: await agentToolSetKey(
+                    agentToolSchemas(definition, JSON.parse(begun.inputJson)),
+                ),
+                serializer: NATIVE_MODEL_SERIALIZER,
+            },
+        });
+    });
+    const load = internal.execution.invocationLifecycle.forExecution;
+    await expect(t.query(load, args)).resolves.toMatchObject({
+        invocation: { inputTextId, inputJson: "" },
+    });
+    const read = internal.execution.invocationLifecycle.executionInputFragment;
+    for (const [index, content] of parts.entries()) {
+        await expect(
+            t.query(read, {
+                ...args,
+                index,
+                inputHash: manifest.contentHash,
+            }),
+        ).resolves.toMatchObject({
+            content,
+            contentHash: manifest.contentHash,
+        });
+    }
+    await expect(
+        t.action(internal.execution.simulation.invoke, args),
+    ).resolves.toEqual(expected);
+    let observedPrompt: string | undefined;
+    const reply = await t.action((ctx) =>
+        invokeControlledGeneration(ctx, args, Date.now() + 10_000, {
+            id: "pi-durable",
+            version: 1,
+            async generate(input, lifecycle) {
+                observedPrompt = input.prompt;
+                await lifecycle.beforeDispatch('{"messages":[]}', {
+                    effectiveMaxOutputTokens: 32,
+                });
+                return {
+                    status: "blocked",
+                    reason: "generation_backend_unknown",
+                };
+            },
+        }),
+    );
+    expect(observedPrompt).toBe(parts.join(""));
+    expect(reply.response).toEqual({
+        kind: "blocked",
+        code: "generation_backend_unknown",
+    });
+    const retained = await t.run(async (ctx) => ({
+        invocation: await ctx.db.get(begun.invocationId),
+        calls: await ctx.db.query("providerCalls").collect(),
+    }));
+    expect(retained.invocation).toMatchObject({
+        receivedOutputJson: stableStringify(reply.response),
+    });
+    expect(retained.calls).toHaveLength(0);
+    const retried = await t.mutation(internal.execution.invocations.begin, {
+        missionId,
+        expectedGeneration: 4,
+        taskKey: "large-simulation-input",
+        provenance: "simulation",
+        returnInputReference: true,
+    });
+    expect(retried).toEqual({
+        kind: "ready_reference",
+        invocationId: begun.invocationId,
+        inputHash: manifest.contentHash,
+    });
+});
+
+test("local simulation inspection finds an exact quotation in a request above the transaction read limit", async () => {
+    const t = convexTest({
+        schema,
+        modules: import.meta.glob("/convex/**/*.ts"),
+        transactionLimits: { bytesRead: 128 * 1024 },
+    });
+    const { missionId } = await seedPiMission(t);
+    await t.run((ctx) =>
+        ctx.db.patch(missionId, {
+            requestKey: "local-simulation",
+            definitionVersion: 4,
+        }),
+    );
+    const scope = { missionId, expectedGeneration: 4 };
+    const context = await t.query(internal.execution.context.build, scope);
+    assert(context.kind === "ready");
+    const [material] = JSON.parse(context.inputJson).domain.availableMaterials;
+    const requestId = await t.mutation(internal.execution.operations.enqueue, {
+        ...scope,
+        cause: "inspect-retained-quotation",
+        input: {
+            kind: "read_in_context",
+            reference: material.readingReferences[0].reference,
+        },
+    });
+    const outcome = await t.action(internal.execution.operations.dispatch, {
+        requestId,
+        expectedGeneration: 4,
+    });
+    assert(outcome.kind === "success");
+    const result = JSON.parse(outcome.valueJson);
+    const quotation = result.passage?.exactQuote ?? result.text;
+    assert(typeof quotation === "string" && quotation.length > 0);
+    const begun = await t.mutation(internal.execution.invocations.begin, {
+        ...scope,
+        taskKey: "inspect-fragmented-request",
+        provenance: "simulation",
+    });
+    assert(begun.kind === "ready");
+    const receipt = { invocationId: begun.invocationId, expectedGeneration: 4 };
+    const { parts, manifest } = retainedTextParts(
+        JSON.stringify({
+            messages: [
+                { text: "x".repeat(175_000) },
+                { text: JSON.stringify({ quotation }) },
+            ],
+        }),
+    );
+    let textId:
+        | import("@convex/_generated/dataModel").Id<"retainedTexts">
+        | undefined;
+    for (const [index, content] of parts.entries())
+        textId = await t.mutation(
+            internal.execution.invocationLifecycle.stageRequest,
+            {
+                ...receipt,
+                fragment: { ...manifest, index, content },
+            },
+        );
+    await t.mutation(internal.execution.invocationLifecycle.retainRequest, {
+        ...receipt,
+        textId,
+    });
+    const completion = retainedTextParts(
+        `${" ".repeat(175_000)}${JSON.stringify({
+            kind: "saved_material_inspection_v1",
+            captureIds: [material.captureId],
+        })}`,
+    );
+    let resultTextId: Id<"retainedTexts"> | undefined;
+    for (const [index, content] of completion.parts.entries())
+        resultTextId = await t.run((ctx) =>
+            stageRetainedText(ctx, `${missionId}:result`, {
+                ...completion.manifest,
+                index,
+                content,
+            }),
+        );
+    assert(resultTextId);
+    await t.run((ctx) => ctx.db.patch(missionId, { resultTextId }));
+    const resultView = await t.action(internal.execution.fixtures.inspect, {
+        missionId,
+    });
+    expect(resultView).toMatchObject({
+        contextIncludesReturnedQuotation: true,
+        invocationCount: 1,
+        completionCount: 1,
+        providerCallCount: 0,
+    });
 });

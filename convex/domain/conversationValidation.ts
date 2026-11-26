@@ -1,6 +1,9 @@
 import { internal } from "@convex/_generated/api";
 import { internalMutation } from "@convex/_generated/server";
-import type { AgentDefinition } from "@convex/execution/agentDefinition";
+import {
+    type AgentDefinition,
+    hasCompletionText,
+} from "@convex/execution/agentDefinition";
 import { executionError } from "@convex/execution/errors";
 import { localBrowserFixturesEnabled } from "@convex/runWorkspace";
 import { v } from "convex/values";
@@ -42,8 +45,29 @@ export const conversationValidationV2Definition: AgentDefinition & {
     progress() {
         return {};
     },
+    preparedCompletion: {
+        outcomeKind: "conversation_validation_v1",
+        async basis() {
+            return {
+                confirmationOnly: false,
+                confirmations: [],
+                factsHash: null,
+                async adopt() {
+                    return { kind: "completed" };
+                },
+            };
+        },
+        render(proposal) {
+            return {
+                result: {
+                    kind: "conversation_validation_v1",
+                    text: proposal.text,
+                },
+            };
+        },
+    },
     async complete(_ctx, _mission, response) {
-        if (!("text" in response) || !response.text.trim())
+        if (!hasCompletionText(response))
             return { kind: "blocked", code: "invalid_completion" };
         return {
             kind: "completed",

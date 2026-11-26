@@ -1,13 +1,42 @@
-import schema from "@convex/schema";
-import { convexTest } from "convex-test";
 import { internal } from "@convex/_generated/api";
-import agentTest from "@convex-dev/agent/test";
+import type { Doc } from "@convex/_generated/dataModel";
+import { recoverPiInvocationBody } from "@convex/integrations/piInvocation";
+import schema from "@convex/schema";
+import { convexTest, type TestConvex } from "convex-test";
 import { vi } from "vitest";
 import { seedSourcePreparation } from "./source-preparation";
 
+/** Follows a refused call's immutable receipt instead of relying on duplicated argument storage. */
+export async function originalOperationArguments(
+    t: TestConvex<typeof schema>,
+    request: Doc<"agentOperationRequests">,
+) {
+    if (
+        request.input.kind !== "invalid" ||
+        !("inputReference" in request.input)
+    )
+        throw new Error("Expected retained invalid-call reference");
+    const reference = request.input.inputReference;
+    const invocation = await t.run((ctx) => ctx.db.get(reference.invocationId));
+    if (!invocation) throw new Error("Missing original invocation");
+    const json = await t.action((ctx) =>
+        recoverPiInvocationBody(ctx, invocation, "received", {
+            expectedGeneration:
+                invocation.adoptionGeneration ?? invocation.generation,
+        }),
+    );
+    if (!json) throw new Error("Missing original response");
+    const response = JSON.parse(json);
+    return response.requests.find(
+        (call: { callId: string }) => call.callId === reference.callId,
+    )?.inputJson;
+}
+
 export async function seedConversation(
     local = false,
-    transactionLimits = false,
+    transactionLimits: NonNullable<
+        Parameters<typeof convexTest>[0]["transactionLimits"]
+    > = false,
 ) {
     const f = await seedSourcePreparation(
         {},
@@ -15,11 +44,10 @@ export async function seedConversation(
             ? convexTest({
                   schema,
                   modules: import.meta.glob("/convex/**/*.ts"),
-                  transactionLimits: true,
+                  transactionLimits,
               })
             : undefined,
     );
-    agentTest.register(f.t);
     const client = f.t.withIdentity({ subject: f.userId });
     await f.t.run((ctx) =>
         ctx.db.patch(f.runId, {

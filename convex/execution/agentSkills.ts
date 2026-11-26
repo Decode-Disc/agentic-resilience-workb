@@ -1,7 +1,7 @@
 import { internal } from "@convex/_generated/api";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import packages from "@convex/integrations/agentSkillPackages.json";
-import { responseControlContext } from "@convex/responseControl";
+import { activeResponseControl } from "@convex/responseControl";
 import { zodToConvex } from "convex-helpers/server/zod4";
 import { getAgentDefinition } from "./agentCatalog";
 import type { AgentSkillBinding } from "./agentSkillContracts";
@@ -85,8 +85,8 @@ export const readSkillOperation: AgentOperationDefinition = {
             return { kind: "unavailable", code: "mission_required" };
         if (mission.definitionId === "workbench_v1") {
             const run = await ctx.db.get(mission.runId);
-            const control = await responseControlContext(ctx, mission);
-            if (!run || run.fixedFramingRevisionId || control?.reminder)
+            const control = await activeResponseControl(ctx, mission);
+            if (!run || run.fixedFramingRevisionId || control.correction)
                 return {
                     kind: "unavailable",
                     code: "skill_resource_not_allowed",

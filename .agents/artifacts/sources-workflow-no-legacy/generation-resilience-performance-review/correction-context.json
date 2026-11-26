@@ -1,0 +1,15 @@
+{
+  "before": [
+    {
+      "path": ".agents/artifacts/sources-workflow-no-legacy/27-tdd-generation-resilience.md",
+      "sha256": "7c690f8ccc33452f10912d690654020709557f3722e104a0651ad51adff3b169",
+      "preservedAs": ".agents/artifacts/sources-workflow-no-legacy/generation-resilience-performance-review/27-tdd-generation-resilience-before-pause-correction.md"
+    },
+    {
+      "path": ".agents/artifacts/sources-workflow-no-legacy/46-structure-outline-generation-resilience.md",
+      "sha256": "a1d8766b25116316b336850b44d4295a40ff8e1f5940d489c01a617881a73720",
+      "preservedAs": ".agents/artifacts/sources-workflow-no-legacy/generation-resilience-performance-review/46-structure-outline-generation-resilience-before-pause-correction.md"
+    }
+  ],
+  "requestedChange": "Resolve code-reviewer HIGH pause/recovery transition, then independent performance-reviewer assessment. Documentation only; no production implementation."
+}

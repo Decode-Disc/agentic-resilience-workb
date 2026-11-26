@@ -8,6 +8,7 @@ import { executionError, executionFailureCode } from "@convex/execution/errors";
 import { operationHistoryReference } from "@convex/execution/journal";
 import { missionObjectiveKey } from "@convex/execution/missionData";
 import {
+    CONVEX_MAX_DOCUMENT_BYTES,
     DOCUMENTARY_SEARCH_QUERY_MAX_CHARS,
     MAX_OPERATION_RESULT_BYTES,
     MAX_POLICY_REASON_CODE_CHARS,
@@ -1203,7 +1204,8 @@ export async function assertSourcesCompletionCapacity(
             ),
         });
     }
-    if (bytes > 1_048_576) throw executionError("sources_result_capacity");
+    if (bytes > CONVEX_MAX_DOCUMENT_BYTES)
+        throw executionError("sources_result_capacity");
     const count = (
         taskKey: string,
         sourceId: Id<"sources">,
@@ -1227,7 +1229,8 @@ export async function assertSourcesCompletionCapacity(
                     contributionId: item.id,
                     version: item.version,
                 }) * item.needIds.length;
-        if (bytes > 1_048_576) throw executionError("sources_result_capacity");
+        if (bytes > CONVEX_MAX_DOCUMENT_BYTES)
+            throw executionError("sources_result_capacity");
     };
     for (const id of data.qualifications) {
         const task = await reads.task(id);
@@ -1303,7 +1306,9 @@ export async function assertSourcesCompletionCapacity(
     // The qualification is known; its future control is bounded by the storage document limit.
     reads.requireCapacity(
         (qualification
-            ? getDocumentSize({ contributions }) + 1024 + 1_048_576
+            ? getDocumentSize({ contributions }) +
+              1024 +
+              CONVEX_MAX_DOCUMENT_BYTES
             : 0) + pendingReceiptBytes,
         8,
     );
@@ -1313,7 +1318,10 @@ export async function assertSourcesCompletionCapacity(
 export function sourcesCompletionAccounting(
     data: SourcesPreparation,
     response: Infer<typeof sourcesCompletionValidator>,
-    admittedWork: SourcesPreparation["work"] = data.work,
+    admittedWork: readonly Pick<
+        SourcesPreparation["work"][number],
+        "requestId"
+    >[] = data.work,
 ) {
     const issues: { path: string; expected: string; code: string }[] = [];
     const add = (path: string, expected: string, code: string) =>
@@ -1394,6 +1402,25 @@ export function sourcesCompletionAccounting(
 /** Completion resolves persisted work and current restrictions; it never adopts model-authored source membership. */
 export async function completeSources(
     ctx: MutationCtx,
+    preparationId: Id<"sourceSelectionProposalRebuilds">,
+    response: Infer<typeof sourcesCompletionValidator>,
+    sharedReads?: SourceReviewReads,
+    assessmentAuthor?: Infer<typeof documentaryAssessmentAuthorValidator>,
+) {
+    const prepared = await prepareSourcesMaterial(
+        ctx,
+        preparationId,
+        response,
+        sharedReads,
+        assessmentAuthor,
+    );
+    await prepared.adopt(ctx);
+    return prepared.material;
+}
+
+/** Computes material without publishing it; completion builds a fresh candidate before adopting it. */
+export async function prepareSourcesMaterial(
+    ctx: QueryCtx,
     preparationId: Id<"sourceSelectionProposalRebuilds">,
     response: Infer<typeof sourcesCompletionValidator>,
     sharedReads?: SourceReviewReads,
@@ -1737,11 +1764,17 @@ export async function completeSources(
         getDocumentSize({
             ...preparation,
             sourcesMission: { ...data, result },
-        }) > 1_048_576
+        }) > CONVEX_MAX_DOCUMENT_BYTES
     )
         throw executionError("sources_result_capacity");
-    await ctx.db.patch(preparationId, { sourcesMission: { ...data, result } });
-    return result;
+    return {
+        material: result,
+        async adopt(writer: MutationCtx) {
+            await writer.db.patch(preparationId, {
+                sourcesMission: { ...data, result },
+            });
+        },
+    };
 }
 
 type ControlledSourceQualification = Awaited<

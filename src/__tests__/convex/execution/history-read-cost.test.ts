@@ -1,10 +1,12 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
+import type { QueryCtx } from "@convex/_generated/server";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import { recordMissionEvent } from "@convex/execution/authority";
 import type { readHistoryPage } from "@convex/execution/history";
 import { projectMissionHistoryEvent } from "@convex/execution/journal";
+import { getDocumentSize, type Value } from "convex/values";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import {
     dispatchHistory,
@@ -184,14 +186,86 @@ test("dense mission history reads only the source documents used by each page an
     }
 });
 
+type HistoryReadMeasurement = Record<
+    string,
+    { documents: number; bytes: number }
+>;
+
+/** Counts the documents yielded to the real history handler using Convex document sizes. */
+function measureHistoryReads(
+    db: QueryCtx["db"],
+    reads: HistoryReadMeasurement,
+) {
+    const count = (row: Record<string, Value> | null, table: string) => {
+        if (!row) return;
+        reads[table] ??= { documents: 0, bytes: 0 };
+        const totals = reads[table];
+        totals.documents++;
+        totals.bytes += getDocumentSize(row);
+    };
+    const observeQuery = <T extends object>(query: T, table: string): T =>
+        new Proxy(query, {
+            get(target, key, receiver) {
+                const value = Reflect.get(target, key, receiver);
+                if (typeof value !== "function") return value;
+                if (key === Symbol.asyncIterator)
+                    return async function* () {
+                        for await (const row of target as T &
+                            AsyncIterable<Record<string, Value>>) {
+                            count(row, table);
+                            yield row;
+                        }
+                    };
+                return (...args: unknown[]) => {
+                    const result = Reflect.apply(value, target, args);
+                    if (result instanceof Promise)
+                        return result.then((rows) => {
+                            if (Array.isArray(rows))
+                                for (const row of rows) count(row, table);
+                            else if (Array.isArray(rows?.page))
+                                for (const row of rows.page) count(row, table);
+                            else count(rows, table);
+                            return rows;
+                        });
+                    return typeof result === "object" && result
+                        ? observeQuery(result, table)
+                        : result;
+                };
+            },
+        });
+    return new Proxy(db, {
+        get(target, key, receiver) {
+            if (key === "query")
+                return (table: Parameters<QueryCtx["db"]["query"]>[0]) =>
+                    observeQuery(target.query(table), table);
+            if (key === "get")
+                return async (id: Parameters<QueryCtx["db"]["get"]>[0]) => {
+                    const row = await target.get(id);
+                    const table = target.normalizeId(
+                        "agentOperationRequests",
+                        id,
+                    )
+                        ? "agentOperationRequests"
+                        : "otherPointReads";
+                    count(row, table);
+                    return row;
+                };
+            return Reflect.get(target, key, receiver);
+        },
+    });
+}
+
 test(`restores ${process.env.HARNESS_REAL_TRAVERSAL_INPUT ? "supplied retained traversal" : "synthetic traversal-shaped"} payloads through readHistoryPage with exact hashes`, async () => {
     const f = await seedHistoryMission();
     vi.stubGlobal("fetch", () => {
         throw new Error("No provider calls in history replay");
     });
     const realInputPath = process.env.HARNESS_REAL_TRAVERSAL_INPUT;
-    const realData = realInputPath
-        ? (JSON.parse(readFileSync(realInputPath, "utf8")) as {
+    const realInput = realInputPath
+        ? readFileSync(realInputPath, "utf8")
+        : undefined;
+    const realData = realInput
+        ? (JSON.parse(realInput) as {
               sourceArchive: string;
               traversalIndex: number;
               items: {
@@ -202,6 +276,16 @@ test(`restores ${process.env.HARNESS_REAL_TRAVERSAL_INPUT ? "supplied retained t
               }[];
           })
         : null;
+    if (realData) {
+        const originalSequences = new Set<number>();
+        for (const item of realData.items) {
+            expect(originalSequences.has(item.originalSequence)).toBe(false);
+            originalSequences.add(item.originalSequence);
+            const serialized = JSON.stringify(item.parsed);
+            expect(serialized.length).toBe(item.characters);
+            expect(sha256Hex(serialized)).toBe(item.sha256);
+        }
+    }
     const payloadSpecs = realData
         ? realData.items.map((item) => ({
               label: `real-seq-${item.originalSequence}`,
@@ -238,6 +322,26 @@ test(`restores ${process.env.HARNESS_REAL_TRAVERSAL_INPUT ? "supplied retained t
             );
         }
     });
+
+    const databaseReads: HistoryReadMeasurement[] = [];
+    if (realData && process.env.HARNESS_REAL_PERF_OUTPUT) {
+        const { read } = await import("@convex/execution/history");
+        const registered = read as typeof read & {
+            _handler: typeof readHistoryPage;
+        };
+        const original = registered._handler;
+        vi.spyOn(registered, "_handler").mockImplementation(
+            async (ctx, args) => {
+                const reads: HistoryReadMeasurement = {};
+                const result = await original(
+                    { ...ctx, db: measureHistoryReads(ctx.db, reads) },
+                    args,
+                );
+                databaseReads.push(reads);
+                return result;
+            },
+        );
+    }
 
     const pages: {
         entries: number;
@@ -285,6 +389,12 @@ test(`restores ${process.env.HARNESS_REAL_TRAVERSAL_INPUT ? "supplied retained t
         expect(actual).toBe(expected.json);
         expect(sha256Hex(actual ?? "")).toBe(expected.contentHash);
     }
+    if (realData && process.env.HARNESS_REAL_PERF_OUTPUT) {
+        expect(databaseReads).toHaveLength(pages.length);
+        expect(
+            databaseReads.some((page) => page.agentExecutionEvents?.documents),
+        ).toBe(true);
+    }
     if (process.env.HARNESS_REAL_PERF_OUTPUT)
         writeFileSync(
             process.env.HARNESS_REAL_PERF_OUTPUT,
@@ -293,6 +403,9 @@ test(`restores ${process.env.HARNESS_REAL_TRAVERSAL_INPUT ? "supplied retained t
                     sourceIdentity: realData
                         ? `${realData.sourceArchive}#traversal-${realData.traversalIndex}`
                         : "synthetic-traversal-shape-27-events",
+                    archiveInputHash: realInput
+                        ? sha256Hex(realInput)
+                        : undefined,
                     eventCount: expectedBySequence.size,
                     totalCharacters: [...expectedBySequence.values()].reduce(
                         (sum, item) => sum + item.json.length,
@@ -300,6 +413,7 @@ test(`restores ${process.env.HARNESS_REAL_TRAVERSAL_INPUT ? "supplied retained t
                     ),
                     restoredHashesVerified: true,
                     consultations: pages.length,
+                    historyHandlerDatabaseReads: databaseReads,
                     totalResponseBytes: pages.reduce(
                         (sum, page) => sum + page.resultBytes,
                         0,

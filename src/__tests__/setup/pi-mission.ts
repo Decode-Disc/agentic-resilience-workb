@@ -5,11 +5,13 @@ import {
     startRetainedInspection,
 } from "./source-preparation";
 
-export async function seedPiMission() {
+export async function seedPiMission(
+    existing?: Parameters<typeof seedInspectedEvidence>[1],
+) {
     vi.useFakeTimers();
     vi.stubEnv("E2E_FIXTURES_ENABLED", "true");
     vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3212");
-    const fixture = await seedInspectedEvidence();
+    const fixture = await seedInspectedEvidence({}, existing);
     const { t, args, invitationId } = fixture;
     await t.run((ctx) => ctx.db.patch(invitationId, { slotKey: "analyst-4" }));
     const contextId = await t.mutation(

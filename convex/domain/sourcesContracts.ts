@@ -338,6 +338,37 @@ export const sourcesPreparationValidator = v.object({
     ),
     result: v.optional(preparedMaterialValidator),
 });
+export const qualificationObservations = v.object({
+    contributionObservations: v.array(
+        v.object({
+            taskId: v.id("aiTaskResults"),
+            captureId: v.id("sourceCaptures"),
+            contributions: v.array(
+                v.object({ id: v.string(), version: v.number() }),
+            ),
+        }),
+    ),
+});
+
+export const sourcesOperationAdmission = v.object({
+    activeWork: v.object({
+        qualificationInputVersion: v.literal("observed_v1"),
+        ...qualificationObservations.fields,
+    }),
+});
+
+export const sourcesCompletionAdmission = v.object({
+    activeWork: v.object({
+        preparationId: v.id("sourceSelectionProposalRebuilds"),
+        needsRevision: v.number(),
+        work: v.array(
+            sourcesPreparationValidator.fields.work.element.pick(
+                "requestId",
+                "needIds",
+            ),
+        ),
+    }),
+});
 const needInput = { needId: v.string() };
 export const discoverSourcesInput = v.object({
     ...needInput,

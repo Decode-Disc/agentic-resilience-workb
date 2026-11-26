@@ -27,6 +27,7 @@ export function qualificationDiagnostic(
         "EACCES",
         "ENOENT",
         "ECONNRESET",
+        "ECONNREFUSED",
         "ETIMEDOUT",
         "ERR_ASSERTION",
     ]);

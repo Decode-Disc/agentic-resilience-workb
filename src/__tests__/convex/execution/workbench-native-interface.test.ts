@@ -3,11 +3,13 @@ import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { runPiMission } from "@convex/integrations/piMission";
 import { nodeActionGenerationDeadline } from "@convex/resourcePolicy";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import { originalOperationArguments } from "@/__tests__/setup/agent-harness";
 import {
     nativePiFixtureRoute,
     nativeTextReply as reply,
     nativeToolReply as toolReply,
 } from "@/__tests__/setup/pi-native";
+import { readConversationPageWithBodies } from "@/__tests__/setup/retained-messages";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 import { seedWorkbenchMaterials } from "@/__tests__/setup/workbench-materials";
 
@@ -81,10 +83,10 @@ test("framing refusal guides a native correction of the scope without changing t
         revision: 2,
         content,
     });
-    const history = await client.query(
-        api.execution.conversations.listMessages,
-        { runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
+    const history = await readConversationPageWithBodies(client, {
+        runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(
         history.page
             .filter((message) => message.role === "assistant")
@@ -191,10 +193,10 @@ test.each([
         revision: 2,
         content,
     });
-    const history = await client.query(
-        api.execution.conversations.listMessages,
-        { runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
+    const history = await readConversationPageWithBodies(client, {
+        runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(
         history.page
             .filter((message) => message.role === "assistant")
@@ -289,7 +291,7 @@ test("exhausted cumulative work budget blocks initial correction without publish
     });
     expect(
         (
-            await client.query(api.execution.conversations.listMessages, {
+            await readConversationPageWithBodies(client, {
                 runId,
                 paginationOpts: { numItems: 20, cursor: null },
             })
@@ -357,10 +359,10 @@ test("a direct analyst edit survives stale output and a fresh conflicting tool p
         }),
     );
     await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 120);
-    const messages = await client.query(
-        api.execution.conversations.listMessages,
-        { runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
+    const messages = await readConversationPageWithBodies(client, {
+        runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(
         messages.page
             .filter((message) => message.role === "assistant")
@@ -416,7 +418,7 @@ test("new Workbench publishes native prose and the next response receives the or
     );
     await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
     const messages = () =>
-        client.query(api.execution.conversations.listMessages, {
+        readConversationPageWithBodies(client, {
             runId,
             paginationOpts: { numItems: 20, cursor: null },
         });
@@ -490,7 +492,7 @@ test.each([
         delivery: "queue",
     });
     await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
-    const page = await client.query(api.execution.conversations.listMessages, {
+    const page = await readConversationPageWithBodies(client, {
         runId,
         paginationOpts: { numItems: 20, cursor: null },
     });
@@ -733,7 +735,7 @@ test("native tools omit mechanical revisions, persist canonical arguments and re
         requests.find((request) => request.input.kind === "adjust_framing")
             ?.input,
     ).toMatchObject({ expectedRevision: 1, content });
-    const page = await client.query(api.execution.conversations.listMessages, {
+    const page = await readConversationPageWithBodies(client, {
         runId,
         paginationOpts: { numItems: 20, cursor: null },
     });
@@ -870,13 +872,10 @@ test.each([
         },
     });
     const published = `${controlEnabled ? explanation : falseClaim}\n\n${confirmation}`;
-    const messages = await client.query(
-        api.execution.conversations.listMessages,
-        {
-            runId,
-            paginationOpts: { numItems: 20, cursor: null },
-        },
-    );
+    const messages = await readConversationPageWithBodies(client, {
+        runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(
         messages.page
             .filter((message) => message.role === "assistant")
@@ -1088,7 +1087,7 @@ test.each([
 
     expect(JSON.stringify(payloads[1])).toContain("NEW DIRECTION");
     expect(JSON.stringify(payloads[1])).not.toContain("WAIT FOR NEXT RESPONSE");
-    const page = await client.query(api.execution.conversations.listMessages, {
+    const page = await readConversationPageWithBodies(client, {
         runId,
         paginationOpts: { numItems: 20, cursor: null },
     });
@@ -1161,7 +1160,7 @@ test("stopping a native response settles its cancelled tasks and reuses the conv
     await client.mutation(api.execution.conversations.resumeQueue, { runId });
     await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
     expect(count).toBe(2);
-    const page = await client.query(api.execution.conversations.listMessages, {
+    const page = await readConversationPageWithBodies(client, {
         runId,
         paginationOpts: { numItems: 20, cursor: null },
     });
@@ -1210,7 +1209,7 @@ test("superseded conversations retain readable history but cannot generate throu
     const sessions = await t.run((ctx) => ctx.db.query("piSessions").collect());
     expect(sessions).toHaveLength(0);
     expect(fetch).not.toHaveBeenCalled();
-    const page = await client.query(api.execution.conversations.listMessages, {
+    const page = await readConversationPageWithBodies(client, {
         runId,
         paginationOpts: { numItems: 20, cursor: null },
     });
@@ -1284,7 +1283,7 @@ test("successive steers retain their native submission identity across instructi
         for (const release of releases) release();
     }
     await running;
-    const page = await client.query(api.execution.conversations.listMessages, {
+    const page = await readConversationPageWithBodies(client, {
         runId,
         paginationOpts: { numItems: 20, cursor: null },
     });
@@ -1349,7 +1348,7 @@ test("rejected framing receipts survive native handover and a later preservation
     );
     await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
     const messages = () =>
-        client.query(api.execution.conversations.listMessages, {
+        readConversationPageWithBodies(client, {
             runId,
             paginationOpts: { numItems: 20, cursor: null },
         });
@@ -1488,10 +1487,10 @@ test("a malformed conversation continuation returns a refusal and the same respo
     });
     await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
     if (providerErrors.length) throw providerErrors[0];
-    const messages = await client.query(
-        api.execution.conversations.listMessages,
-        { runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
+    const messages = await readConversationPageWithBodies(client, {
+        runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     const requests = await t.run((ctx) =>
         ctx.db.query("agentOperationRequests").collect(),
     );
@@ -1554,10 +1553,10 @@ test("an invalid history cursor gives exact recovery guidance and permits readin
         nativePiFixtureRoute,
     );
     await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
-    const history = await client.query(
-        api.execution.conversations.listMessages,
-        { runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
+    const history = await readConversationPageWithBodies(client, {
+        runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     const original = history.page.find((message) => message.role === "user");
     assert(original);
     await client.mutation(api.execution.conversations.submit, {
@@ -1648,17 +1647,23 @@ test.each([
             input: {
                 kind: "invalid",
                 name: "adjust_framing",
-                inputJson: original,
+                inputReference: expect.objectContaining({
+                    callId: expect.any(String),
+                    responseHash: expect.any(String),
+                    invocationId: expect.any(String),
+                }),
                 validation: { path: "", expected: "object" },
             },
             status: "completed",
             outcome: expect.objectContaining({ kind: "refused" }),
         }),
     ]);
-    const messages = await client.query(
-        api.execution.conversations.listMessages,
-        { runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
+    assert(requests[0]);
+    expect(await originalOperationArguments(t, requests[0])).toBe(original);
+    const messages = await readConversationPageWithBodies(client, {
+        runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(
         messages.page.filter((m) => m.role === "assistant").map((m) => m.text),
     ).toEqual([
@@ -1728,7 +1733,7 @@ test("missing native argument evidence blocks generation and a fresh analyst req
     ).toBeNull();
     expect(
         (
-            await client.query(api.execution.conversations.listMessages, {
+            await readConversationPageWithBodies(client, {
                 runId,
                 paginationOpts: { numItems: 20, cursor: null },
             })
@@ -1786,7 +1791,7 @@ test("a corrected native framing operation succeeds after malformed original JSO
     });
     expect(
         (
-            await client.query(api.execution.conversations.listMessages, {
+            await readConversationPageWithBodies(client, {
                 runId,
                 paginationOpts: { numItems: 20, cursor: null },
             })
@@ -1801,7 +1806,11 @@ test("a corrected native framing operation succeeds after malformed original JSO
             input: {
                 kind: "invalid",
                 name: "adjust_framing",
-                inputJson: "{",
+                inputReference: expect.objectContaining({
+                    callId: expect.any(String),
+                    responseHash: expect.any(String),
+                    invocationId: expect.any(String),
+                }),
                 validation: { path: "", expected: "object" },
             },
             outcome: expect.objectContaining({ kind: "refused" }),
@@ -1899,10 +1908,10 @@ test("a command received during a tool reply does not deadlock the native respon
     );
     await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
     expect(calls).toBe(2);
-    const messages = await client.query(
-        api.execution.conversations.listMessages,
-        { runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
+    const messages = await readConversationPageWithBodies(client, {
+        runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(
         messages.page.filter((m) => m.role === "assistant").map((m) => m.text),
     ).toContain("Research has not started.");
@@ -2147,10 +2156,10 @@ test.each([
     expect(
         await t.run((ctx) => ctx.db.query("piSessions").collect()),
     ).toHaveLength(1);
-    const messages = await client.query(
-        api.execution.conversations.listMessages,
-        { runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
+    const messages = await readConversationPageWithBodies(client, {
+        runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     const final = messages.page
         .filter((message) => message.role === "assistant")
         .at(-1)?.text;
@@ -2255,13 +2264,10 @@ test("an unresolved crisis saves a neutral program and a later analyst confirmat
         content: h20Program,
         eventBasis: { kind: "analyst", excerpt: confirmation, messageId },
     });
-    const history = await client.query(
-        api.execution.conversations.listMessages,
-        {
-            runId,
-            paginationOpts: { numItems: 20, cursor: null },
-        },
-    );
+    const history = await readConversationPageWithBodies(client, {
+        runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(
         history.page
             .filter(({ role }) => role === "assistant")
@@ -2446,13 +2452,10 @@ test.each([
         content: h20Program,
         eventBasis: { kind: "public", referenceIndexes: [0, 2] },
     });
-    const history = await client.query(
-        api.execution.conversations.listMessages,
-        {
-            runId,
-            paginationOpts: { numItems: 20, cursor: null },
-        },
-    );
+    const history = await readConversationPageWithBodies(client, {
+        runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(history.page.find(({ role }) => role === "assistant")?.text).toBe(
         finalText,
     );
@@ -3868,13 +3871,10 @@ test("provisional estimate review keeps the analyst's activity and saves explici
             ?.sourcePreparationId,
     ).toBeUndefined();
 
-    const published = await fixture.client.query(
-        api.execution.conversations.listMessages,
-        {
-            runId: fixture.runId,
-            paginationOpts: { numItems: 20, cursor: null },
-        },
-    );
+    const published = await readConversationPageWithBodies(fixture.client, {
+        runId: fixture.runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     const clarification = published.page
         .filter((message) => message.role === "assistant")
         .at(-1)?.text;

@@ -1,4 +1,6 @@
 import { v } from "convex/values";
+export const REQUEST_APPROVAL_FIXTURE_CAUSE = "fixture-request-approval";
+
 export const conversationValidationSchemas = {
     id: v.literal("conversation_validation_v1"),
     scope: v.object({ kind: v.literal("conversation_validation_v1") }),

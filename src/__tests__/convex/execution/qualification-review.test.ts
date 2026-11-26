@@ -430,6 +430,7 @@ for (const { subscription, compaction, fault } of [
                 );
                 expectedInput.set(requests, 100);
                 if (compaction && phase === "compaction") {
+                    expect(body.prompt_cache_key).toBeUndefined();
                     summaries++;
                     if (fault === "unknown")
                         throw new Error("Synthetic summary connection lost");
@@ -573,6 +574,7 @@ for (const { subscription, compaction, fault } of [
                 }),
                 archive: () => {
                     archived++;
+                    return undefined;
                 },
             };
             const exitCode = process.exitCode;
@@ -878,6 +880,7 @@ for (const { subscription, compaction, fault } of [
                 }),
                 archive: () => {
                     archived++;
+                    return undefined;
                 },
             };
             await runCampaign("run", root, {}, undefined, boundaries);

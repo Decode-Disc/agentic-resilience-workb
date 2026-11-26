@@ -1,5 +1,6 @@
-import { api, internal } from "@convex/_generated/api";
+import { internal } from "@convex/_generated/api";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import { readConversationPageWithBodies } from "@/__tests__/setup/retained-messages";
 import {
     seedWorkbench,
     workbenchAdmissionInput,
@@ -198,7 +199,7 @@ test.each([
             ).kind,
         ).toBe("completed");
     } else expect(finished.kind).toBe("completed");
-    const page = await client.query(api.execution.conversations.listMessages, {
+    const page = await readConversationPageWithBodies(client, {
         runId,
         paginationOpts: { numItems: 20, cursor: null },
     });

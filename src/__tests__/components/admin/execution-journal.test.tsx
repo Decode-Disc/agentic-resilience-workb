@@ -147,6 +147,54 @@ test("a retained structured result remains inspectable before business adoption"
     expect(screen.queryByText("Outcome not recorded · unknown")).toBeNull();
 });
 
+test("a fragmented normalized result uses its receipt only when the disclosure opens", () => {
+    convexReactHarness.query(api.adminOperations.inspectJournalEvent).returns({
+        event,
+        invocation: {
+            journalVersion: 1,
+            provenance: "live",
+            status: "started",
+            generation: 1,
+            receivedOutput: {
+                contentHash: "normalized-hash",
+                sizeBytes: 180_000,
+            },
+        },
+        request: null,
+        providerCall: null,
+    });
+    const read = vi.fn((_args: unknown) => ({
+        results: [{ index: 0, content: "Exact normalized fragment" }],
+        status: "CanLoadMore",
+        loadMore,
+    }));
+    convexReactHarness
+        .paginatedQuery(api.adminOperations.listInvocationPayloadFragmentsPage)
+        .returnsFrom(read);
+    render(<AdminExecutionJournal runId={runId} />);
+    fireEvent.click(screen.getByRole("button", { name: /Reply recorded/ }));
+    expect(
+        screen.getByText("Response retained · awaiting adoption"),
+    ).toBeTruthy();
+    expect(read).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Structured result" }));
+    expect(read).toHaveBeenCalledWith(
+        expect.objectContaining({
+            args: {
+                runId,
+                invocationId: event.invocationId,
+                part: "received",
+                contentHash: "normalized-hash",
+            },
+        }),
+    );
+    expect(screen.getByText("Exact normalized fragment")).toBeTruthy();
+    fireEvent.click(
+        screen.getByRole("button", { name: "Load more snapshot content" }),
+    );
+    expect(loadMore).toHaveBeenCalledWith(1);
+});
+
 test.each([
     "recorded",
     "unavailable",

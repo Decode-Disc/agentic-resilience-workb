@@ -18,11 +18,23 @@ import {
 import { executionError } from "./errors";
 import {
     commonOperationSuccessValidator,
+    completionFeedbackValidator,
     historyReadReceiptValidator,
     historySourceFor,
     type protectedDiagnosticValidator,
     validationFeedbackValidator,
 } from "./operationContracts";
+
+/** The preparation model operations that own a one-shot visible output stream. */
+export const ONE_SHOT_PREPARATION_OPERATIONS = [
+    "source_qualification",
+    "source_comparison",
+    "source_documentary_control",
+] as const;
+
+export function isOneShotPreparationOperation(operation: string) {
+    return ONE_SHOT_PREPARATION_OPERATIONS.some((value) => value === operation);
+}
 
 export {
     agentDefinitionIdValidator,
@@ -314,22 +326,85 @@ export const invocationResponseValidator = v.union(
     v.object({ kind: v.literal("blocked"), code: v.string() }),
 );
 
+/** Compaction retains native output separately from its application disposition. */
+export function successfulAuxiliaryResponse() {
+    return { kind: "operations" as const, requests: [] };
+}
+
 export const invocationReplyValidator = v.object({
     response: invocationResponseValidator,
     rawOutputJson: v.optional(v.string()),
 });
 
+/** Correlation and bounded notes shared by prepared publication and correction. */
+export const preparedCompletionValidator = v.object({
+    responseHash: v.string(),
+    callId: v.optional(v.string()),
+    workingNotes: v.optional(v.string()),
+    workingNotesOversized: v.optional(v.literal(true)),
+});
+
+/** Action-prepared arguments; original bytes remain in the digest-bound invocation receipt. */
+export const preparedSubmissionValidator = v.object({
+    responseHash: v.string(),
+    response: v.union(
+        v.object({
+            kind: v.literal("operations"),
+            requests: v.array(
+                v.object({
+                    callId: v.string(),
+                    name: v.string(),
+                    inputJson: v.optional(v.string()),
+                    refusalCode: v.optional(
+                        v.literal("operation_input_capacity"),
+                    ),
+                    validation: v.optional(validationFeedbackValidator),
+                }),
+            ),
+            workingNotes: v.optional(v.string()),
+        }),
+        v.object({
+            kind: v.literal("completion_submission"),
+            call: v.union(
+                v.null(),
+                v.object({
+                    callId: v.string(),
+                    inputJson: v.optional(v.string()),
+                    feedback: v.optional(completionFeedbackValidator),
+                    blockCode: v.optional(v.literal("working_memory_capacity")),
+                }),
+            ),
+        }),
+        v.object({
+            kind: v.literal("completion_correction"),
+            completion: preparedCompletionValidator,
+        }),
+        v.object({
+            kind: v.literal("completion_refusal"),
+            completion: preparedCompletionValidator,
+            code: v.string(),
+        }),
+        v.object({ kind: v.literal("blocked"), code: v.string() }),
+    ),
+});
+
 /** Structural batch failures are incidents before receipt settlement and remain fenced at adoption. */
 export function invocationStructureError(
-    response: Infer<typeof invocationResponseValidator>,
+    response:
+        | Infer<typeof invocationResponseValidator>
+        | Infer<typeof preparedSubmissionValidator>["response"],
     pi = false,
 ) {
-    if (response.kind === "completion_submission") {
-        if (
-            response.call !== null &&
-            (response.call.callId.length < 1 ||
-                response.call.callId.length > 160)
-        )
+    if (
+        response.kind === "completion_submission" ||
+        response.kind === "completion_correction" ||
+        response.kind === "completion_refusal"
+    ) {
+        const callId =
+            response.kind === "completion_submission"
+                ? response.call?.callId
+                : response.completion.callId;
+        if (callId !== undefined && (callId.length < 1 || callId.length > 160))
             return "invalid_tool_correlation";
         return undefined;
     }
@@ -351,6 +426,17 @@ export const requestInputValidator = v.union(
         kind: v.literal("invalid"),
         name: v.string(),
         inputJson: v.string(),
+        refusalCode: v.optional(v.string()),
+        validation: v.optional(validationFeedbackValidator),
+    }),
+    v.object({
+        kind: v.literal("invalid"),
+        name: v.string(),
+        inputReference: v.object({
+            invocationId: v.id("agentInvocations"),
+            responseHash: v.string(),
+            callId: v.string(),
+        }),
         refusalCode: v.optional(v.string()),
         validation: v.optional(validationFeedbackValidator),
     }),

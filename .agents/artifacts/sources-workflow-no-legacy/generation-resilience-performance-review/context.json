@@ -1,0 +1,101 @@
+{
+  "task": "Independent performance-reviewer assessment after source-backed pause/recovery design correction",
+  "repositoryHead": "168981b3c48a7d20062e39e2a2df71689c1036d4",
+  "inputs": [
+    {
+      "path": ".agents/artifacts/sources-workflow-no-legacy/27-tdd-generation-resilience.md",
+      "sha256": "dbb90b8720ca2e0f9b4760046da41e667d1b3583c28e5a8e163f1b436896409a",
+      "frozenSnapshot": ".agents/artifacts/sources-workflow-no-legacy/generation-resilience-performance-review/27-tdd-generation-resilience-reviewed.md",
+      "localLinks": 13
+    },
+    {
+      "path": ".agents/artifacts/sources-workflow-no-legacy/46-structure-outline-generation-resilience.md",
+      "sha256": "643db3d37d5273167701ae4ceb5f44b12e29cd0fa5824ec7b98f6090b33297c7",
+      "frozenSnapshot": ".agents/artifacts/sources-workflow-no-legacy/generation-resilience-performance-review/46-structure-outline-generation-resilience-reviewed.md",
+      "localLinks": 37
+    },
+    {
+      "path": ".agents/artifacts/sources-workflow-no-legacy/generation-resilience-design-review/verification/verification.md",
+      "sha256": "66af0d6edb3863a11999b13505dfd2aec71bcb12ffe0bc81819bcbe40bd2d3c9"
+    }
+  ],
+  "reviewer": {
+    "route": "native Codex performance-reviewer specialist",
+    "model": "gpt-6.1-sol",
+    "reasoningEffort": "xhigh",
+    "context": "fresh bounded context",
+    "reason": "User explicitly requested performance-reviewer; fixed profile matches supported parent model/effort and the multi-owner scheduling/accounting/resource review.",
+    "agent": "/root/generation_resilience_performance_review"
+  },
+  "previousReview": "47-code-review-generation-resilience-outline.md",
+  "pauseFindingDisposition": "Specified in TDD and outline; same research-control owner, safe waiting_provider boundary, actual public-pause to paused/public-resume regression. Unimplemented; no runtime closure claimed.",
+  "scope": "Read-only design/outline performance and resource review, including correction verification; no production changes, tests/probes, network, service changes, migration, inference or nested agents.",
+  "status": "complete",
+  "documentChecks": {
+    "docsCheck": "passed: 82 files, 461 links, zero errors; pre-existing advisory TECH word count",
+    "artifactLinks": "passed",
+    "fingerprints": "match",
+    "whitespace": "passed"
+  },
+  "createdAt": "2026-11-26T09:52:30.491313+00:00",
+  "verdict": "COMMENT",
+  "report": ".agents/artifacts/sources-workflow-no-legacy/48-performance-review-generation-resilience.md",
+  "priorHighDisposition": "Adequately corrected as design according to independent reviewer; runtime behavior unimplemented.",
+  "findings": [
+    {
+      "severity": "MEDIUM",
+      "impact": "WATCH/nonblocking",
+      "title": "Make abort-versus-capture ordering discriminating",
+      "disposition": "Accepted; ordering and delayed-acknowledgement/grace-exhaustion checks subsequently specified by parent. Not implemented or independently re-reviewed."
+    },
+    {
+      "severity": "MEDIUM",
+      "impact": "WATCH/nonblocking",
+      "title": "Preserve native no-hydration wait path for waiting_provider",
+      "disposition": "Accepted; real deferred-wake regression and runtime replay-byte measurement subsequently specified by parent. Not implemented or independently re-reviewed."
+    }
+  ],
+  "finalDocuments": [
+    {
+      "path": ".agents/artifacts/sources-workflow-no-legacy/27-tdd-generation-resilience.md",
+      "sha256": "448e3a4807270a14a315ea449ecaed1ddd182f8d310d9d86c764ea97b3a97dba"
+    },
+    {
+      "path": ".agents/artifacts/sources-workflow-no-legacy/46-structure-outline-generation-resilience.md",
+      "sha256": "6d1138e2cddaec0c19fc6fb79f51e85ee2c6cb27217db5576299953f76b93129"
+    }
+  ],
+  "refinementDiff": ".agents/artifacts/sources-workflow-no-legacy/generation-resilience-performance-review/post-review-verification-refinements.diff",
+  "reviewedContextSnapshot": ".agents/artifacts/sources-workflow-no-legacy/generation-resilience-performance-review/context-reviewed.json",
+  "completedAt": "2026-11-26T10:02:52.005556+00:00",
+  "finalValidation": {
+    "command": "pnpm docs:check",
+    "exitCode": 0,
+    "files": 82,
+    "referenceLinks": 461,
+    "errors": 0,
+    "advisory": "Pre-existing TECH word-count warning",
+    "artifactLinks": {
+      "tdd": 13,
+      "outline": 38,
+      "report": 7
+    },
+    "sourceFingerprint": "matches outline",
+    "reviewSnapshots": "unchanged",
+    "phaseOverview": "seven phases, matches",
+    "whitespace": "passed",
+    "productionCodeChanges": "none",
+    "behavioralTests": "not run; documentation-only correction"
+  },
+  "notification": {
+    "project": "agentic-resilience-workbench",
+    "sender": "Codex",
+    "event": "design-correction-and-review-complete",
+    "key": "generation-resilience-outline46-6d1138e2-performance",
+    "revision": "6d1138e2cddaec0c19fc6fb79f51e85ee2c6cb27217db5576299953f76b93129",
+    "message": "TDD et découpage corrigés pour la pause effective. Revue indépendante performance-reviewer : COMMENT, aucun blocage performance ; correction de pause jugée adéquate au niveau conception. Deux précisions non bloquantes sur capture et attente Pi ajoutées au plan. Vérifications documentaires réussies ; aucune implémentation ni exécution payante.",
+    "accepted": true,
+    "messageId": 1128,
+    "receipt": "/home/abdwhb/.local/state/agent-stack/notify/51904898fe41cc370f4416549464af7871e29511ab772bc02b0cf8a1d0db9cc5.json"
+  }
+}

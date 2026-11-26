@@ -344,6 +344,10 @@ test("retained automated review survives cleanup updating current evidence", asy
 for (const fault of [
     "retained",
     "retained-assessment-failure",
+    "retained-assessment-missing-archive-failure",
+    "retained-assessment-corrupt-archive-failure",
+    "retained-close-assessment-retry",
+    "retained-reconcile-only",
     "retained-archive-failure",
     "retained-archive-and-diagnostic-failure",
     "none",
@@ -499,6 +503,17 @@ for (const fault of [
                 assess: async () => assert.fail("not reconciled"),
             });
         }
+        if (fault === "retained-reconcile-only") {
+            writeFileSync(join(root, "cleanup.json"), '{"completed":true}');
+            writeFileSync(
+                join(lotRoot, "campaign-result.json"),
+                JSON.stringify({
+                    completed: true,
+                    cleanupCompleted: true,
+                    cleanupObservation: "observations/after-cleanup",
+                }),
+            );
+        }
         const frozen = readFileSync(
             join(lotRoot, "campaign-result.json"),
             "utf8",
@@ -508,11 +523,15 @@ for (const fault of [
                 fault === "foreign-candidate" ? "c".repeat(64) : "b".repeat(64),
             _id: "lot-fixture",
             key: "lot-1",
-            status: "review",
+            status: fault === "retained-reconcile-only" ? "closing" : "review",
             createdAt: 1,
         };
         const snapshot = {
-            campaign: { manifest, activeLotId: lot._id },
+            campaign: {
+                _id: "campaign-fixture",
+                manifest,
+                activeLotId: lot._id,
+            },
             lots: [lot],
             continueCursor: null,
             coverage: [],
@@ -555,6 +574,7 @@ for (const fault of [
             assert.ok(
                 [
                     "qualificationCampaigns:close",
+                    "qualificationCampaigns:reconcile",
                     "qualificationCampaigns:assess",
                     "qualificationCampaigns:reserveAnalysis",
                     "qualificationCampaigns:settleAnalysis",
@@ -599,6 +619,21 @@ for (const fault of [
                     assert.deepEqual(settled.get(args.attemptKey), args);
                 else settled.set(args.attemptKey, structuredClone(args));
             }
+            if (
+                fault === "retained-reconcile-only" &&
+                name.endsWith(":reconcile")
+            ) {
+                assert.deepEqual(args, {
+                    lotId: lot._id,
+                    cleanupCompleted: true,
+                });
+                if (!interrupted) {
+                    interrupted = true;
+                    return { reconciled: false };
+                }
+                lot.status = "review";
+                return { reconciled: true };
+            }
             if (name.endsWith(":assess")) {
                 if (fault.includes("assessment-") && !interrupted) {
                     interrupted = true;
@@ -620,6 +655,7 @@ for (const fault of [
             return null;
         });
         let archives = 0;
+        let lastArchive;
         let dispatches = 0;
         let mockFailure;
         const boundaries = {
@@ -653,6 +689,29 @@ for (const fault of [
                                 : "ENOSPC",
                         },
                     );
+                const directory = join(
+                    root,
+                    "archives",
+                    `verified-${archives}`,
+                );
+                mkdirSync(directory, { recursive: true });
+                const archive = join(root, `archive-${archives}.tar.gz`);
+                const record = join(directory, "record.json");
+                const bytes = "verified archive fixture";
+                writeFileSync(archive, bytes);
+                writeFileSync(
+                    record,
+                    JSON.stringify({
+                        verification: "restored_and_verified",
+                        archive: {
+                            path: archive,
+                            bytes: Buffer.byteLength(bytes),
+                            sha256: sha256(bytes),
+                        },
+                    }),
+                );
+                lastArchive = archive;
+                return { status: "verified", archive, record };
             },
             reviewTransport: {
                 kind: "mock-openai",
@@ -780,6 +839,56 @@ for (const fault of [
                     async () => assert.fail("no scenario replay"),
                     boundaries,
                 );
+            if (
+                [
+                    "retained-close-assessment-retry",
+                    "retained-reconcile-only",
+                ].includes(fault)
+            ) {
+                const close = () =>
+                    runCampaign(
+                        "close",
+                        root,
+                        {},
+                        async () => assert.fail("no scenario replay"),
+                        boundaries,
+                    );
+                if (fault === "retained-reconcile-only") {
+                    await close();
+                    assert.equal(process.exitCode, 2);
+                    assert.deepEqual(operations, [
+                        "qualificationCampaigns:reconcile",
+                    ]);
+                    assert.equal(
+                        existsSync(join(lotRoot, "reconciliation.json")),
+                        false,
+                    );
+                    assert.equal(
+                        readFileSync(join(root, "cleanup.json"), "utf8"),
+                        '{"completed":true}',
+                    );
+                }
+                await close();
+                assert.equal(lot.status, "finished");
+                assert.equal(dispatches, 0);
+                assert.equal(archives, 1);
+                assert.deepEqual(
+                    operations,
+                    fault === "retained-reconcile-only"
+                        ? [
+                              "qualificationCampaigns:reconcile",
+                              "qualificationCampaigns:reconcile",
+                              "qualificationCampaigns:assess",
+                              "qualificationCampaigns:close",
+                          ]
+                        : [
+                              "qualificationCampaigns:assess",
+                              "qualificationCampaigns:assess",
+                              "qualificationCampaigns:close",
+                          ],
+                );
+                return;
+            }
             if (fault.startsWith("retained-") && fault.endsWith("failure")) {
                 await assert.rejects(
                     run(),
@@ -830,7 +939,27 @@ for (const fault of [
                     join(lotRoot, files[0]),
                     "utf8",
                 );
+                if (fault === "retained-assessment-missing-archive-failure") {
+                    const { unlinkSync } = await import("node:fs");
+                    unlinkSync(lastArchive);
+                } else if (
+                    fault === "retained-assessment-corrupt-archive-failure"
+                ) {
+                    writeFileSync(
+                        lastArchive,
+                        Buffer.alloc(readFileSync(lastArchive).length),
+                    );
+                }
                 await run();
+                if (
+                    fault.includes("-archive-failure") &&
+                    fault.startsWith("retained-assessment")
+                )
+                    assert.equal(
+                        archives,
+                        2,
+                        "recovery recreates an unavailable or corrupt archive",
+                    );
                 assert.equal(lot.status, "finished");
                 assert.equal(
                     existsSync(
@@ -1290,10 +1419,7 @@ for (const fault of [
                 operations.filter((name) => name.endsWith(":assess")).length,
                 fault === "assess-ack" ? 2 : 1,
             );
-            assert.equal(
-                archives,
-                ["assess-ack", "settlement-revision"].includes(fault) ? 2 : 1,
-            );
+            assert.equal(archives, fault === "settlement-revision" ? 2 : 1);
             assert.equal(dispatches, retained ? 0 : 2);
             if (!retained) {
                 const journal = readFileSync(
@@ -2707,6 +2833,23 @@ test("Pi receives its original remaining request authority on every investigatio
         join(root, "published.json"),
         "Retained fixture observation.",
     );
+    const { mkdirSync } = await import("node:fs");
+    mkdirSync(join(root, "observations/after-cleanup"), { recursive: true });
+    writeFileSync(join(root, "observations/after-cleanup/snapshot.json"), "{}");
+    writeFileSync(
+        join(root, "progress.jsonl"),
+        [
+            JSON.stringify({
+                event: "started",
+                scenario: manifest.scenarios[0].id,
+            }),
+            JSON.stringify({
+                event: "finished",
+                scenario: manifest.scenarios[0].id,
+                executionIntegrity: "passed",
+            }),
+        ].join("\n"),
+    );
     const runtime = await qualificationReviewRuntime("openai-codex");
     process.env.WORKBENCH_REVIEW_REASONING = "high";
     const payloads = [];
@@ -2739,8 +2882,29 @@ test("Pi receives its original remaining request authority on every investigatio
     assert.equal(result.status, "pending");
     if (captureError) throw captureError;
     assert.equal(payloads.length, 2, JSON.stringify(result));
+    const pin = JSON.parse(
+        readFileSync(join(root, "automated-review-mission.json"), "utf8"),
+    );
+    assert.deepEqual(pin.context.observationPrefixes, [
+        "observations/after-cleanup/",
+    ]);
+    assert.equal(
+        pin.context.scenarioStatuses[manifest.scenarios[0].id],
+        "completed",
+    );
+    assert.equal(
+        pin.context.scenarioStatuses[manifest.scenarios[1].id],
+        "not_run",
+    );
     for (let index = 0; index < payloads.length; index++) {
-        const text = JSON.stringify(payloads[index]);
+        const payload = payloads[index];
+        assert.equal(
+            payload.prompt_cache_key,
+            `review-${pin.evidenceHash.slice(0, 48)}`,
+        );
+        assert.equal(payload.prompt_cache_retention, undefined);
+        assert.notEqual(payload.prompt_cache_options?.mode, "explicit");
+        const text = JSON.stringify(payload);
         assert(
             text.includes(`Review request ${index + 1}.`),
             "The actual request ordinal must reach the provider",
@@ -2753,6 +2917,70 @@ test("Pi receives its original remaining request authority on every investigatio
         );
         assert(text.includes("Absolute analysis deadline:"));
     }
+});
+
+test("campaign review navigation classifies started and failure-artifact scenarios from frozen evidence", async (t) => {
+    const { mkdirSync, rmSync } = await import("node:fs");
+    const { campaignReviewNavigation } = await import(
+        "../../../scripts/evaluations/workbench-browser/campaign.ts"
+    );
+    const { configurableCampaign } = await import(
+        "../setup/qualification-v2.ts"
+    );
+    const root = mkdtempSync(join(tmpdir(), "qualification-navigation-"));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const manifest = {
+        ...configurableCampaign(),
+        version: 3,
+        batteryHash: "a".repeat(64),
+        analysis: {
+            scope: "evidence_review",
+            accounting: "native_subscription",
+            routes: [{ provider: "openai-codex", model: "gpt-6.1-sol" }],
+            perLot: { requests: 2 },
+            total: { requests: 2 },
+            timeoutMs: 10000,
+        },
+    };
+    writeFileSync(
+        join(root, "campaign-lot.json"),
+        JSON.stringify({
+            manifest,
+            candidateHash: "b".repeat(64),
+            fingerprints: {},
+        }),
+    );
+    const [first, second] = manifest.scenarios.map((s) => s.id);
+    const third = "scenario-failed-artifact";
+    const fourth = "scenario-unrun";
+    mkdirSync(join(root, third), { recursive: true });
+    writeFileSync(join(root, third, "failure.json"), '{"step":"start"}');
+    writeFileSync(
+        join(root, "progress.jsonl"),
+        [
+            JSON.stringify({ event: "started", scenario: first }),
+            JSON.stringify({
+                event: "finished",
+                scenario: first,
+                executionIntegrity: "passed",
+            }),
+            JSON.stringify({ event: "started", scenario: second }),
+            JSON.stringify({ event: "started", scenario: third }),
+        ].join("\n"),
+    );
+    const template = campaignReviewTemplate(root);
+    const navigation = campaignReviewNavigation(root, template.evidenceHash, [
+        first,
+        second,
+        third,
+        fourth,
+    ]);
+    assert.deepEqual(navigation.scenarioStatuses, {
+        [first]: "completed",
+        [second]: "started",
+        [third]: "failed",
+        [fourth]: "not_run",
+    });
 });
 
 test("native report writes preserve revisions outside frozen evidence and refuse other paths", async (t) => {

@@ -1,6 +1,7 @@
 import { api, internal } from "@convex/_generated/api";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
+import { readConversationPageWithBodies } from "@/__tests__/setup/retained-messages";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 
 afterEach(() => {
@@ -455,13 +456,10 @@ test("an admitted native reply exposes committed public text before EOF and publ
             },
             { timeout: 5000 },
         );
-        const history = await client.query(
-            api.execution.conversations.listMessages,
-            {
-                runId,
-                paginationOpts: { numItems: 20, cursor: null },
-            },
-        );
+        const history = await readConversationPageWithBodies(client, {
+            runId,
+            paginationOpts: { numItems: 20, cursor: null },
+        });
         expect(
             history.page.filter((message) => message.role === "assistant"),
         ).toEqual([]);
@@ -541,13 +539,10 @@ test("an admitted native reply exposes committed public text before EOF and publ
         }
         await execution;
     }
-    const history = await client.query(
-        api.execution.conversations.listMessages,
-        {
-            runId,
-            paginationOpts: { numItems: 20, cursor: null },
-        },
-    );
+    const history = await readConversationPageWithBodies(client, {
+        runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(
         history.page.filter((message) => message.role === "assistant"),
     ).toEqual([
@@ -572,10 +567,10 @@ test("the admitted local simulation respects the current Sources question capaci
     const snapshot = await client.query(api.workbench.snapshot, { runId });
     expect(snapshot.researchStart.questionCapacity).toBe(3);
     expect(snapshot.framing?.content.questions).toHaveLength(3);
-    const history = await client.query(
-        api.execution.conversations.listMessages,
-        { runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
+    const history = await readConversationPageWithBodies(client, {
+        runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(
         history.page.filter((message) => message.role === "assistant"),
     ).toEqual([

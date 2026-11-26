@@ -1,0 +1,11 @@
+--- src/__tests__/convex/execution/workbench-native-admission.test.ts
++++ src/__tests__/convex/execution/workbench-native-admission.test.ts
+@@ -286,7 +286,7 @@
+                         !edited &&
+                         getFunctionName(reference) ===
+                             "execution/invocations:begin" &&
+-                        result.kind === "ready"
++                        result.kind === "ready_reference"
+                     ) {
+                         edited = true;
+                         const frame = await client.query(api.framing.get, {

@@ -1,0 +1,58 @@
+
+ RUN  v4.1.10 /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+
+ ❯ src/__tests__/convex/execution/large-response.test.ts (18 tests | 2 failed | 16 skipped) 624ms
+   × blank textual completion remains a bounded refusal (native: false) 465ms
+   × blank textual completion remains a bounded refusal (native: true) 150ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/convex/execution/large-response.test.ts > blank textual completion remains a bounded refusal (native: false)
+{
+  message: '',
+  actual: null,
+  expected: undefined,
+  showDiff: false,
+  name: 'AssertionError',
+  ok: false,
+  stack: 'AssertionError: \n' +
+    '    at /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/convex/execution/large-response.test.ts:206:5\n' +
+    '    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at file:///home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/node_modules/.pnpm/@vitest+runner@4.1.10/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20',
+  stacks: [
+    {
+      method: '',
+      file: '/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/convex/execution/large-response.test.ts',
+      line: 206,
+      column: 5
+    }
+  ]
+}
+ ❯ src/__tests__/convex/execution/large-response.test.ts:206:5
+    204|     await retainOriginalResponse(f, responseJson);
+    205|     const preparedSubmission = preparePiSubmission(response, responseJ…
+    206|     assert(preparedSubmission);
+       |     ^
+    207|     expect(getDocumentSize(preparedSubmission)).toBeLessThan(1024);
+    208|     const args = { invocationId: f.invocationId, expectedGeneration: 1…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/__tests__/convex/execution/large-response.test.ts > blank textual completion remains a bounded refusal (native: true)
+AssertionError: expected 175254 to be less than 1024
+ ❯ src/__tests__/convex/execution/large-response.test.ts:207:49
+    205|     const preparedSubmission = preparePiSubmission(response, responseJ…
+    206|     assert(preparedSubmission);
+    207|     expect(getDocumentSize(preparedSubmission)).toBeLessThan(1024);
+       |                                                 ^
+    208|     const args = { invocationId: f.invocationId, expectedGeneration: 1…
+    209|     const outcome = await f.t.mutation(internal.execution.invocations.…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 16 skipped (18)
+   Start at  13:08:02
+   Duration  6.92s (transform 3.17s, setup 255ms, import 4.54s, tests 624ms, environment 1.16s)
+

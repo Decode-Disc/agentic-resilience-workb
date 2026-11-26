@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { once } from "node:events";
 import {
     closeSync,
     constants,
     cpSync,
+    createReadStream,
     existsSync,
     fstatSync,
+    lstatSync,
     mkdirSync,
     openSync,
     readdirSync,
@@ -16,7 +18,15 @@ import {
     writeFileSync,
 } from "node:fs";
 import type { Server } from "node:http";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import {
+    basename,
+    dirname,
+    isAbsolute,
+    join,
+    relative,
+    resolve,
+    sep,
+} from "node:path";
 import { type Browser, chromium, expect, type Page } from "@playwright/test";
 import { ConvexHttpClient } from "convex/browser";
 import {
@@ -421,6 +431,137 @@ function reviewEvidenceIndex(root: string, evidenceHash: string) {
     ) as Record<string, string>;
     assert.equal(candidateHash(index), evidenceHash, "Stale evidence index");
     return index;
+}
+
+const campaignArchiveSchema = z.object({
+    status: z.literal("verified"),
+    archive: z.string(),
+    record: z.string(),
+});
+type CampaignArchive = z.infer<typeof campaignArchiveSchema>;
+
+function readCampaignArchiveRecord(records: string, archive: CampaignArchive) {
+    const directory = dirname(archive.record);
+    assert(
+        isAbsolute(archive.archive) &&
+            dirname(directory) === records &&
+            basename(archive.record) === "record.json" &&
+            lstatSync(records).isDirectory() &&
+            lstatSync(directory).isDirectory() &&
+            lstatSync(archive.record).isFile(),
+        "Invalid campaign archive record path",
+    );
+    const record = z
+        .object({
+            verification: z.literal("restored_and_verified"),
+            archive: z.object({
+                path: z.string(),
+                bytes: z.number().int().nonnegative(),
+                sha256: z.string().regex(/^[a-f0-9]{64}$/),
+            }),
+        })
+        .parse(read(archive.record));
+    assert.equal(
+        record.archive.path,
+        archive.archive,
+        "Campaign archive path changed",
+    );
+    return record.archive;
+}
+
+async function retainedCampaignArchive(
+    receipt: string,
+    records: string,
+    inputsHash: string,
+) {
+    try {
+        const archive = campaignArchiveSchema
+            .extend({
+                inputsHash: z.string(),
+                archiveSha256: z.string(),
+            })
+            .parse(read(receipt));
+        if (archive.inputsHash !== inputsHash) return false;
+        const expected = readCampaignArchiveRecord(records, archive);
+        const stat = lstatSync(archive.archive);
+        if (
+            !stat.isFile() ||
+            stat.size !== expected.bytes ||
+            expected.sha256 !== archive.archiveSha256
+        )
+            return false;
+        const digest = createHash("sha256");
+        for await (const chunk of createReadStream(archive.archive))
+            digest.update(chunk);
+        return digest.digest("hex") === expected.sha256;
+    } catch {
+        // Old, unavailable, or invalid receipts cannot vouch for the archive.
+        return false;
+    }
+}
+
+/** Derives reviewer navigation from frozen inventory and verified scenario evidence. */
+export function campaignReviewNavigation(
+    root: string,
+    evidenceHash: string,
+    scenarioIds: string[],
+) {
+    const evidence = reviewEvidenceIndex(root, evidenceHash);
+    const observationPrefixes = [
+        ...new Set(
+            Object.keys(evidence).flatMap((path) => {
+                const prefix = /^observations\/[^/]+\//.exec(path)?.[0];
+                return prefix ? [prefix] : [];
+            }),
+        ),
+    ].sort();
+    const scenarioStatuses: Record<
+        string,
+        "completed" | "failed" | "started" | "not_run"
+    > = {};
+    if (Object.hasOwn(evidence, "progress.jsonl")) {
+        const journal = readCampaignReviewEvidence(
+            root,
+            evidenceHash,
+            "progress.jsonl",
+            REVIEW_EVIDENCE_POLICY.maxFileBytes,
+        );
+        for (const id of scenarioIds) scenarioStatuses[id] = "not_run";
+        for (const line of journal.split("\n").filter(Boolean)) {
+            const entry = z
+                .object({
+                    scenario: z.string().optional(),
+                    event: z.string(),
+                    executionIntegrity: z.string().optional(),
+                })
+                .parse(JSON.parse(line));
+            if (
+                !entry.scenario ||
+                !Object.hasOwn(scenarioStatuses, entry.scenario)
+            )
+                continue;
+            if (entry.event === "started")
+                scenarioStatuses[entry.scenario] = "started";
+            if (entry.event === "finished")
+                scenarioStatuses[entry.scenario] =
+                    entry.executionIntegrity === "failed"
+                        ? "failed"
+                        : "completed";
+        }
+        for (const id of scenarioIds) {
+            const path = `${id}/failure.json`;
+            if (Object.hasOwn(evidence, path)) {
+                readCampaignReviewEvidence(
+                    root,
+                    evidenceHash,
+                    path,
+                    REVIEW_EVIDENCE_POLICY.maxFileBytes,
+                );
+                scenarioStatuses[id] = "failed";
+            }
+        }
+    }
+    return { observationPrefixes, scenarioStatuses };
 }
 
 /** Lists a bounded page of paths in a frozen evidence index. */
@@ -1181,7 +1322,7 @@ type CampaignBoundaries = {
         client: ConvexHttpClient;
         origins: RuntimeOrigins;
     }>;
-    archive?: (root: string, name: string) => void;
+    archive?: (root: string, name: string) => CampaignArchive | undefined;
 };
 
 async function executeCampaign(
@@ -1435,6 +1576,78 @@ async function executeCampaign(
             lots: lots.sort((a, b) => a.createdAt - b.createdAt),
         };
     };
+    const archiveCampaignInputs = async (
+        lotRoot: string,
+        name: string,
+        kind: "run" | "assessment" | "diagnostic" | "manual-assessment",
+        selected: string[],
+    ) => {
+        const records = join(root, "archives");
+        const receipt = join(records, `${basename(lotRoot)}-${kind}.json`);
+        const files: Record<string, string> = {};
+        const collect = (path: string) => {
+            const stat = lstatSync(path);
+            assert(!stat.isSymbolicLink(), "Symlink refused in archive inputs");
+            if (stat.isDirectory()) {
+                for (const item of readdirSync(path)) collect(join(path, item));
+            } else {
+                assert(stat.isFile(), "Unsupported archive input");
+                files[relative(lotRoot, path)] = sha256(readFileSync(path));
+            }
+        };
+        for (const path of selected) collect(path);
+        // Log files created by a failed submission do not change the assessment evidence.
+        if (kind === "assessment") {
+            for (const path of Object.keys(files)) {
+                if (/^campaign-diagnostic-[^/]+\.json$/.test(path))
+                    delete files[path];
+            }
+        }
+        if (kind === "run") delete files["archive-result.json"];
+        const inputsHash = candidateHash(files);
+        if (await retainedCampaignArchive(receipt, records, inputsHash)) return;
+        let archive: CampaignArchive | undefined;
+        if (boundaries.archive) archive = boundaries.archive(lotRoot, name);
+        else {
+            const archived = spawnSync(
+                "pnpm",
+                [
+                    "evaluation:archive",
+                    "--name",
+                    name,
+                    "--record-dir",
+                    records,
+                    ...selected.flatMap((path, index) => [
+                        "--external",
+                        `${kind === "diagnostic" || kind === "assessment" ? `review${index}` : "qualification"}=${path}`,
+                    ]),
+                ],
+                {
+                    encoding: "utf8",
+                    timeout: TOOLING_POLICY.backendCommandTimeoutMs,
+                },
+            );
+            assert.equal(
+                archived.status,
+                0,
+                "Campaign archive failed; original evidence retained",
+            );
+            archive = campaignArchiveSchema.parse(
+                JSON.parse(archived.stdout.trim().split("\n").at(-1) ?? ""),
+            );
+        }
+        if (archive) {
+            const { sha256: archiveSha256 } = readCampaignArchiveRecord(
+                records,
+                archive,
+            );
+            save(records, `${basename(lotRoot)}-${kind}`, {
+                ...archive,
+                inputsHash,
+                archiveSha256,
+            });
+        }
+    };
     const reviewLot = async (
         lot: {
             _id: Id<"qualificationLots">;
@@ -1501,12 +1714,11 @@ async function executeCampaign(
             save(lotRoot, "automated-review-status", pending);
             return pending;
         }
-        const archiveReview = (kind: "assessment" | "diagnostic") => {
+        const archiveReview = async (kind: "assessment" | "diagnostic") => {
             const name = `campaign-${manifest.key}-${lot.key}-${kind}`.slice(
                 0,
                 64,
             );
-            const receiptName = "automated-review-diagnostic-archive";
             const selected =
                 kind === "assessment"
                     ? [lotRoot]
@@ -1515,7 +1727,8 @@ async function executeCampaign(
                               .filter(
                                   (item) =>
                                       item.isFile() &&
-                                      item.name !== `${receiptName}.json` &&
+                                      item.name !==
+                                          "automated-review-diagnostic-archive.json" &&
                                       (item.name.startsWith(
                                           "automated-review-",
                                       ) ||
@@ -1534,51 +1747,7 @@ async function executeCampaign(
                               ),
                           ),
                       ];
-            const inputsHash =
-                kind === "diagnostic"
-                    ? candidateHash(
-                          Object.fromEntries(
-                              selected.map((path) => [
-                                  relative(lotRoot, path),
-                                  sha256(readFileSync(path)),
-                              ]),
-                          ),
-                      )
-                    : null;
-            if (
-                inputsHash &&
-                existsSync(join(lotRoot, `${receiptName}.json`)) &&
-                z
-                    .object({ inputsHash: z.string() })
-                    .parse(read(join(lotRoot, `${receiptName}.json`)))
-                    .inputsHash === inputsHash
-            )
-                return;
-            if (boundaries.archive) boundaries.archive(lotRoot, name);
-            else {
-                const archived = spawnSync(
-                    "pnpm",
-                    [
-                        "evaluation:archive",
-                        "--name",
-                        name,
-                        ...selected.flatMap((path, index) => [
-                            "--external",
-                            `review${index}=${path}`,
-                        ]),
-                    ],
-                    {
-                        encoding: "utf8",
-                        timeout: TOOLING_POLICY.backendCommandTimeoutMs,
-                    },
-                );
-                assert.equal(
-                    archived.status,
-                    0,
-                    "Review archive failed; retained diagnostics and evidence are unchanged",
-                );
-            }
-            if (inputsHash) save(lotRoot, receiptName, { inputsHash });
+            await archiveCampaignInputs(lotRoot, name, kind, selected);
         };
         let assessmentArchived = false;
         let step = "review";
@@ -1595,17 +1764,44 @@ async function executeCampaign(
                 review,
                 assess: async (assessment) => {
                     step = "archive-assessment";
-                    archiveReview("assessment");
+                    await archiveReview("assessment");
                     assessmentArchived = true;
                     step = "submit-assessment";
-                    await client.mutation(
-                        ref(internal.qualificationCampaigns.assess),
-                        {
-                            lotId: lot._id,
-                            assessmentHash: assessment.assessmentHash,
-                            verdict: assessment.verdict,
-                        },
-                    );
+                    for (let attempt = 1; ; attempt++) {
+                        try {
+                            await client.mutation(
+                                ref(internal.qualificationCampaigns.assess),
+                                {
+                                    lotId: lot._id,
+                                    assessmentHash: assessment.assessmentHash,
+                                    verdict: assessment.verdict,
+                                },
+                            );
+                            break;
+                        } catch (error) {
+                            const { code } = qualificationDiagnostic(
+                                step,
+                                error,
+                            );
+                            if (
+                                action !== "close" ||
+                                attempt >=
+                                    TOOLING_POLICY.assessmentSubmitMaxAttempts ||
+                                ![
+                                    "ECONNREFUSED",
+                                    "ECONNRESET",
+                                    "ETIMEDOUT",
+                                ].includes(code ?? "")
+                            )
+                                throw error;
+                            await new Promise((resolve) =>
+                                setTimeout(
+                                    resolve,
+                                    TOOLING_POLICY.assessmentSubmitRetryDelayMs,
+                                ),
+                            );
+                        }
+                    }
                     step = "retain-assessment";
                 },
             });
@@ -1628,7 +1824,7 @@ async function executeCampaign(
                 );
                 if (!assessmentArchived) {
                     step = "archive-diagnostic";
-                    archiveReview("diagnostic");
+                    await archiveReview("diagnostic");
                 }
             }
         } catch (error) {
@@ -1729,31 +1925,22 @@ async function executeCampaign(
             join(root, "lots", lot.key),
             read(options.review),
         );
-        const archived = spawnSync(
-            "pnpm",
-            [
-                "evaluation:archive",
-                "--name",
+        const lotRoot = join(root, "lots", lot.key);
+        try {
+            await archiveCampaignInputs(
+                lotRoot,
                 `campaign-${state.manifest.key}-${lot.key}-assessment`.slice(
                     0,
                     64,
                 ),
-                "--external",
-                `qualification=${join(root, "lots", lot.key)}`,
-            ],
-            {
-                encoding: "utf8",
-                timeout: TOOLING_POLICY.backendCommandTimeoutMs,
-            },
-        );
-        save(root, `assessment-archive-${lot.key}`, {
-            completed: archived.status === 0,
-        });
-        assert.equal(
-            archived.status,
-            0,
-            "Assessment archive failed; retained evidence is unchanged",
-        );
+                "manual-assessment",
+                [lotRoot],
+            );
+            save(root, `assessment-archive-${lot.key}`, { completed: true });
+        } catch (error) {
+            save(root, `assessment-archive-${lot.key}`, { completed: false });
+            throw error;
+        }
         await client.mutation(ref(internal.qualificationCampaigns.assess), {
             lotId: lot._id,
             assessmentHash: result.assessmentHash,
@@ -1774,7 +1961,7 @@ async function executeCampaign(
         existingCampaign &&
         ["run", "close"].includes(action)
     ) {
-        const pending =
+        let pending =
             existingCampaign.lots.find(
                 (lot) =>
                     lot._id === existingCampaign.campaign.activeLotId &&
@@ -1802,6 +1989,54 @@ async function executeCampaign(
                             ),
                         ),
                 );
+        const activeLot = existingCampaign.lots.find(
+            (lot) => lot._id === existingCampaign.campaign.activeLotId,
+        );
+        if (action === "close" && activeLot?.status === "closing") {
+            const lotRoot = join(root, "lots", activeLot.key);
+            const cleanupPath = join(root, "cleanup.json");
+            const resultPath = join(lotRoot, "campaign-result.json");
+            if (
+                existsSync(cleanupPath) &&
+                existsSync(resultPath) &&
+                existsSync(join(lotRoot, "automated-review-result.json"))
+            ) {
+                const cleanup = read(cleanupPath) as { completed?: boolean };
+                const result = read(resultPath) as {
+                    cleanupCompleted?: boolean;
+                    cleanupObservation?: string;
+                    evidenceCaptureFailed?: boolean;
+                };
+                if (
+                    cleanup.completed === true &&
+                    result.cleanupCompleted === true &&
+                    result.cleanupObservation &&
+                    !result.evidenceCaptureFailed
+                ) {
+                    assert.deepEqual(
+                        manifest,
+                        existingCampaign.campaign.manifest,
+                        "Local mandate differs from the server authorization",
+                    );
+                    const reconciliation = await client.mutation(
+                        ref(internal.qualificationCampaigns.reconcile),
+                        { lotId: activeLot._id, cleanupCompleted: true },
+                    );
+                    if (!reconciliation.reconciled) {
+                        process.exitCode = 2;
+                        console.log(
+                            JSON.stringify({
+                                status: "awaiting_reconciliation",
+                                root: lotRoot,
+                            }),
+                        );
+                        return;
+                    }
+                    save(lotRoot, "reconciliation", reconciliation);
+                    pending = activeLot;
+                }
+            }
+        }
         if (pending) {
             assert.deepEqual(
                 manifest,
@@ -1864,7 +2099,7 @@ async function executeCampaign(
             );
             mkdirSync(validationRoot, { recursive: true, mode: 0o700 });
             const candidate = preserveQualificationCandidate(validationRoot);
-            verifyQualificationCandidate(validationRoot, candidate);
+            await verifyQualificationCandidate(validationRoot, candidate);
         }
     }
     const publication = await client.query(
@@ -2141,7 +2376,7 @@ async function executeCampaign(
             candidateHash(current),
             "Candidate changed before validation",
         );
-        verifyQualificationCandidate(lotRoot, validatedFingerprints);
+        await verifyQualificationCandidate(lotRoot, validatedFingerprints);
         if (manifest.mode === "live") {
             assert(adminCode);
             await withQualificationAdministrator(
@@ -2279,20 +2514,23 @@ async function executeCampaign(
         process.removeListener("SIGINT", onSignal);
         process.removeListener("SIGTERM", onSignal);
         const diagnostics: string[] = [];
+        let dispatchRevoked = false;
         if (lot) {
             try {
                 await client.mutation(
                     ref(internal.qualificationCampaigns.beginCleanup),
                     { lotId: lot._id },
                 );
+                dispatchRevoked = true;
             } catch {
                 diagnostics.push("dispatch_revocation_failed");
             }
         }
+        let reusableAfterCleanup = false;
         if (lotRoot && existsSync(join(lotRoot, "prepared.json"))) {
             try {
-                if (manifest.version !== 1)
-                    await inspectCampaignScenarios(
+                if (manifest.version !== 1) {
+                    const observation = await inspectCampaignScenarios(
                         client,
                         lotRoot,
                         join(
@@ -2300,8 +2538,15 @@ async function executeCampaign(
                             "observations",
                             `before-cleanup-${randomUUID()}`,
                         ),
+                        {
+                            mode:
+                                completed && dispatchRevoked
+                                    ? "before_cleanup"
+                                    : "full",
+                        },
                     );
-                else await sourcesQualificationPhase("inspect", lotRoot);
+                    reusableAfterCleanup = observation.reusableAfterCleanup;
+                } else await sourcesQualificationPhase("inspect", lotRoot);
             } catch {
                 completed = false;
                 evidenceCaptureFailed = true;
@@ -2342,6 +2587,14 @@ async function executeCampaign(
                     client,
                     lotRoot,
                     join(lotRoot, observation),
+                    {
+                        mode:
+                            completed &&
+                            reusableAfterCleanup &&
+                            !evidenceCaptureFailed
+                                ? "post_cleanup"
+                                : "full",
+                    },
                 );
                 cleanupObservation = observation;
             } catch {
@@ -2466,28 +2719,18 @@ async function executeCampaign(
                 { lotId: lot._id, cleanupCompleted },
             );
             save(lotRoot, "reconciliation", result);
-            const archive = spawnSync(
-                "pnpm",
-                [
-                    "evaluation:archive",
-                    "--name",
+            try {
+                await archiveCampaignInputs(
+                    lotRoot,
                     `campaign-${manifest.key}-${lot.key}`.slice(0, 64),
-                    "--external",
-                    `qualification=${lotRoot}`,
-                ],
-                {
-                    encoding: "utf8",
-                    timeout: TOOLING_POLICY.backendCommandTimeoutMs,
-                },
-            );
-            save(lotRoot, "archive-result", {
-                completed: archive.status === 0,
-            });
-            if (archive.status !== 0) {
-                process.exitCode = 1;
-                failure ??= new Error(
-                    "Campaign archive failed; original evidence retained",
+                    "run",
+                    [lotRoot],
                 );
+                save(lotRoot, "archive-result", { completed: true });
+            } catch (error) {
+                save(lotRoot, "archive-result", { completed: false });
+                process.exitCode = 1;
+                failure ??= error;
             }
             const template = campaignReviewTemplate(lotRoot, {
                 recovery: recovering || action === "close",

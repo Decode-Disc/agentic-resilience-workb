@@ -1,0 +1,61 @@
+--- a/src/__tests__/convex/execution/workbench-native-recovery.test.ts
++++ b/src/__tests__/convex/execution/workbench-native-recovery.test.ts
+@@ -1,4 +1,5 @@
+-import { api, internal } from "@convex/_generated/api";
++import { writeFileSync } from "node:fs";
++import { api, components, internal } from "@convex/_generated/api";
+ import { executionError } from "@convex/execution/errors";
+ import { runPiMission } from "@convex/integrations/piMission";
+ import { nodeActionGenerationDeadline } from "@convex/resourcePolicy";
+@@ -210,6 +211,14 @@
+ }, 30000);
+ 
+ test("a crash after publication settles the original native task before the next mission without replaying model work", async () => {
++    const fragmented = process.env.WORKBENCH_BASELINE_FRAGMENTED === "1";
++    if (fragmented) {
++        const { directedWorkbenchDefinition } = await import("@convex/domain/workbenchAgent");
++        vi.spyOn(directedWorkbenchDefinition, "simulate").mockReturnValue({
++            kind: "complete",
++            text: `Historical documentary explanation. ${"x".repeat(82_000)} 🧭`,
++        });
++    }
+     const { t, client, runId } = await seedWorkbench(true);
+     const active = await t.mutation(
+         internal.execution.conversations.startTurn,
+@@ -261,6 +270,36 @@
+     }));
+     expect(before.mission?.status).toBe("completed");
+     expect(before.session?.settledSequence).not.toBe(before.session?.sequence);
++    const frozen = await t.run(async (ctx) => {
++        const turn = await ctx.db.get(active.turnId);
++        assert(turn?.publishedMessageId);
++        const conversation = await ctx.db.get(turn.conversationId);
++        const delivery = await ctx.db.get(turn.publishedMessageId);
++        assert(conversation?.storageRef && delivery?.storageMessageRef && before.session);
++        const refs = delivery.storageMessageRef.startsWith("[")
++            ? JSON.parse(delivery.storageMessageRef) as string[]
++            : [delivery.storageMessageRef];
++        const messages = await ctx.runQuery(components.agent.messages.getMessagesByIds, { messageIds: refs });
++        const commits = await ctx.db.query("piCommits").withIndex("by_session_and_sequence", (q) =>
++            q.eq("sessionId", before.session!._id),
++        ).collect();
++        const resultTextId = before.mission && "protocolVersion" in before.mission
++            ? before.mission.resultTextId : undefined;
++        if (fragmented) assert(resultTextId);
++        const resultManifest = resultTextId ? await ctx.db.get(resultTextId) : null;
++        const resultFragments = resultTextId
++            ? await ctx.db.query("retainedTextFragments").withIndex("by_text_and_index", (q) =>
++                q.eq("textId", resultTextId),
++            ).collect()
++            : [];
++        return { turn, conversation, delivery, messages, commits, resultManifest, resultFragments };
++    });
++    writeFileSync(process.env.WORKBENCH_BASELINE_REHEARSAL_OUTPUT!, JSON.stringify({
++        revision: "ab98abfb6800eb35f8262ceb7fd034e2c6ee23bb",
++        ...before,
++        ...frozen,
++    }));
++    if (fragmented) return;
+     const sessionId = before.session?._id;
+     assert(sessionId);
+     await t.run((ctx) => ctx.db.patch(sessionId, { leaseUntil: 0 }));

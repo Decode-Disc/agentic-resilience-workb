@@ -1108,6 +1108,12 @@ export default defineSchema({
         completedAt: v.optional(v.number()),
     })
         .index("by_operation_key", ["operationKey"])
+        .index("by_mission_service_status_operation", [
+            "missionId",
+            "service",
+            "status",
+            "operation",
+        ])
         .index("by_qualification_context_and_status_and_lease", [
             "qualificationContextId",
             "status",

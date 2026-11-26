@@ -84,21 +84,29 @@ for (const width of [1440, 390])
                     exact: true,
                 }),
             ).toBeVisible();
-            await page
-                .getByRole("button", { name: "Composer tools", exact: true })
-                .click();
+            const tools = page.getByRole("button", {
+                name: "Composer tools",
+                exact: true,
+            });
+            await tools.click();
+            const menu = page.getByRole("menu", {
+                name: "Composer tools",
+                exact: true,
+            });
+            await expect(menu).toBeVisible();
+            await expect(menu).toBeFocused();
             await expect(input).toHaveValue(
                 "Focus on who sets the rules of the workflow.",
             );
-            await page.keyboard.press("Escape");
+            await menu.press("Escape");
+            await expect(menu).toBeHidden();
+            await expect(tools).toHaveAttribute("aria-expanded", "false");
+            await expect(tools).toBeFocused();
             await input.focus();
             await expect(input).toBeFocused();
-            await expect(
-                page.getByRole("button", {
-                    name: "Composer tools",
-                    exact: true,
-                }),
-            ).toHaveAttribute("aria-expanded", "false");
+            await expect(input).toHaveValue(
+                "Focus on who sets the rules of the workflow.",
+            );
             await page.screenshot({
                 path: `/tmp/composer-program-focused-${theme}-${width}.png`,
             });

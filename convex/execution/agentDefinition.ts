@@ -1,6 +1,7 @@
-import type { Doc } from "@convex/_generated/dataModel";
+import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
 import type { AgentIdentityId } from "@convex/domain/agentIdentities";
+import type { AnalystTurnWording } from "@convex/domain/preparedAnalystWording";
 import { MAX_OPERATION_RESULT_BYTES } from "@convex/resourcePolicy";
 import {
     type GenericValidator,
@@ -43,6 +44,13 @@ export type AgentScope = Infer<typeof agentScopeValidator>;
 export type AgentState = Infer<typeof agentStateValidator>;
 export type AgentResult = Infer<typeof agentResultValidator>;
 export type AgentCompletion = Infer<typeof agentCompletionValidator>;
+
+/** Textual completion requires visible content, independently of its transport or storage. */
+export function hasCompletionText(
+    proposal: AgentCompletion,
+): proposal is AgentCompletion & { text: string } {
+    return "text" in proposal && proposal.text.trim().length > 0;
+}
 export type OperationPin = Infer<typeof operationPinValidator>;
 export type OperationInput = Infer<typeof requestInputValidator>;
 export type OperationOutcome = Infer<typeof operationOutcomeValidator>;
@@ -135,6 +143,10 @@ export type AgentDefinition = {
         ctx: QueryCtx,
         mission: Doc<"agentMissions">,
         run: Doc<"researchRuns">,
+        options?: {
+            correctionAdmission?: true;
+            instructionTexts?: Map<Id<"agentMessageDeliveries">, string>;
+        },
     ): Promise<
         | { kind: "blocked"; code: string }
         | {
@@ -148,6 +160,74 @@ export type AgentDefinition = {
         mission: AgentProgressMission,
         outcome: OperationOutcome,
     ): AgentProgress;
+    /** Owns completion when proposal and published text are prepared outside the transaction. */
+    preparedCompletion?: {
+        outcomeKind: "workbench_v1" | "conversation_validation_v1";
+        analystWording?: true;
+        correction?(
+            ctx: QueryCtx,
+            mission: Doc<"agentMissions">,
+            wording: AnalystTurnWording,
+        ): Promise<
+            | { kind: "blocked"; code: string }
+            | {
+                  kind: "correct";
+                  feedback: Infer<typeof completionFeedbackValidator>;
+              }
+        >;
+        basis(
+            ctx: QueryCtx,
+            mission: Doc<"agentMissions">,
+            instructionTexts: Map<Id<"agentMessageDeliveries">, string>,
+            wording?: AnalystTurnWording,
+        ): Promise<{
+            confirmationOnly: boolean;
+            confirmations: readonly string[];
+            factsHash: string | null;
+            factsRevisionTemplate?: string;
+            adopt(
+                ctx: MutationCtx,
+                invocation: Doc<"agentInvocations">,
+                reviewDraft:
+                    | Infer<
+                          typeof import("@convex/domain/workbenchResponseControlContracts").preparedResponseReviewDraft
+                      >
+                    | undefined,
+                exactFactsRevision?: string,
+            ): Promise<
+                | { kind: "blocked"; code: string }
+                | { kind: "continue" }
+                | {
+                      kind: "correct";
+                      feedback: Infer<typeof completionFeedbackValidator>;
+                  }
+                | { kind: "completed" }
+            >;
+        } | null>;
+        render(
+            proposal: AgentCompletion & { text: string },
+            basis: {
+                confirmationOnly: boolean;
+                confirmations: readonly string[];
+            },
+        ): {
+            result: AgentResult;
+            reviewDraft?: Infer<
+                typeof import("@convex/domain/workbenchResponseControlContracts").preparedResponseReviewDraft
+            >;
+        };
+    };
+    /** Computes a structured domain result before fragment staging; complete still owns adoption. */
+    preparedResult?: {
+        proposalCapacity(proposal: AgentCompletion): string | undefined;
+        preview(
+            ctx: QueryCtx,
+            mission: Doc<"agentMissions">,
+            proposal: AgentCompletion,
+            admittedInput: unknown,
+            invocation: Doc<"agentInvocations">,
+        ): Promise<AgentResult | null>;
+    };
     /** Completion examines the immutable input admitted to this invocation, including during retained-response replay. */
     complete(
         ctx: MutationCtx,
@@ -155,6 +235,10 @@ export type AgentDefinition = {
         response: AgentCompletion,
         admittedInput: unknown,
         invocation: Doc<"agentInvocations">,
+        preparedReviewDraft?: Infer<
+            typeof import("@convex/domain/workbenchResponseControlContracts").preparedResponseReviewDraft
+        >,
+        preparedResultHash?: string,
     ): Promise<
         | { kind: "blocked"; code: string }
         | { kind: "continue" }

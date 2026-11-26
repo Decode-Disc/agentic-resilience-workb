@@ -1,0 +1,26 @@
+
+ RUN  v4.1.10 /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+
+ ❯ src/__tests__/convex/execution/large-response.test.ts (15 tests | 1 failed | 14 skipped) 831ms
+   × a schema-valid operation beyond document capacity retains its arguments and receives an explicit refusal 828ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/convex/execution/large-response.test.ts > a schema-valid operation beyond document capacity retains its arguments and receives an explicit refusal
+AssertionError: expected 1048835 to be less than 1024
+ ❯ src/__tests__/convex/execution/large-response.test.ts:100:49
+     98|     const preparedSubmission = preparePiSubmission(response, responseJ…
+     99|     assert(preparedSubmission);
+    100|     expect(getDocumentSize(preparedSubmission)).toBeLessThan(1024);
+       |                                                 ^
+    101|     const outcome = await f.t.mutation(internal.execution.invocations.…
+    102|     expect(outcome.kind).toBe("waiting");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 14 skipped (15)
+   Start at  12:28:16
+   Duration  19.50s (transform 11.02s, setup 1.19s, import 12.97s, tests 831ms, environment 3.56s)
+

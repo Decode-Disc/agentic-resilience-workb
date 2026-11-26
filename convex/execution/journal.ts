@@ -1,23 +1,36 @@
+import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import {
+    internalAction,
     internalMutation,
+    internalQuery,
     type MutationCtx,
     type QueryCtx,
 } from "@convex/_generated/server";
+import type { PreparedAnalystWording } from "@convex/domain/preparedAnalystWording";
 import {
     completeCharacterBoundary,
     sha256Hex,
     stableStringify,
 } from "@convex/domain/sourcePassages";
+import type { preparedResponseReviewDraft } from "@convex/domain/workbenchResponseControlContracts";
 import {
+    CONVEX_MAX_DOCUMENT_BYTES,
+    DOSSIER_PURGE_BATCH,
     HISTORY_PAGE_SIZE,
-    RETAINED_TEXT_INLINE_BYTES,
+    MAX_CONVERSATION_SCAN_BYTES,
     MAX_OBSERVABLE_OUTPUT_BYTES,
     MAX_OPERATION_RESULT_BYTES,
+    RETAINED_TEXT_INLINE_BYTES,
 } from "@convex/resourcePolicy";
+import {
+    paginationOptsValidator,
+    paginationResultValidator,
+} from "convex/server";
 import { getDocumentSize, type Infer, v } from "convex/values";
 import { recordInvocationEvent, requireMissionAuthority } from "./authority";
 import { executionError } from "./errors";
+import type { preparedCompletionValidator } from "./executionProtocol";
 import {
     isCommonConsultation,
     type retainedPayloadValidator,
@@ -25,11 +38,12 @@ import {
 
 import {
     completeRetainedText,
-    retainCompleteText,
-    readRetainedText,
+    deleteRetainedTextBatch,
+    retainedTextFragment,
     retainedTextParts,
     retainedTextRange,
     stageRetainedText,
+    verifyRetainedText,
 } from "./retainedText";
 
 type RetainedPayload = Infer<typeof retainedPayloadValidator>;
@@ -196,14 +210,207 @@ export async function invocationHistoryReference(
     return null;
 }
 
-async function historyEventParts(
-    ctx: QueryCtx,
-    event: Doc<"agentExecutionEvents">,
-) {
+function historyEventMetadata(event: Doc<"agentExecutionEvents">) {
     const metadata = { ...event };
     delete metadata.payload;
     delete metadata.historySourceSequence;
     delete metadata.protectedDiagnostic;
+    delete metadata.contextHistoryHash;
+    return metadata;
+}
+
+function contextHistoryEnvelope(event: Doc<"agentExecutionEvents">) {
+    return {
+        prefix: `{"event":${stableStringify(historyEventMetadata(event))},"observation":{"state":"complete","value":`,
+        suffix: '},"version":1}',
+    };
+}
+
+async function contextHistoryText(
+    ctx: QueryCtx,
+    event: Doc<"agentExecutionEvents">,
+) {
+    if (!event.contextObservation || event.nativeInputSequence === undefined)
+        throw executionError("journal_payload_invalid");
+    const text = await completeRetainedText(
+        ctx,
+        event.contextObservation.textId,
+    );
+    if (
+        text.key !==
+        contextObservationTextKey(event.runId, event.nativeInputSequence)
+    )
+        throw executionError("journal_payload_invalid");
+    return text;
+}
+
+const contextHistoryBackfillScope = {
+    runId: v.id("researchRuns"),
+    eventId: v.id("agentExecutionEvents"),
+};
+
+/** Enumerates old context observations without touching their retained bodies. */
+export const pendingContextHistoryBackfills = internalQuery({
+    args: { paginationOpts: paginationOptsValidator },
+    returns: paginationResultValidator(v.object(contextHistoryBackfillScope)),
+    handler: async (ctx, { paginationOpts }) => {
+        const page = await ctx.db
+            .query("agentExecutionEvents")
+            .withIndex("by_kind_and_context_history_hash", (q) =>
+                q
+                    .eq("kind", "context_observed")
+                    .eq("contextHistoryHash", undefined),
+            )
+            .paginate({
+                ...paginationOpts,
+                numItems: Math.min(paginationOpts.numItems, HISTORY_PAGE_SIZE),
+                maximumRowsRead: HISTORY_PAGE_SIZE,
+                maximumBytesRead: MAX_CONVERSATION_SCAN_BYTES,
+            });
+        return {
+            ...page,
+            page: page.page.map((event) => ({
+                runId: event.runId,
+                eventId: event._id,
+            })),
+        };
+    },
+});
+
+async function contextHistoryBackfillSource(
+    ctx: QueryCtx,
+    args: { runId: Id<"researchRuns">; eventId: Id<"agentExecutionEvents"> },
+) {
+    const run = await ctx.db.get(args.runId);
+    const event = await ctx.db.get(args.eventId);
+    if (!run || run.withdrawnAt !== undefined || event?.runId !== run._id)
+        throw executionError("journal_payload_unavailable");
+    const text = await contextHistoryText(ctx, event);
+    const envelope = contextHistoryEnvelope(event);
+    const identity = sha256Hex(
+        stableStringify({
+            ...envelope,
+            textId: text._id,
+            contentHash: text.contentHash,
+        }),
+    );
+    return { event, text, envelope, identity };
+}
+
+export const contextHistoryBackfillFragment = internalQuery({
+    args: {
+        ...contextHistoryBackfillScope,
+        index: v.number(),
+        identity: v.optional(v.string()),
+    },
+    handler: async (ctx, args) => {
+        const { text, envelope, identity } = await contextHistoryBackfillSource(
+            ctx,
+            args,
+        );
+        if (args.identity !== undefined && identity !== args.identity)
+            throw executionError("journal_payload_conflict");
+        return {
+            ...envelope,
+            identity,
+            content: await retainedTextFragment(ctx, text, args.index),
+            contentHash: text.contentHash,
+            characters: text.characters,
+            sizeBytes: text.sizeBytes,
+            fragmentCount: text.fragmentHashes.length,
+        };
+    },
+});
+
+export const recordContextHistoryBackfill = internalMutation({
+    args: {
+        ...contextHistoryBackfillScope,
+        identity: v.string(),
+        historyHash: v.string(),
+    },
+    returns: v.string(),
+    handler: async (ctx, args) => {
+        const { event, identity } = await contextHistoryBackfillSource(
+            ctx,
+            args,
+        );
+        if (
+            identity !== args.identity ||
+            (event.contextHistoryHash &&
+                event.contextHistoryHash !== args.historyHash)
+        )
+            throw executionError("journal_payload_conflict");
+        if (!event.contextHistoryHash)
+            await ctx.db.patch(event._id, {
+                contextHistoryHash: args.historyHash,
+            });
+        return args.historyHash;
+    },
+});
+
+/** Verifies historical observation bytes before making their original history envelope range-readable. */
+export const backfillContextHistoryHash = internalAction({
+    args: contextHistoryBackfillScope,
+    returns: v.string(),
+    handler: async (ctx, args): Promise<string> => {
+        const read = internal.execution.journal.contextHistoryBackfillFragment;
+        const first = await ctx.runQuery(read, { ...args, index: 0 });
+        const scope = { ...args, identity: first.identity };
+        const fragments = [first.content];
+        for (let index = 1; index < first.fragmentCount; index++)
+            fragments.push(
+                (await ctx.runQuery(read, { ...scope, index })).content,
+            );
+        const json = verifyRetainedText(first, fragments.join(""));
+        if (stableStringify(JSON.parse(json)) !== json)
+            throw executionError("journal_payload_invalid");
+        return ctx.runMutation(
+            internal.execution.journal.recordContextHistoryBackfill,
+            {
+                ...scope,
+                historyHash: sha256Hex(first.prefix + json + first.suffix),
+            },
+        );
+    },
+});
+
+/** Advances the unresolved index by one verified observation. */
+export const backfillNextContextHistoryHash = internalAction({
+    args: {},
+    returns: v.union(
+        v.object({ ...contextHistoryBackfillScope, historyHash: v.string() }),
+        v.null(),
+    ),
+    handler: async (
+        ctx,
+    ): Promise<{
+        runId: Id<"researchRuns">;
+        eventId: Id<"agentExecutionEvents">;
+        historyHash: string;
+    } | null> => {
+        const pending = await ctx.runQuery(
+            internal.execution.journal.pendingContextHistoryBackfills,
+            { paginationOpts: { cursor: null, numItems: 1 } },
+        );
+        const scope = pending.page[0];
+        if (!scope) {
+            if (!pending.isDone)
+                throw executionError("journal_payload_unavailable");
+            return null;
+        }
+        const historyHash = await ctx.runAction(
+            internal.execution.journal.backfillContextHistoryHash,
+            scope,
+        );
+        return { ...scope, historyHash };
+    },
+});
+
+async function historyEventParts(
+    ctx: QueryCtx,
+    event: Doc<"agentExecutionEvents">,
+) {
+    const metadata = historyEventMetadata(event);
     const part =
         event.kind === "invocation_request_recorded"
             ? "request"
@@ -229,46 +436,39 @@ async function historyEventParts(
             invocationPayload.invocationId !== event.invocationId)
     )
         throw executionError("journal_payload_invalid");
-    const observation = event.contextObservation
-        ? {
-              state: "complete" as const,
-              value: JSON.parse(
-                  await readRetainedText(ctx, event.contextObservation.textId),
-              ) as unknown,
-          }
-        : event.payload
-          ? observablePayload(event.payload)
-          : event.kind === "invocation_refused"
+    if (event.contextObservation)
+        throw executionError("journal_payload_backfill_required");
+    const observation = event.payload
+        ? observablePayload(event.payload)
+        : event.kind === "invocation_refused"
+          ? {
+                state: "incomplete",
+                code: "invocation_observation_unavailable",
+            }
+          : event.requestId && OPERATION_OBSERVATIONS.has(event.kind)
             ? {
                   state: "incomplete",
-                  code: "invocation_observation_unavailable",
+                  code: "operation_observation_unavailable",
               }
-            : event.requestId && OPERATION_OBSERVATIONS.has(event.kind)
-              ? {
-                    state: "incomplete",
-                    code: "operation_observation_unavailable",
-                }
-              : undefined;
+            : undefined;
     return { metadata, part, invocationPayload, observation };
 }
 
-/** Historical fragments never join the current mutable execution documents. */
+/** Returns a single fitting event; larger events must use its paged reader. */
 export async function projectMissionHistoryEvent(
     ctx: QueryCtx,
     event: Doc<"agentExecutionEvents">,
 ): Promise<{ json: string; contentHash: string }> {
-    return projectMissionHistoryEventFromParts(
-        ctx,
-        event,
-        await historyEventParts(ctx, event),
-    );
+    const page = await readMissionHistoryEventFragment(ctx, event, 0);
+    if (page.end !== page.totalCharacters)
+        throw executionError("journal_payload_requires_pagination");
+    return { json: page.content, contentHash: page.contentHash };
 }
 
-async function projectMissionHistoryEventFromParts(
-    ctx: QueryCtx,
+function projectMissionHistoryEventFromParts(
     event: Doc<"agentExecutionEvents">,
     parts: Awaited<ReturnType<typeof historyEventParts>>,
-): Promise<{ json: string; contentHash: string }> {
+): { json: string; contentHash: string } {
     const { metadata, part, invocationPayload, observation } = parts;
     const json = stableStringify({
         version: 1,
@@ -277,17 +477,7 @@ async function projectMissionHistoryEventFromParts(
         ...(part || event.invocationPayloadId
             ? {
                   invocation: invocationPayload
-                      ? observablePayload(
-                            invocationPayload.textId
-                                ? {
-                                      ...invocationPayload,
-                                      json: await readRetainedText(
-                                          ctx,
-                                          invocationPayload.textId,
-                                      ),
-                                  }
-                                : invocationPayload,
-                        )
+                      ? observablePayload(invocationPayload)
                       : {
                             state: "incomplete",
                             code: "invocation_observation_unavailable",
@@ -313,14 +503,19 @@ export async function readMissionHistoryEventFragment(
     offset: number,
     limit = MAX_OPERATION_RESULT_BYTES,
 ) {
+    if (event.contextObservation && event.contextHistoryHash) {
+        const text = await contextHistoryText(ctx, event);
+        return readHistoryRange(ctx, text, {
+            ...contextHistoryEnvelope(event),
+            contentHash: event.contextHistoryHash,
+            offset,
+            limit,
+        });
+    }
     const eventParts = await historyEventParts(ctx, event);
     const { metadata, invocationPayload, observation } = eventParts;
     if (!invocationPayload?.textId) {
-        const source = await projectMissionHistoryEventFromParts(
-            ctx,
-            event,
-            eventParts,
-        );
+        const source = projectMissionHistoryEventFromParts(event, eventParts);
         return {
             ...historyTextFragment(source.json, offset, limit),
             contentHash: source.contentHash,
@@ -338,7 +533,29 @@ export async function readMissionHistoryEventFragment(
         ...(observation ? { observation } : {}),
     };
     const prefix = `${stableStringify(envelope).slice(0, -1)},"invocation":{"state":"complete","value":`;
-    const suffix = "}}";
+    return readHistoryRange(ctx, text, {
+        prefix,
+        suffix: "}}",
+        contentHash: sha256Hex(
+            stableStringify({ ...envelope, contentHash: text.contentHash }),
+        ),
+        offset,
+        limit,
+    });
+}
+
+async function readHistoryRange(
+    ctx: QueryCtx,
+    text: Awaited<ReturnType<typeof completeRetainedText>>,
+    range: {
+        prefix: string;
+        suffix: string;
+        contentHash: string;
+        offset: number;
+        limit: number;
+    },
+) {
+    const { prefix, suffix, offset, limit, contentHash } = range;
     const totalCharacters = prefix.length + text.characters + suffix.length;
     if (
         !Number.isSafeInteger(offset) ||
@@ -392,12 +609,7 @@ export async function readMissionHistoryEventFragment(
         totalCharacters,
         content,
         end,
-        contentHash: sha256Hex(
-            stableStringify({
-                ...envelope,
-                contentHash: text.contentHash,
-            }),
-        ),
+        contentHash,
     };
 }
 
@@ -431,10 +643,7 @@ export function historyTextFragment(
 }
 
 /** The immutable admitted snapshot may span documents; historical inline invocations retain their exact input. */
-export async function admittedInputJson(
-    ctx: QueryCtx,
-    invocation: Doc<"agentInvocations">,
-) {
+export function admittedInputJson(invocation: Doc<"agentInvocations">) {
     if (!invocation.inputTextId) {
         if (
             invocation.inputContentHash &&
@@ -443,17 +652,56 @@ export async function admittedInputJson(
             throw executionError("invocation_input_invalid");
         return invocation.inputJson;
     }
+    throw executionError("invocation_input_requires_fragment");
+}
+
+export async function admittedInputManifest(
+    ctx: QueryCtx,
+    invocation: Doc<"agentInvocations">,
+) {
+    if (!invocation.inputTextId)
+        throw executionError("invocation_input_invalid");
     const text = await completeRetainedText(ctx, invocation.inputTextId);
     if (
         text.key !== `${invocation._id}:input` ||
         text.contentHash !== invocation.inputContentHash
     )
         throw executionError("invocation_input_invalid");
-    return readRetainedText(ctx, text._id);
+    return text;
 }
 
 export function admittedInputHash(invocation: Doc<"agentInvocations">) {
     return invocation.inputContentHash ?? sha256Hex(invocation.inputJson);
+}
+
+export async function admittedInputFragment(
+    ctx: QueryCtx,
+    invocation: Doc<"agentInvocations">,
+    index: number,
+    expectedHash: string,
+) {
+    if (admittedInputHash(invocation) !== expectedHash)
+        throw executionError("invocation_input_invalid");
+    if (invocation.inputTextId) {
+        const text = await admittedInputManifest(ctx, invocation);
+        return {
+            content: await retainedTextFragment(ctx, text, index),
+            contentHash: text.contentHash,
+            sizeBytes: text.sizeBytes,
+            characters: text.characters,
+            fragmentCount: text.fragmentHashes.length,
+        };
+    }
+    const content = invocation.inputJson;
+    if (index !== 0 || sha256Hex(content) !== expectedHash)
+        throw executionError("invocation_input_invalid");
+    return {
+        content,
+        contentHash: expectedHash,
+        sizeBytes: new TextEncoder().encode(content).length,
+        characters: content.length,
+        fragmentCount: 1,
+    };
 }
 
 /** Recovery bytes share immutable retention; their size must not roll back an already observed provider result. */
@@ -483,32 +731,22 @@ export async function retainInvocationRawOutput(
     // Inline responses and correction share the invocation document; larger responses live in fragments.
     const large =
         new TextEncoder().encode(rawOutputJson).length >
-            MAX_OBSERVABLE_OUTPUT_BYTES ||
+            RETAINED_TEXT_INLINE_BYTES ||
         getDocumentSize({ ...invocation, rawOutputJson }) +
             2 * RETAINED_TEXT_INLINE_BYTES +
             MAX_OPERATION_RESULT_BYTES >=
-            1_048_576;
+            CONVEX_MAX_DOCUMENT_BYTES;
     if (!large) return { rawOutputJson };
     if (invocation.generationBackend?.id !== "pi-durable")
         throw executionError("response_capacity");
-    const textId = await retainCompleteText(
-        ctx,
-        `${invocation._id}:raw_output`,
-        rawOutputJson,
-    );
-    return { rawOutputJson: undefined, rawOutputTextId: textId };
-}
-
-/** Native replay receives the exact original; ordinary metadata readers keep a bounded invocation document. */
-export async function invocationRawOutputJson(
-    ctx: QueryCtx,
-    invocation: Doc<"agentInvocations">,
-) {
-    if (!invocation.rawOutputTextId) return invocation.rawOutputJson;
-    const text = await completeRetainedText(ctx, invocation.rawOutputTextId);
-    if (text.key !== `${invocation._id}:raw_output`)
-        throw executionError("invocation_result_invalid");
-    return readRetainedText(ctx, text._id);
+    const staged = await ctx.db
+        .query("retainedTexts")
+        .withIndex("by_key", (q) => q.eq("key", `${invocation._id}:raw_output`))
+        .unique();
+    if (!staged || staged.contentHash !== sha256Hex(rawOutputJson))
+        throw executionError("invocation_result_not_prepared");
+    await completeRetainedText(ctx, staged._id);
+    return { rawOutputJson: undefined, rawOutputTextId: staged._id };
 }
 
 /** Received and adopted response identities share immutable bytes, independent of inline storage. */
@@ -519,46 +757,117 @@ export async function retainInvocationResponse(
 ) {
     if (new TextEncoder().encode(json).length <= RETAINED_TEXT_INLINE_BYTES)
         return { json, textId: undefined };
-    const textId = await retainCompleteText(
-        ctx,
-        `${invocation._id}:response:${sha256Hex(json)}`,
-        json,
-    );
-    return { json: undefined, textId };
+    const staged = await ctx.db
+        .query("retainedTexts")
+        .withIndex("by_key", (q) =>
+            q.eq("key", `${invocation._id}:response:${sha256Hex(json)}`),
+        )
+        .unique();
+    if (!staged) throw executionError("invocation_result_not_prepared");
+    await completeRetainedText(ctx, staged._id);
+    return { json: undefined, textId: staged._id };
 }
 
-/** Rehydrates execution responses only at consumers that need their complete content. */
-export async function invocationResponses(
+/** Resolves an invocation-owned retained response, independently of how callers read it. */
+export async function invocationResponseManifest(
+    ctx: QueryCtx,
+    invocation: Doc<"agentInvocations">,
+    textId: Id<"retainedTexts">,
+    kind: "response" | "raw",
+) {
+    const text = await completeRetainedText(ctx, textId);
+    const expectedKey =
+        kind === "raw"
+            ? `${invocation._id}:raw_output`
+            : `${invocation._id}:response:${text.contentHash}`;
+    if (text.key !== expectedKey)
+        throw executionError("invocation_result_invalid");
+    return text;
+}
+
+/** Resolves the observed digest and checks any coexisting inline copy. */
+export async function receivedResponseDigest(
     ctx: QueryCtx,
     invocation: Doc<"agentInvocations">,
 ) {
-    const read = async (
-        textId: Id<"retainedTexts"> | undefined,
-        inline: string | undefined,
-    ) => {
-        if (!textId) return inline;
-        const manifest = await completeRetainedText(ctx, textId);
-        if (
-            manifest.key !==
-            `${invocation._id}:response:${manifest.contentHash}`
-        )
-            throw executionError("invocation_result_invalid");
-        const json = await readRetainedText(ctx, textId);
-        if (inline !== undefined && inline !== json)
-            throw executionError("invocation_result_conflict");
-        return json;
-    };
-    const receivedOutputJson = await read(
+    const inline =
+        invocation.receivedOutputJson === undefined
+            ? undefined
+            : sha256Hex(invocation.receivedOutputJson);
+    if (!invocation.receivedOutputTextId) return inline;
+    const text = await invocationResponseManifest(
+        ctx,
+        invocation,
         invocation.receivedOutputTextId,
-        invocation.receivedOutputJson,
+        "response",
     );
-    const outputJson =
-        invocation.outputTextId &&
-        invocation.outputTextId === invocation.receivedOutputTextId &&
-        invocation.outputJson === undefined
-            ? receivedOutputJson
-            : await read(invocation.outputTextId, invocation.outputJson);
-    return { receivedOutputJson, outputJson };
+    if (inline !== undefined && inline !== text.contentHash)
+        throw executionError("invocation_result_conflict");
+    return text.contentHash;
+}
+
+/** Validates a replay or adoption against the stored identity without reading fragments. */
+export async function matchInvocationResponse(
+    ctx: QueryCtx,
+    invocation: Doc<"agentInvocations">,
+    part: "received" | "adopted",
+    expected: string | { responseHash: string },
+) {
+    const [textId, inline] =
+        part === "received"
+            ? [invocation.receivedOutputTextId, invocation.receivedOutputJson]
+            : [invocation.outputTextId, invocation.outputJson];
+    if (
+        inline !== undefined &&
+        (typeof expected === "string"
+            ? inline !== expected
+            : sha256Hex(inline) !== expected.responseHash)
+    )
+        throw executionError("invocation_result_conflict");
+    if (textId) {
+        const text = await invocationResponseManifest(
+            ctx,
+            invocation,
+            textId,
+            "response",
+        );
+        const bytes =
+            typeof expected === "string"
+                ? new TextEncoder().encode(expected)
+                : undefined;
+        const hash =
+            typeof expected === "string"
+                ? sha256Hex(bytes ?? expected)
+                : expected.responseHash;
+        if (
+            text.contentHash !== hash ||
+            (typeof expected === "string" &&
+                (text.characters !== expected.length ||
+                    text.sizeBytes !== bytes?.length))
+        )
+            throw executionError("invocation_result_conflict");
+    }
+    return textId || inline !== undefined
+        ? { textId, json: textId ? undefined : inline }
+        : null;
+}
+
+/** Verifies the persisted operation correlation against the original response identity. */
+export async function retainedNativeCalls(
+    ctx: QueryCtx,
+    invocation: Doc<"agentInvocations">,
+) {
+    const retained = invocation.nativeOperations;
+    if (!retained) return undefined;
+    const expected = { responseHash: retained.responseHash };
+    if (
+        invocation.status !== "returned" ||
+        retained.calls.length !== invocation.requestIds?.length ||
+        !(await matchInvocationResponse(ctx, invocation, "adopted", expected))
+    )
+        throw executionError("operation_correlation_invalid");
+    await matchInvocationResponse(ctx, invocation, "received", expected);
+    return retained.calls;
 }
 
 export function hasReceivedResponse(invocation: Doc<"agentInvocations">) {
@@ -594,6 +903,12 @@ export async function retainInvocationPayload(
     const text = textId ? await completeRetainedText(ctx, textId) : undefined;
     if (text && text.key !== `${invocation._id}:${part}`)
         throw executionError("journal_payload_conflict");
+    const existing = await ctx.db
+        .query("agentInvocationPayloads")
+        .withIndex("by_invocation_and_part", (q) =>
+            q.eq("invocationId", invocation._id).eq("part", part),
+        )
+        .unique();
     let payload: RetainedPayload = text
         ? {
               version: 1,
@@ -610,27 +925,43 @@ export async function retainInvocationPayload(
     if (
         !text &&
         contentJson !== undefined &&
-        payload.state === "incomplete" &&
-        invocation.generationBackend?.id === "pi-durable"
+        invocation.generationBackend?.id === "pi-durable" &&
+        (payload.state === "incomplete" ||
+            (part === "reply" &&
+                existing?.json === undefined &&
+                (payload.sizeBytes ?? 0) > RETAINED_TEXT_INLINE_BYTES))
     ) {
-        const { manifest, parts } = retainedTextParts(
-            stableStringify(JSON.parse(contentJson)),
-        );
-        let retainedId: Id<"retainedTexts"> | undefined;
-        for (const [index, content] of parts.entries())
-            retainedId = await stageRetainedText(
-                ctx,
-                `${invocation._id}:${part}`,
-                { ...manifest, index, content },
-            );
+        const canonical =
+            payload.json ?? stableStringify(JSON.parse(contentJson));
+        const key = `${invocation._id}:${part}`;
+        let retainedId = existing?.textId;
+        if (!retainedId) {
+            const { manifest, parts } = retainedTextParts(canonical);
+            for (const [index, content] of parts.entries())
+                retainedId = await stageRetainedText(ctx, key, {
+                    ...manifest,
+                    index,
+                    content,
+                });
+        }
         if (!retainedId) throw executionError("journal_payload_invalid");
-        await completeRetainedText(ctx, retainedId);
+        const retained = await completeRetainedText(ctx, retainedId);
+        if (existing?.textId) {
+            const bytes = new TextEncoder().encode(canonical);
+            if (
+                retained.key !== key ||
+                retained.contentHash !== sha256Hex(bytes) ||
+                retained.sizeBytes !== bytes.length ||
+                retained.characters !== canonical.length
+            )
+                throw executionError("journal_payload_conflict");
+        }
         payload = {
             version: 1,
             state: "complete",
             textId: retainedId,
-            contentHash: manifest.contentHash,
-            sizeBytes: manifest.sizeBytes,
+            contentHash: retained.contentHash,
+            sizeBytes: retained.sizeBytes,
         };
     }
     const { contentHash, code } = payload;
@@ -659,12 +990,6 @@ export async function retainInvocationPayload(
                 },
             });
     }
-    const existing = await ctx.db
-        .query("agentInvocationPayloads")
-        .withIndex("by_invocation_and_part", (q) =>
-            q.eq("invocationId", invocation._id).eq("part", part),
-        )
-        .unique();
     if (existing) {
         if (existing.contentHash !== contentHash || existing.code !== code)
             throw executionError("journal_payload_conflict");
@@ -691,6 +1016,110 @@ export async function retainInvocationPayload(
         state: payload.state,
         ...(code ? { code } : {}),
     };
+}
+
+export function preparedReplyBasisHash(
+    basisHash: string,
+    reviewDraft: Infer<typeof preparedResponseReviewDraft> | undefined,
+    completion: Infer<typeof preparedCompletionValidator>,
+    wording?: PreparedAnalystWording,
+    exactFactsRevision?: string,
+) {
+    return sha256Hex(
+        stableStringify({
+            basisHash,
+            reviewDraft,
+            completion,
+            wording,
+            exactFactsRevision,
+        }),
+    );
+}
+
+export function preparedResultPrefix(invocationId: Id<"agentInvocations">) {
+    return `${invocationId}:prepared_result`;
+}
+
+export function preparedReplyPrefix(invocationId: Id<"agentInvocations">) {
+    return `${invocationId}:prepared_reply`;
+}
+
+export async function purgeInvocationJournalBatch(
+    ctx: MutationCtx,
+    invocationId: Id<"agentInvocations">,
+) {
+    const payload = await ctx.db
+        .query("agentInvocationPayloads")
+        .withIndex("by_invocation_and_part", (q) =>
+            q.eq("invocationId", invocationId),
+        )
+        .first();
+    if (payload) {
+        if (
+            payload.textId &&
+            !(await deleteRetainedTextBatch(
+                ctx,
+                payload.textId,
+                `${invocationId}:${payload.part}`,
+                DOSSIER_PURGE_BATCH,
+            ))
+        )
+            return true;
+        await ctx.db.delete(payload._id);
+        return true;
+    }
+    for (const part of ["request", "reply"]) {
+        const key = `${invocationId}:${part}`;
+        const staged = await ctx.db
+            .query("retainedTexts")
+            .withIndex("by_key", (q) => q.eq("key", key))
+            .unique();
+        if (staged) {
+            await deleteRetainedTextBatch(
+                ctx,
+                staged._id,
+                key,
+                DOSSIER_PURGE_BATCH,
+            );
+            return true;
+        }
+    }
+    for (const prefix of [
+        preparedReplyPrefix(invocationId),
+        preparedResultPrefix(invocationId),
+        `${invocationId}:response`,
+    ]) {
+        const preparation = await ctx.db
+            .query("retainedTexts")
+            .withIndex("by_key", (q) =>
+                q.gte("key", `${prefix}:`).lt("key", `${prefix};`),
+            )
+            .first();
+        if (preparation) {
+            await deleteRetainedTextBatch(
+                ctx,
+                preparation._id,
+                preparation.key,
+                DOSSIER_PURGE_BATCH,
+            );
+            return true;
+        }
+    }
+    const rawKey = `${invocationId}:raw_output`;
+    const raw = await ctx.db
+        .query("retainedTexts")
+        .withIndex("by_key", (q) => q.eq("key", rawKey))
+        .unique();
+    if (raw) {
+        await deleteRetainedTextBatch(
+            ctx,
+            raw._id,
+            rawKey,
+            DOSSIER_PURGE_BATCH,
+        );
+        return true;
+    }
+    return false;
 }
 
 /** Advances a fixed pre-upgrade cutoff; caller strings are never used as paginator positions. */
@@ -762,10 +1191,13 @@ export const indexRetainedHistory = internalMutation({
 export async function invocationEventObservation(
     ctx: QueryCtx,
     invocation: Doc<"agentInvocations">,
-    response: Infer<
-        typeof import("./executionProtocol").invocationResponseValidator
-    >,
+    response:
+        | Infer<
+              typeof import("./executionProtocol").invocationResponseValidator
+          >
+        | { responseHash: string; operationNames?: string[] },
     rawOutputJson?: string,
+    retainedResponseHash?: string,
 ) {
     const reply = await ctx.db
         .query("agentInvocationPayloads")
@@ -773,18 +1205,30 @@ export async function invocationEventObservation(
             q.eq("invocationId", invocation._id).eq("part", "reply"),
         )
         .unique();
+    const operationNames =
+        "kind" in response
+            ? response.kind === "operations"
+                ? response.requests.map((request) => request.name)
+                : []
+            : (response.operationNames ?? []);
     const consultationOnly =
-        response.kind === "operations" &&
-        response.requests.length > 0 &&
-        response.requests.every((request) =>
-            isCommonConsultation(request.name),
-        );
+        operationNames.length > 0 && operationNames.every(isCommonConsultation);
+    const responseHash =
+        "responseHash" in response
+            ? response.responseHash
+            : retainedResponseHash;
     return {
         historySource: consultationOnly ? undefined : ("observation" as const),
         invocationPayloadId: reply?._id,
         observation: {
             provenance: invocation.provenance,
-            response,
+            response: responseHash
+                ? {
+                      kind: "retained_invocation_response",
+                      invocationId: invocation._id,
+                      contentHash: responseHash,
+                  }
+                : response,
             ...(invocation.provenance === "simulation" &&
             rawOutputJson !== undefined
                 ? { rawOutputJson }
@@ -816,6 +1260,13 @@ export async function nextNativeInputSequence(
     return sequence;
 }
 
+export function contextObservationTextKey(
+    runId: Id<"researchRuns">,
+    sequence: number,
+) {
+    return `context:${runId}:${sequence}`;
+}
+
 /** Records an immutable observation with the business effect; replay never allocates another order. */
 export async function recordContextObservation(
     ctx: MutationCtx,
@@ -837,12 +1288,17 @@ export async function recordContextObservation(
         )
         .unique();
     if (previous) {
+        if (!previous.contextObservation)
+            throw executionError("journal_payload_conflict");
+        const stored = await completeRetainedText(
+            ctx,
+            previous.contextObservation.textId,
+        );
+        const bytes = new TextEncoder().encode(json);
         if (
-            !previous.contextObservation ||
-            (await readRetainedText(
-                ctx,
-                previous.contextObservation.textId,
-            )) !== json
+            stored.contentHash !== sha256Hex(bytes) ||
+            stored.characters !== json.length ||
+            stored.sizeBytes !== bytes.length
         )
             throw executionError("journal_payload_conflict");
         return previous._id;
@@ -851,14 +1307,18 @@ export async function recordContextObservation(
     const { parts, manifest } = retainedTextParts(json);
     let textId: Id<"retainedTexts"> | undefined;
     for (const [index, content] of parts.entries())
-        textId = await stageRetainedText(ctx, `context:${runId}:${sequence}`, {
-            ...manifest,
-            index,
-            content,
-        });
+        textId = await stageRetainedText(
+            ctx,
+            contextObservationTextKey(runId, sequence),
+            {
+                ...manifest,
+                index,
+                content,
+            },
+        );
     if (!textId) throw executionError("journal_payload_invalid");
     await completeRetainedText(ctx, textId);
-    return ctx.db.insert("agentExecutionEvents", {
+    const eventId = await ctx.db.insert("agentExecutionEvents", {
         runId,
         actor: args.actor,
         kind: "context_observed",
@@ -873,6 +1333,13 @@ export async function recordContextObservation(
         },
         occurredAt: Date.now(),
     });
+    const event = await ctx.db.get(eventId);
+    if (!event) throw executionError("journal_payload_unavailable");
+    const { prefix, suffix } = contextHistoryEnvelope(event);
+    await ctx.db.patch(eventId, {
+        contextHistoryHash: sha256Hex(prefix + json + suffix),
+    });
+    return eventId;
 }
 
 /** Current observation frontier is independent of invocation/lease bookkeeping. */

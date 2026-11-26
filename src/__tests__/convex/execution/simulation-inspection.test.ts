@@ -40,7 +40,7 @@ test.each([
         result: { captureIds: [captureId] },
     });
     expect(
-        await t.query(internal.execution.fixtures.inspect, { missionId }),
+        await t.action(internal.execution.fixtures.inspect, { missionId }),
     ).toMatchObject({
         status: "completed",
         contextIncludesReturnedQuotation: true,
@@ -74,7 +74,7 @@ test.each([
         }),
     );
     expect(
-        await t.query(internal.execution.fixtures.inspect, { missionId }),
+        await t.action(internal.execution.fixtures.inspect, { missionId }),
     ).toMatchObject({ contextIncludesReturnedQuotation: false });
     await t.run((ctx) =>
         ctx.db.patch(reading._id, {
@@ -82,7 +82,7 @@ test.each([
         }),
     );
     await expect(
-        t.query(internal.execution.fixtures.inspect, { missionId }),
+        t.action(internal.execution.fixtures.inspect, { missionId }),
     ).rejects.toThrow("Invalid retained simulation result");
     await t.run(async (ctx) => {
         await ctx.db.patch(reading._id, { outcome: reading.outcome });
@@ -101,6 +101,6 @@ test.each([
         await ctx.db.patch(request._id, { json: "{invalid" });
     });
     await expect(
-        t.query(internal.execution.fixtures.inspect, { missionId }),
+        t.action(internal.execution.fixtures.inspect, { missionId }),
     ).rejects.toThrow("Invalid retained simulation input");
 }, 30_000);

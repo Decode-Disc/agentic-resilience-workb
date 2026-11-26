@@ -62,14 +62,16 @@ function FragmentedPayload({
     runId,
     invocationId,
     part,
+    contentHash,
 }: {
     runId: Id<"researchRuns">;
     invocationId: Id<"agentInvocations">;
-    part: "request" | "reply";
+    part: "request" | "reply" | "received" | "adopted";
+    contentHash?: string;
 }) {
     const page = usePaginatedQuery(
         api.adminOperations.listInvocationPayloadFragmentsPage,
-        { runId, invocationId, part },
+        { runId, invocationId, part, ...(contentHash ? { contentHash } : {}) },
         { initialNumItems: CLIENT_PAGE_SIZE.invocationPayloadFragments },
     );
     const container = useRef<HTMLDivElement>(null);
@@ -220,11 +222,21 @@ function EventDetail({
     const detail = useQuery(api.adminOperations.inspectJournalEvent, {
         runId,
         eventId,
+        bodyAccess: "separate",
     });
     if (!detail) return <p role="status">Loading event…</p>;
     const { event, invocation, request, providerCall } = detail;
     const structuredResult =
-        invocation?.outputJson ?? invocation?.receivedOutputJson;
+        invocation?.outputJson ??
+        (invocation?.output ? undefined : invocation?.receivedOutputJson);
+    const structuredReference =
+        invocation?.output ??
+        (invocation?.outputJson === undefined
+            ? invocation?.receivedOutput
+            : undefined);
+    const received =
+        invocation?.receivedOutputJson !== undefined ||
+        invocation?.receivedOutput !== undefined;
     return (
         <div className="min-w-0 space-y-3 pt-2 text-sm">
             {invocation ? (
@@ -241,11 +253,10 @@ function EventDetail({
                     </p>
                     {providerCall?.dispatchOutcome === "unknown" ? (
                         <p>Interrupted · outcome unknown</p>
-                    ) : invocation.receivedOutputJson &&
+                    ) : received &&
                       invocation.receivedWhileAuthorized === false ? (
                         <p>Response retained · adoption refused</p>
-                    ) : invocation.receivedOutputJson &&
-                      invocation.status === "started" ? (
+                    ) : received && invocation.status === "started" ? (
                         <p>Response retained · awaiting adoption</p>
                     ) : invocation.status === "started" ? (
                         <p>Outcome not recorded · unknown</p>
@@ -259,6 +270,25 @@ function EventDetail({
                     {structuredResult ? (
                         <AdminDetailDisclosure label="Structured result">
                             <SnapshotText>{structuredResult}</SnapshotText>
+                        </AdminDetailDisclosure>
+                    ) : structuredReference && event.invocationId ? (
+                        <AdminDetailDisclosure label="Structured result">
+                            <LoadErrorBoundary
+                                title="Snapshot unavailable"
+                                description="We couldn’t load this snapshot. Try again.">
+                                <FragmentedPayload
+                                    runId={runId}
+                                    invocationId={event.invocationId}
+                                    part={
+                                        invocation.output
+                                            ? "adopted"
+                                            : "received"
+                                    }
+                                    contentHash={
+                                        structuredReference.contentHash
+                                    }
+                                />
+                            </LoadErrorBoundary>
                         </AdminDetailDisclosure>
                     ) : null}
                 </>

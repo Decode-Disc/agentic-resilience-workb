@@ -10,11 +10,8 @@ import {
 } from "@convex/execution/approvals";
 import { executionFailureCode } from "@convex/execution/errors";
 import { resumeResearch } from "@convex/execution/researchControl";
-import {
-    createConversationStorage,
-    saveConversationMessage,
-} from "@convex/integrations/agentStorage";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import { retainFixtureDelivery } from "@/__tests__/setup/retained-messages";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 import {
     client,
@@ -45,25 +42,16 @@ async function raiseSourcesTimeLimitApproval(
 async function seedAgentMessageId(
     f: Awaited<ReturnType<typeof seedExpiredPreparation>>,
 ) {
-    return f.t.run(async (ctx) => {
+    const deliveryId = await f.t.run(async (ctx) => {
         const now = Date.now();
-        const storageRef = await createConversationStorage(ctx, f.visitorId);
         const conversationId = await ctx.db.insert("agentConversations", {
             runId: f.runId,
-            storageRef,
             queuedCount: 0,
             createdAt: now,
         });
-        const storageMessageRef = await saveConversationMessage(
-            ctx,
-            storageRef,
-            "assistant",
-            "Agent message",
-        );
         return ctx.db.insert("agentMessageDeliveries", {
             runId: f.runId,
             conversationId,
-            storageMessageRef,
             requestKey: "req-approvals-test",
             contentHash: "hash-approvals-test",
             role: "assistant",
@@ -72,6 +60,7 @@ async function seedAgentMessageId(
             createdAt: now,
         });
     });
+    return retainFixtureDelivery(f.t, deliveryId, "Agent message");
 }
 
 test("raising the same action twice for one generation keeps one pending request", async () => {

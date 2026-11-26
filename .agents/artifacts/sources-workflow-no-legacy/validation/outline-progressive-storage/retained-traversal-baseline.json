@@ -1,0 +1,67 @@
+{
+  "sourceIdentity": "/home/abdwhb/.cache/workbench-evaluations/framing-v9-qualification-20261120-ready/lots/lot-1/observations/after-cleanup-1ee9e20b-c15c-4460-97fa-e39e37767b51/sources-attribution-independence#traversal-0",
+  "archiveInputHash": "b1009be287ba7991a8a6d7f34304987f193f6076b1b646764a1cf0bbf6d77b5e",
+  "eventCount": 27,
+  "totalCharacters": 50747,
+  "restoredHashesVerified": true,
+  "consultations": 2,
+  "historyHandlerDatabaseReads": [
+    {
+      "agentOperationRequests": {
+        "documents": 1,
+        "bytes": 639
+      },
+      "otherPointReads": {
+        "documents": 14,
+        "bytes": 5574
+      },
+      "browserTestContexts": {
+        "documents": 2,
+        "bytes": 470
+      },
+      "invitations": {
+        "documents": 1,
+        "bytes": 227
+      },
+      "agentExecutionEvents": {
+        "documents": 20,
+        "bytes": 33493
+      }
+    },
+    {
+      "agentOperationRequests": {
+        "documents": 2,
+        "bytes": 40059
+      },
+      "otherPointReads": {
+        "documents": 14,
+        "bytes": 8214
+      },
+      "browserTestContexts": {
+        "documents": 2,
+        "bytes": 470
+      },
+      "invitations": {
+        "documents": 1,
+        "bytes": 227
+      },
+      "agentExecutionEvents": {
+        "documents": 8,
+        "bytes": 19820
+      }
+    }
+  ],
+  "totalResponseBytes": 59320,
+  "pages": [
+    {
+      "entries": 20,
+      "resultBytes": 37039,
+      "historyCharacters": 31916
+    },
+    {
+      "entries": 8,
+      "resultBytes": 22281,
+      "historyCharacters": 19180
+    }
+  ]
+}

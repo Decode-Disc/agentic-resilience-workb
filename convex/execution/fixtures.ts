@@ -1,13 +1,14 @@
-import { hasReceivedResponse } from "./journal";
 import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import {
+    type ActionCtx,
     internalAction,
     internalMutation,
     internalQuery,
     type MutationCtx,
     type QueryCtx,
 } from "@convex/_generated/server";
+import { REQUEST_APPROVAL_FIXTURE_CAUSE } from "@convex/domain/conversationValidationContracts";
 import {
     claimCorpusApprovedRunExecution,
     claimPausedRunExecution,
@@ -71,21 +72,24 @@ import {
     paginationResultValidator,
 } from "convex/server";
 import { type Infer, v } from "convex/values";
+import { validate } from "convex-helpers/validators";
 import { getAgentDefinition } from "./agentCatalog";
 import { agentToolSchemas } from "./agentDefinition";
+import { agentResultValidator } from "./agentSchemas";
 import { requireMissionAuthority } from "./authority";
 import { publishTurn, submitAuthorizedMessage } from "./conversations";
 import {
     agentBackendValidator,
     DEFAULT_AGENT_BACKEND,
 } from "./executionProtocol";
-import { admittedInputJson } from "./journal";
-import { generationInterruption, missionResult } from "./missionData";
+import { admittedInputHash, hasReceivedResponse } from "./journal";
+import { generationInterruption, retainedMissionResult } from "./missionData";
 import {
     completeRetainedText,
-    readRetainedText,
     retainedDiagnosticText,
+    retainedTextFragment,
     retainedTextPage,
+    verifyRetainedText,
 } from "./retainedText";
 
 /** Validates retained fixture provenance without granting or renewing execution authority. */
@@ -173,41 +177,25 @@ async function requireCampaignScenarios(
 }
 /** Binds unpaid simulation dossiers before the first turn; the immutable mandate owns their identity. */
 
-/** The admitted input and, when recorded, the provider request snapshot of one invocation. */
-async function modelReceivedTexts(
-    ctx: QueryCtx,
-    invocation: Doc<"agentInvocations">,
-): Promise<string[]> {
-    const request = await ctx.db
-        .query("agentInvocationPayloads")
-        .withIndex("by_invocation_and_part", (q) =>
-            q.eq("invocationId", invocation._id).eq("part", "request"),
-        )
-        .unique();
-    const recorded =
-        request?.json ??
-        (request?.textId
-            ? await readRetainedText(ctx, request.textId)
-            : undefined);
-    // Decode the envelope before inspecting native messages: their text may itself contain JSON.
+/** Match exact decoded input strings, including nested JSON retained as message text. */
+function inputContainsQuotation(input: string, quotation: string) {
     let pending: unknown[];
     try {
-        pending = [
-            JSON.parse(await admittedInputJson(ctx, invocation)),
-            ...(recorded === undefined ? [] : [JSON.parse(recorded)]),
-        ];
+        pending = [JSON.parse(input)];
     } catch {
         throw new Error("Invalid retained simulation input");
     }
-    const texts: string[] = [];
+    const escaped = JSON.stringify(quotation).slice(1, -1);
     while (pending.length) {
         const value = pending.pop();
-        if (typeof value === "string") texts.push(value);
-        else if (Array.isArray(value)) pending.push(...value);
+        if (typeof value === "string") {
+            if (value.includes(quotation) || value.includes(escaped))
+                return true;
+        } else if (Array.isArray(value)) pending.push(...value);
         else if (value && typeof value === "object")
             pending.push(...Object.values(value));
     }
-    return texts;
+    return false;
 }
 
 export const bindCampaignScenarios = internalMutation({
@@ -568,45 +556,61 @@ export const activate = internalMutation({
     },
 });
 
-export const inspect = internalQuery({
+const simulationInspection = v.object({
+    runId: v.id("researchRuns"),
+    status: v.string(),
+    blockCode: v.union(v.string(), v.null()),
+    provenance: v.optional(v.union(v.literal("live"), v.literal("simulation"))),
+    operations: v.array(v.string()),
+    outcomes: v.array(v.union(v.string(), v.null())),
+    generationBackends: v.array(v.union(agentBackendValidator, v.null())),
+    backendStorageCount: v.number(),
+    invocationCount: v.number(),
+    observedInvocationCount: v.number(),
+    contextIncludesReturnedQuotation: v.boolean(),
+    providerCallCount: v.number(),
+    completionCount: v.number(),
+    runExecutionStatus: v.string(),
+    conversationTurnStatus: v.union(v.string(), v.null()),
+    conversationQueuedCount: v.number(),
+});
+
+async function requireSimulationInspection(
+    ctx: QueryCtx,
+    missionId: Id<"agentMissions">,
+) {
+    const mission = await ctx.db.get(missionId);
+    const run = mission ? await ctx.db.get(mission.runId) : null;
+    if (!mission || !run || run.purpose !== "browser_test")
+        throw new Error("Local simulation scope required");
+    const visitor = await requireBrowserTestRunOwner(ctx, run);
+    const contextId = await requireBrowserFixtureContext(ctx, visitor);
+    if (
+        run.ownerVisitorId !== visitor._id ||
+        run.browserTestContextId !== contextId ||
+        ![
+            "local-simulation",
+            "local-validation",
+            "local-conversation",
+        ].includes(mission.requestKey)
+    )
+        throw new Error("Local simulation scope required");
+    return { mission, run };
+}
+
+export const simulationInspectionSnapshot = internalQuery({
     args: { missionId: v.id("agentMissions") },
     returns: v.object({
-        runId: v.id("researchRuns"),
-        status: v.string(),
-        blockCode: v.union(v.string(), v.null()),
-        provenance: v.optional(
-            v.union(v.literal("live"), v.literal("simulation")),
-        ),
-        operations: v.array(v.string()),
-        outcomes: v.array(v.union(v.string(), v.null())),
-        generationBackends: v.array(v.union(agentBackendValidator, v.null())),
-        backendStorageCount: v.number(),
-        invocationCount: v.number(),
-        observedInvocationCount: v.number(),
-        contextIncludesReturnedQuotation: v.boolean(),
-        providerCallCount: v.number(),
-        completionCount: v.number(),
-        runExecutionStatus: v.string(),
-        conversationTurnStatus: v.union(v.string(), v.null()),
-        conversationQueuedCount: v.number(),
+        snapshot: simulationInspection,
+        invocationIds: v.array(v.id("agentInvocations")),
+        quotation: v.optional(v.string()),
+        resultHash: v.optional(v.string()),
     }),
     handler: async (ctx, args) => {
-        const mission = await ctx.db.get(args.missionId);
-        const run = mission ? await ctx.db.get(mission.runId) : null;
-        if (!mission || !run || run.purpose !== "browser_test")
-            throw new Error("Local simulation scope required");
-        const visitor = await requireBrowserTestRunOwner(ctx, run);
-        const contextId = await requireBrowserFixtureContext(ctx, visitor);
-        if (
-            run.ownerVisitorId !== visitor._id ||
-            run.browserTestContextId !== contextId ||
-            ![
-                "local-simulation",
-                "local-validation",
-                "local-conversation",
-            ].includes(mission.requestKey)
-        )
-            throw new Error("Local simulation scope required");
+        const { mission, run } = await requireSimulationInspection(
+            ctx,
+            args.missionId,
+        );
         const invocations = await ctx.db
             .query("agentInvocations")
             .withIndex("by_mission", (q) => q.eq("missionId", mission._id))
@@ -644,54 +648,244 @@ export const inspect = internalQuery({
         const conversation = turn
             ? await ctx.db.get(turn.conversationId)
             : null;
-        const result = await missionResult(ctx, mission);
+        const inspection =
+            mission.definitionId === "saved_material_inspection_v1" &&
+            "protocolVersion" in mission
+                ? mission
+                : undefined;
+        const retainedResult = inspection?.resultTextId
+            ? await retainedMissionResult(
+                  ctx,
+                  inspection,
+                  inspection.resultTextId,
+              )
+            : undefined;
         return {
-            runExecutionStatus: run.executionStatus,
-            conversationTurnStatus: turn?.status ?? null,
-            conversationQueuedCount: conversation?.queuedCount ?? 0,
-            runId: run._id,
-            status: mission.status,
-            blockCode: mission.blockCode ?? null,
-            provenance: mission.provenance,
-            operations: requests.map((request) => request.input.kind),
-            outcomes: requests.map((request) => request.outcome?.kind ?? null),
-            generationBackends: invocations.map(
-                (invocation) => invocation.generationBackend ?? null,
-            ),
-            backendStorageCount: invocations.filter(
-                (invocation) => invocation.generationStorageRef !== undefined,
-            ).length,
-            invocationCount: invocations.length,
-            observedInvocationCount: invocations.filter((invocation) =>
-                hasReceivedResponse(invocation),
-            ).length,
-            // What the model received: the admitted state, or a native
-            // backend's recorded request, which carries its own tool results.
-            contextIncludesReturnedQuotation:
-                !!quotation &&
-                (
-                    await Promise.all(
-                        invocations.map((invocation) =>
-                            modelReceivedTexts(ctx, invocation),
-                        ),
-                    )
-                )
-                    .flat()
-                    .some(
-                        (input) =>
-                            input.includes(quotation) ||
-                            input.includes(
-                                JSON.stringify(quotation).slice(1, -1),
-                            ),
-                    ),
-            providerCallCount: calls.length,
-            completionCount:
-                "protocolVersion" in mission
-                    ? result?.kind === "saved_material_inspection_v1"
-                        ? result.captureIds.length
-                        : 0
-                    : mission.completionRefs.length,
+            resultHash: retainedResult?.contentHash,
+            invocationIds: invocations.map((invocation) => invocation._id),
+            quotation,
+            snapshot: {
+                runExecutionStatus: run.executionStatus,
+                conversationTurnStatus: turn?.status ?? null,
+                conversationQueuedCount: conversation?.queuedCount ?? 0,
+                runId: run._id,
+                status: mission.status,
+                blockCode: mission.blockCode ?? null,
+                provenance: mission.provenance,
+                operations: requests.map((request) => request.input.kind),
+                outcomes: requests.map(
+                    (request) => request.outcome?.kind ?? null,
+                ),
+                generationBackends: invocations.map(
+                    (invocation) => invocation.generationBackend ?? null,
+                ),
+                backendStorageCount: invocations.filter(
+                    (invocation) =>
+                        invocation.generationStorageRef !== undefined,
+                ).length,
+                invocationCount: invocations.length,
+                observedInvocationCount: invocations.filter((invocation) =>
+                    hasReceivedResponse(invocation),
+                ).length,
+                contextIncludesReturnedQuotation: false,
+                providerCallCount: calls.length,
+                completionCount:
+                    "protocolVersion" in mission
+                        ? inspection?.result?.kind ===
+                          "saved_material_inspection_v1"
+                            ? inspection.result.captureIds.length
+                            : 0
+                        : mission.completionRefs.length,
+            },
         };
+    },
+});
+
+export const simulationInputFragment = internalQuery({
+    args: {
+        missionId: v.id("agentMissions"),
+        invocationId: v.id("agentInvocations"),
+        part: v.union(v.literal("admitted"), v.literal("request")),
+        index: v.number(),
+        contentHash: v.optional(v.string()),
+    },
+    returns: v.union(
+        v.null(),
+        v.object({
+            content: v.string(),
+            contentHash: v.string(),
+            sizeBytes: v.number(),
+            characters: v.number(),
+            fragmentCount: v.number(),
+        }),
+    ),
+    handler: async (ctx, args) => {
+        const { mission, run } = await requireSimulationInspection(
+            ctx,
+            args.missionId,
+        );
+        const invocation = await ctx.db.get(args.invocationId);
+        if (
+            !invocation ||
+            invocation.missionId !== mission._id ||
+            invocation.runId !== run._id
+        )
+            throw new Error("Local simulation scope required");
+        let textId = invocation.inputTextId;
+        let inline = invocation.inputJson;
+        let hash: string | undefined = admittedInputHash(invocation);
+        let sizeBytes: number | undefined;
+        let key = `${invocation._id}:input`;
+        if (args.part === "request") {
+            const request = await ctx.db
+                .query("agentInvocationPayloads")
+                .withIndex("by_invocation_and_part", (q) =>
+                    q.eq("invocationId", invocation._id).eq("part", "request"),
+                )
+                .unique();
+            if (request?.state !== "complete") return null;
+            if (request.runId !== run._id)
+                throw new Error("Local simulation scope required");
+            textId = request.textId;
+            inline = request.json ?? "";
+            hash = request.contentHash;
+            sizeBytes = request.sizeBytes;
+            key = `${invocation._id}:request`;
+        }
+        if (
+            !hash ||
+            (args.contentHash !== undefined && args.contentHash !== hash)
+        )
+            throw new Error("Invalid retained simulation input");
+        if (textId) {
+            const text = await completeRetainedText(ctx, textId);
+            if (
+                text.key !== key ||
+                text.contentHash !== hash ||
+                (sizeBytes !== undefined && text.sizeBytes !== sizeBytes)
+            )
+                throw new Error("Invalid retained simulation input");
+            return {
+                content: await retainedTextFragment(ctx, text, args.index),
+                contentHash: hash,
+                sizeBytes: text.sizeBytes,
+                characters: text.characters,
+                fragmentCount: text.fragmentHashes.length,
+            };
+        }
+        if (args.index !== 0 || sha256Hex(inline) !== hash)
+            throw new Error("Invalid retained simulation input");
+        return {
+            content: inline,
+            contentHash: hash,
+            sizeBytes: new TextEncoder().encode(inline).length,
+            characters: inline.length,
+            fragmentCount: 1,
+        };
+    },
+});
+
+async function simulationInput(
+    ctx: ActionCtx,
+    args: {
+        missionId: Id<"agentMissions">;
+        invocationId: Id<"agentInvocations">;
+        part: "admitted" | "request";
+    },
+) {
+    const reader = internal.execution.fixtures.simulationInputFragment;
+    const first = await ctx.runQuery(reader, { ...args, index: 0 });
+    if (!first) return null;
+    const fragments = [first.content];
+    for (let index = 1; index < first.fragmentCount; index++) {
+        const next = await ctx.runQuery(reader, {
+            ...args,
+            index,
+            contentHash: first.contentHash,
+        });
+        if (!next) throw new Error("Invalid retained simulation input");
+        fragments.push(next.content);
+    }
+    return verifyRetainedText(first, fragments.join(""));
+}
+
+export const simulationInspectionResultFragment = internalQuery({
+    args: {
+        missionId: v.id("agentMissions"),
+        contentHash: v.string(),
+        index: v.number(),
+    },
+    handler: async (ctx, args) => {
+        const { mission } = await requireSimulationInspection(
+            ctx,
+            args.missionId,
+        );
+        if (
+            mission.definitionId !== "saved_material_inspection_v1" ||
+            !("protocolVersion" in mission) ||
+            !mission.resultTextId
+        )
+            throw new Error("Invalid retained simulation result");
+        const text = await retainedMissionResult(
+            ctx,
+            mission,
+            mission.resultTextId,
+        );
+        if (text.contentHash !== args.contentHash)
+            throw new Error("Invalid retained simulation result");
+        return {
+            content: await retainedTextFragment(ctx, text, args.index),
+            contentHash: text.contentHash,
+            sizeBytes: text.sizeBytes,
+            characters: text.characters,
+            fragmentCount: text.fragmentHashes.length,
+        };
+    },
+});
+
+export const inspect = internalAction({
+    args: { missionId: v.id("agentMissions") },
+    returns: simulationInspection,
+    handler: async (ctx, args): Promise<Infer<typeof simulationInspection>> => {
+        const { snapshot, invocationIds, quotation, resultHash } =
+            await ctx.runQuery(
+                internal.execution.fixtures.simulationInspectionSnapshot,
+                args,
+            );
+        if (resultHash) {
+            const read =
+                internal.execution.fixtures.simulationInspectionResultFragment;
+            const scope = { ...args, contentHash: resultHash };
+            const first = await ctx.runQuery(read, { ...scope, index: 0 });
+            const fragments = [first.content];
+            for (let index = 1; index < first.fragmentCount; index++)
+                fragments.push(
+                    (await ctx.runQuery(read, { ...scope, index })).content,
+                );
+            const result: unknown = JSON.parse(
+                verifyRetainedText(first, fragments.join("")),
+            );
+            if (!validate(agentResultValidator, result))
+                throw new Error("Invalid retained simulation result");
+            snapshot.completionCount =
+                result.kind === "saved_material_inspection_v1"
+                    ? result.captureIds.length
+                    : 0;
+        }
+        if (!quotation) return snapshot;
+        let contextIncludesReturnedQuotation = false;
+        for (const invocationId of invocationIds) {
+            for (const part of ["admitted", "request"] as const) {
+                const input = await simulationInput(ctx, {
+                    ...args,
+                    invocationId,
+                    part,
+                });
+                if (input !== null && inputContainsQuotation(input, quotation))
+                    contextIncludesReturnedQuotation = true;
+            }
+        }
+        return { ...snapshot, contextIncludesReturnedQuotation };
     },
 });
 
@@ -2446,7 +2640,7 @@ export const prepareRequestApprovalFixture = internalMutation({
             {
                 missionId: mission._id,
                 expectedGeneration: mission.generation,
-                cause: "fixture-request-approval",
+                cause: REQUEST_APPROVAL_FIXTURE_CAUSE,
                 input: {
                     kind: "request_approval",
                     action: "pause_research",

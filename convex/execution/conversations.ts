@@ -7,14 +7,30 @@ import {
     type QueryCtx,
     query,
 } from "@convex/_generated/server";
+import type {
+    AnalystTurnWording,
+    PreparedAnalystWording,
+} from "@convex/domain/preparedAnalystWording";
 import { savedMaterialBinding } from "@convex/domain/savedMaterialOperations";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
-import { readFramingCitationPolicy } from "@convex/framingCitationPolicy";
+import { workbenchInstructionMessageIds } from "@convex/domain/workbenchInstructions";
 import {
-    createConversationStorage,
-    readConversationMessages,
-    saveConversationMessage,
-} from "@convex/integrations/agentStorage";
+    conversationBodyAccess,
+    conversationBodyReference,
+    conversationPageBodies,
+    deliveryBodyHash,
+    readConversationWording,
+    retainedDeliveryBody,
+    retainedDeliveryKey,
+    retainedReplyKey,
+} from "@convex/execution/conversationBodies";
+import {
+    adoptRetainedTextKey,
+    retainedTextFragment,
+    retainedTextParts,
+    stageRetainedText,
+} from "@convex/execution/retainedText";
+import { readFramingCitationPolicy } from "@convex/framingCitationPolicy";
 import {
     piMissionStateText,
     piRequiredContextTokens,
@@ -35,6 +51,8 @@ import {
     HISTORY_PAGE_SIZE,
     MAX_CONTEXT_BYTES,
     MAX_OPERATION_RESULT_BYTES,
+    RESPONSE_CONTROL_MAX_INPUT_BYTES,
+    RETAINED_TEXT_INLINE_BYTES,
 } from "@convex/resourcePolicy";
 import {
     localBrowserFixturesEnabled,
@@ -71,7 +89,6 @@ async function conversationForRun(ctx: QueryCtx, runId: Id<"researchRuns">) {
         .unique();
 }
 
-/** Every newly processed batch receives one atomic, immutable visibility revision. */
 async function advancePublication(
     ctx: MutationCtx,
     conversationId: Id<"agentConversations">,
@@ -168,6 +185,54 @@ export function isApprovalReceiptMessage(
     );
 }
 
+/** Atomically creates a delivery with its own body while preserving the request identity. */
+async function insertRetainedDelivery(
+    ctx: MutationCtx,
+    fields: Omit<
+        Doc<"agentMessageDeliveries">,
+        "_id" | "_creationTime" | "bodyTextId" | "bodyContentHash"
+    >,
+    text: string | Doc<"retainedTexts">,
+) {
+    if (typeof text !== "string") {
+        if (
+            fields.role !== "assistant" ||
+            fields.delivery !== "reply" ||
+            !fields.turnId ||
+            fields.contentHash !== text.contentHash
+        )
+            throw executionError("publication_conflict");
+        await adoptRetainedTextKey(
+            ctx,
+            text._id,
+            retainedReplyKey(fields.turnId),
+        );
+        // A reply's publication identity already is its body digest.
+        return ctx.db.insert("agentMessageDeliveries", {
+            ...fields,
+            bodyTextId: text._id,
+        });
+    }
+    const deliveryId = await ctx.db.insert("agentMessageDeliveries", fields);
+    const key = retainedDeliveryKey({ ...fields, _id: deliveryId });
+    if (new TextEncoder().encode(text).length > RETAINED_TEXT_INLINE_BYTES)
+        throw executionError("invocation_result_not_prepared");
+    const { parts, manifest } = retainedTextParts(text);
+    let bodyTextId: Id<"retainedTexts"> | undefined;
+    for (const [index, content] of parts.entries())
+        bodyTextId = await stageRetainedText(ctx, key, {
+            ...manifest,
+            index,
+            content,
+        });
+    if (!bodyTextId) throw executionError("conversation_message_unavailable");
+    await ctx.db.patch(deliveryId, {
+        bodyTextId,
+        bodyContentHash: manifest.contentHash,
+    });
+    return deliveryId;
+}
+
 /** Persists a server-owned control or approval receipt without admitting a response or changing its queue. */
 export async function recordControlExchange(
     ctx: MutationCtx,
@@ -206,44 +271,35 @@ export async function recordControlExchange(
         args.exchange.kind === "command"
             ? args.exchange.name
             : args.exchange.text;
-    const storageMessageRef = await saveConversationMessage(
+    const messageId = await insertRetainedDelivery(
         ctx,
-        conversation.storageRef,
-        "user",
+        {
+            runId: conversation.runId,
+            conversationId: conversation._id,
+            requestKey: args.requestKey,
+            contentHash: args.contentHash,
+            role: "user",
+            delivery: "control",
+            status: "processed",
+            publicationRevision,
+            createdAt,
+        },
         userText,
     );
-    const messageId = await ctx.db.insert("agentMessageDeliveries", {
-        runId: conversation.runId,
-        conversationId: conversation._id,
-        requestKey: args.requestKey,
-        contentHash: args.contentHash,
-        storageMessageRef,
-        role: "user",
-        delivery: "control",
-        status: "processed",
-        publicationRevision,
-        createdAt,
-    });
-    const confirmationRef = await saveConversationMessage(
+    const confirmationMessageId = await insertRetainedDelivery(
         ctx,
-        conversation.storageRef,
-        "assistant",
-        args.text,
-    );
-    const confirmationMessageId = await ctx.db.insert(
-        "agentMessageDeliveries",
         {
             runId: conversation.runId,
             conversationId: conversation._id,
             requestKey: `${args.exchange.kind === "approval" ? APPROVAL_RECEIPT_KEY_PREFIX : "control-reply:"}${messageId}`,
             contentHash: sha256Hex(args.text),
-            storageMessageRef: confirmationRef,
             role: "assistant",
             delivery: "reply",
             status: "processed",
             publicationRevision,
             createdAt,
         },
+        args.text,
     );
     await ctx.db.patch(messageId, {
         ...(args.exchange.kind === "command"
@@ -297,25 +353,22 @@ export async function recordApprovalNotice(
         .unique();
     if (existing) return existing._id;
     const publicationRevision = await advancePublication(ctx, conversation._id);
-    const storageMessageRef = await saveConversationMessage(
+    return insertRetainedDelivery(
         ctx,
-        conversation.storageRef,
-        "assistant",
+        {
+            runId: conversation.runId,
+            conversationId: conversation._id,
+            requestKey,
+            contentHash: sha256Hex(args.text),
+            role: "assistant",
+            delivery: "notice",
+            status: "processed",
+            approvalRequestId: args.requestId,
+            publicationRevision,
+            createdAt: Date.now(),
+        },
         args.text,
     );
-    return ctx.db.insert("agentMessageDeliveries", {
-        runId: conversation.runId,
-        conversationId: conversation._id,
-        requestKey,
-        contentHash: sha256Hex(args.text),
-        storageMessageRef,
-        role: "assistant",
-        delivery: "notice",
-        status: "processed",
-        approvalRequestId: args.requestId,
-        publicationRevision,
-        createdAt: Date.now(),
-    });
 }
 
 const messageInput = v.object({
@@ -337,7 +390,6 @@ export async function ensureDossierConversation(
         throw executionError("not_authorized");
     let conversation = await conversationForRun(ctx, run._id);
     if (!conversation) {
-        const storageRef = await createConversationStorage(ctx, visitor._id);
         const setting = await ctx.db
             .query("agentModelSettings")
             .withIndex("by_agent", (q) => q.eq("agent", "workbench"))
@@ -382,7 +434,6 @@ export async function ensureDossierConversation(
                   }
                 : {}),
             runId: run._id,
-            storageRef,
             queuedCount: 0,
             createdAt: Date.now(),
         });
@@ -442,33 +493,30 @@ export async function submitAuthorizedMessage(
         throw executionError("active_turn_required");
     if (args.delivery === "queue" && args.turnId)
         throw executionError("invalid_delivery_target");
-    const storageMessageRef = await saveConversationMessage(
+    const messageId = await insertRetainedDelivery(
         ctx,
-        conversation.storageRef,
-        "user",
+        {
+            runId: args.runId,
+            conversationId: conversation._id,
+            framingBaseRevisionId: run.currentFramingRevisionId,
+            requestKey: args.requestKey,
+            contentHash,
+            role: "user",
+            ...(args.delivery === "steer"
+                ? {
+                      nativeInputSequence: await nextNativeInputSequence(
+                          ctx,
+                          args.runId,
+                      ),
+                  }
+                : {}),
+            delivery: args.delivery,
+            status: args.delivery === "steer" ? "active" : "queued",
+            turnId: args.delivery === "steer" ? turn?._id : undefined,
+            createdAt: Date.now(),
+        },
         args.text,
     );
-    const messageId = await ctx.db.insert("agentMessageDeliveries", {
-        runId: args.runId,
-        conversationId: conversation._id,
-        storageMessageRef,
-        framingBaseRevisionId: run.currentFramingRevisionId,
-        requestKey: args.requestKey,
-        contentHash,
-        role: "user",
-        ...(args.delivery === "steer"
-            ? {
-                  nativeInputSequence: await nextNativeInputSequence(
-                      ctx,
-                      args.runId,
-                  ),
-              }
-            : {}),
-        delivery: args.delivery,
-        status: args.delivery === "steer" ? "active" : "queued",
-        turnId: args.delivery === "steer" ? turn?._id : undefined,
-        createdAt: Date.now(),
-    });
     if (args.delivery === "steer" && turn) {
         await ctx.db.patch(turn._id, {
             instructionVersion: turn.instructionVersion + 1,
@@ -661,10 +709,20 @@ export const get = query({
     },
 });
 
+/** History remains readable across research cancellation until the dossier is withdrawn. */
+export async function requireConversationHistoryRun(
+    ctx: QueryCtx,
+    runId: Id<"researchRuns">,
+) {
+    const { run } = await requireWorkspaceRun(ctx, runId);
+    if (run.withdrawnAt !== undefined) throw executionError("not_authorized");
+}
+
 export const listMessages = query({
     args: {
         runId: v.id("researchRuns"),
         paginationOpts: paginationOptsValidator,
+        bodyAccess: conversationBodyAccess,
     },
     returns: paginationResultValidator(
         v.object({
@@ -678,13 +736,14 @@ export const listMessages = query({
             ).fields,
             _id: v.id("agentMessageDeliveries"),
             text: v.string(),
+            body: conversationBodyReference,
             responseControl:
                 schema.tables.agentMessageDeliveries.validator.fields
                     .responseControl,
         }),
     ),
     handler: async (ctx, args) => {
-        await requireWorkspaceRun(ctx, args.runId);
+        await requireConversationHistoryRun(ctx, args.runId);
         if (args.paginationOpts.numItems > HISTORY_PAGE_SIZE)
             throw executionError("history_page_capacity");
         const page = await ctx.db
@@ -693,16 +752,12 @@ export const listMessages = query({
             .paginate(args.paginationOpts);
         const conversation = await conversationForRun(ctx, args.runId);
         if (!conversation) return { ...page, page: [] };
-        const texts = await readConversationMessages(
-            ctx,
-            conversation.storageRef,
-            page.page.map((message) => message.storageMessageRef),
-        );
+        const bodies = conversationPageBodies(page.page);
         return {
             ...page,
             page: page.page.map((message, index) => {
-                const text = texts[index];
-                if (text === undefined)
+                const body = bodies[index];
+                if (!body)
                     throw executionError("conversation_message_unavailable");
                 return {
                     _id: message._id,
@@ -712,7 +767,7 @@ export const listMessages = query({
                     delivery: message.delivery,
                     status: message.status,
                     createdAt: message.createdAt,
-                    text,
+                    ...body,
                     ...(message.responseControl
                         ? { responseControl: message.responseControl }
                         : {}),
@@ -722,27 +777,149 @@ export const listMessages = query({
     },
 });
 
+/** A delivery's body continues independently of the delivery list cursor. */
+export const readMessageBody = query({
+    args: {
+        runId: v.id("researchRuns"),
+        messageId: v.id("agentMessageDeliveries"),
+        contentHash: v.string(),
+        index: v.number(),
+    },
+    returns: v.object({
+        content: v.string(),
+        offset: v.number(),
+        totalCharacters: v.number(),
+        nextIndex: v.union(v.number(), v.null()),
+    }),
+    handler: async (ctx, args) => {
+        await requireConversationHistoryRun(ctx, args.runId);
+        const delivery = await ctx.db.get(args.messageId);
+        if (
+            !delivery ||
+            delivery.runId !== args.runId ||
+            deliveryBodyHash(delivery) !== args.contentHash
+        )
+            throw executionError("conversation_message_unavailable");
+        const text = await retainedDeliveryBody(ctx, delivery);
+        const content = await retainedTextFragment(ctx, text, args.index);
+        const offset = args.index === 0 ? 0 : text.fragmentEnds[args.index - 1];
+        const end = text.fragmentEnds[args.index];
+        const nextIndex =
+            args.index + 1 === text.fragmentHashes.length
+                ? null
+                : args.index + 1;
+        if (
+            offset === undefined ||
+            end !== offset + content.length ||
+            (nextIndex === null && end !== text.characters)
+        )
+            throw executionError("conversation_message_unavailable");
+        return { content, offset, totalCharacters: text.characters, nextIndex };
+    },
+});
+
 /** Only the claimed turn's messages enter required context; queued messages remain outside it. */
 export async function conversationInstructions(
     ctx: QueryCtx,
     mission: Doc<"agentMissions">,
+    loaded?: Map<Id<"agentMessageDeliveries">, string>,
 ) {
     if (!mission.conversationTurnId) return undefined;
     const turn = await ctx.db.get(mission.conversationTurnId);
     if (!turn || turn.missionId !== mission._id || turn.status !== "active")
         throw executionError("active_turn_required");
-    return readTurnInstructions(ctx, turn);
+    return readTurnInstructions(ctx, turn, loaded);
+}
+
+/** The delivery index order is also the order of the native analyst input lot. */
+export function analystTurnDeliveries(
+    ctx: QueryCtx,
+    turnId: Id<"agentConversationTurns">,
+) {
+    return ctx.db
+        .query("agentMessageDeliveries")
+        .withIndex("by_turn", (q) => q.eq("turnId", turnId))
+        .filter((q) => q.eq(q.field("role"), "user"));
+}
+
+/** Revalidates action-prepared wording against current turn and transmitted request identities. */
+export async function readPreparedTurnWording(
+    ctx: QueryCtx,
+    mission: Doc<"agentMissions">,
+    wording: PreparedAnalystWording,
+): Promise<AnalystTurnWording | null> {
+    const turn = mission.conversationTurnId
+        ? await ctx.db.get(mission.conversationTurnId)
+        : null;
+    if (turn?.missionId !== mission._id || turn.status !== "active")
+        return null;
+
+    const seen = new Set<Id<"agentMessageDeliveries">>();
+    let bytes = 0;
+    const check = async (delivery: Doc<"agentMessageDeliveries"> | null) => {
+        const expected = wording[seen.size];
+        if (
+            !expected ||
+            expected.messageId !== delivery?._id ||
+            !delivery.bodyTextId ||
+            expected.contentHash !== deliveryBodyHash(delivery) ||
+            delivery.role !== "user" ||
+            delivery.runId !== mission.runId ||
+            delivery.conversationId !== turn.conversationId
+        )
+            return null;
+        const manifest = await retainedDeliveryBody(ctx, delivery);
+        if (
+            expected.text !== undefined &&
+            sha256Hex(expected.text) !== manifest.contentHash
+        )
+            return null;
+        bytes += manifest.sizeBytes;
+        seen.add(expected.messageId);
+        return expected;
+    };
+    const messages: AnalystTurnWording["messages"] = [];
+    for await (const delivery of analystTurnDeliveries(ctx, turn._id)) {
+        const expected = await check(delivery);
+        if (!expected) return null;
+        messages.push({
+            ...expected,
+            delivery: delivery.delivery,
+            receivedAt: new Date(delivery.createdAt).toISOString(),
+        });
+    }
+    const transmitted: PreparedAnalystWording = [];
+    for (const id of await workbenchInstructionMessageIds(ctx, mission.runId)) {
+        if (seen.has(id)) continue;
+        const expected = await check(await ctx.db.get(id));
+        if (!expected) return null;
+        transmitted.push(expected);
+    }
+    if (
+        seen.size !== wording.length ||
+        wording.some(
+            (message) =>
+                (message.text !== undefined) !==
+                bytes <= RESPONSE_CONTROL_MAX_INPUT_BYTES,
+        )
+    )
+        return null;
+    return {
+        turnId: turn._id,
+        instructionVersion: turn.instructionVersion,
+        messages,
+        transmitted,
+    };
 }
 
 export async function readTurnInstructions(
     ctx: QueryCtx,
     turn: Doc<"agentConversationTurns">,
+    loaded?: Map<Id<"agentMessageDeliveries">, string>,
 ) {
     const conversation = await ctx.db.get(turn.conversationId);
     if (!conversation) throw executionError("conversation_unavailable");
-    const messages = ctx.db
-        .query("agentMessageDeliveries")
-        .withIndex("by_turn", (q) => q.eq("turnId", turn._id));
+    const messages = analystTurnDeliveries(ctx, turn._id);
     const result = {
         turnId: turn._id,
         instructionVersion: turn.instructionVersion,
@@ -765,11 +942,7 @@ export async function readTurnInstructions(
     let bytes = new TextEncoder().encode(JSON.stringify(result)).length;
     const batch: Doc<"agentMessageDeliveries">[] = [];
     const appendBatch = async () => {
-        const texts = await readConversationMessages(
-            ctx,
-            conversation.storageRef,
-            batch.map((message) => message.storageMessageRef),
-        );
+        const texts = await readConversationWording(ctx, batch, loaded);
         for (const [index, message] of batch.entries()) {
             const text = texts[index];
             if (text === undefined)
@@ -790,7 +963,6 @@ export async function readTurnInstructions(
         batch.length = 0;
     };
     for await (const message of messages) {
-        if (message.role !== "user") continue;
         batch.push(message);
         if (batch.length === HISTORY_PAGE_SIZE) await appendBatch();
     }
@@ -814,50 +986,60 @@ export async function requireInstructionVersion(
         throw executionError("stale_instructions");
 }
 
-/** Publication and delivery acknowledgement share the application/component transaction. */
+/** Publishes the retained reply and acknowledges delivery in one transaction. */
 export async function publishTurn(
     ctx: MutationCtx,
     mission: Doc<"agentMissions">,
-    text: string,
+    reply: string | Doc<"retainedTexts">,
     instructionVersion: number | undefined,
+    preparedText?: Doc<"retainedTexts">,
 ) {
     if (!mission.conversationTurnId)
         throw executionError("active_turn_required");
     const turn = await ctx.db.get(mission.conversationTurnId);
     if (!turn) throw executionError("active_turn_required");
-    const hash = sha256Hex(text);
+    const text = typeof reply === "string" ? reply : undefined;
+    const preparedBody = typeof reply === "string" ? preparedText : reply;
+    const hash =
+        typeof reply === "string" ? sha256Hex(reply) : reply.contentHash;
     if (turn.publishedMessageId) {
         if (turn.publicationHash !== hash)
             throw executionError("publication_conflict");
-        return turn.publishedMessageId;
+        const existing = await ctx.db.get(turn.publishedMessageId);
+        if (!existing) throw executionError("publication_conflict");
+        return { bodyTextId: existing.bodyTextId, contentHash: hash };
     }
     await requireInstructionVersion(ctx, mission, instructionVersion);
-    if (!text.trim()) throw executionError("response_capacity");
+    if (text !== undefined && !text.trim())
+        throw executionError("response_capacity");
     const conversation = await ctx.db.get(turn.conversationId);
     if (!conversation) throw executionError("conversation_unavailable");
     const publicationRevision = await advancePublication(ctx, conversation._id);
-    const storageMessageRef = await saveConversationMessage(
+    const requestKey = retainedReplyKey(turn._id);
+    if (preparedBody && preparedBody.contentHash !== hash)
+        throw executionError("publication_conflict");
+    const messageId = await insertRetainedDelivery(
         ctx,
-        conversation.storageRef,
-        "assistant",
-        text,
+        {
+            ...(turn.responseControl?.summary
+                ? { responseControl: turn.responseControl.summary }
+                : {}),
+            runId: mission.runId,
+            conversationId: conversation._id,
+            requestKey,
+            contentHash: hash,
+            role: "assistant",
+            delivery: "reply",
+            status: "processed",
+            publicationRevision,
+            turnId: turn._id,
+            createdAt: Date.now(),
+        },
+        preparedBody ?? reply,
     );
-    const messageId = await ctx.db.insert("agentMessageDeliveries", {
-        ...(turn.responseControl?.summary
-            ? { responseControl: turn.responseControl.summary }
-            : {}),
-        runId: mission.runId,
-        conversationId: conversation._id,
-        storageMessageRef,
-        requestKey: `reply:${turn._id}`,
-        contentHash: hash,
-        role: "assistant",
-        delivery: "reply",
-        status: "processed",
-        publicationRevision,
-        turnId: turn._id,
-        createdAt: Date.now(),
-    });
+    const bodyTextId =
+        preparedBody?._id ?? (await ctx.db.get(messageId))?.bodyTextId;
+    if (!bodyTextId) throw executionError("publication_conflict");
     const messages = ctx.db
         .query("agentMessageDeliveries")
         .withIndex("by_turn", (q) => q.eq("turnId", turn._id));
@@ -890,7 +1072,7 @@ export async function publishTurn(
             internal.execution.conversations.pumpWorkbench,
             { runId: mission.runId },
         );
-    return messageId;
+    return { bodyTextId, contentHash: hash };
 }
 
 /** Cancellation drains deliveries in bounded transactions, retaining every original message. */
@@ -1091,13 +1273,13 @@ export const startTurn = internalMutation({
         if (!existingTurnId && definition.nativeConversation) {
             const admitted = await ctx.db.get(turnId);
             if (!admitted) throw executionError("active_turn_required");
-            const instructions = await readTurnInstructions(ctx, admitted);
+            const messages = await analystTurnDeliveries(
+                ctx,
+                admitted._id,
+            ).collect();
             await ctx.db.patch(turnId, {
-                nativeInitialMessageIds: instructions.messages.map(
-                    (message) => message.messageId,
-                ),
-                nativeInitialInstructionVersion:
-                    instructions.instructionVersion,
+                nativeInitialMessageIds: messages.map((message) => message._id),
+                nativeInitialInstructionVersion: admitted.instructionVersion,
             });
         }
         return { turnId, missionId };

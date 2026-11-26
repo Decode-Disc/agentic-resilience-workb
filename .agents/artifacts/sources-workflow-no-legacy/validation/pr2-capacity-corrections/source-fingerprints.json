@@ -1,0 +1,15 @@
+{
+  "convex/execution/executionProtocol.ts": "c708a53aea7d0747a8a964be165fcc3d7f955ce7e39715326984c82c682ad103",
+  "convex/execution/invocationLifecycle.ts": "3f0d660349976b53ca7b558236615ee8750638e58d47ebd492ecc5a8d8beb010",
+  "convex/execution/journal.ts": "3244ff5840404803db7dc141aa8df45e3d39c4064b3387d51315588c14563fc3",
+  "convex/integrations/piInvocation.ts": "f23ec4bb2f605a8e56f5fd45b8959c21bac761be09b0f6a958ac03fb8ab90e07",
+  "convex/integrations/piMission.ts": "4871a0d75510137978af0f54e30ea47f560f6a7ebe1156fc5aa54d443e2317b9",
+  "convex/integrations/agentStorage.ts": "d26769dc2ab763ad1641411a209b5fda60c6ea7c2d88dae339415aa5b6c68343",
+  "src/components/chat/conversation-thread.tsx": "094f431a3b5b023d401c5db79d6bea08bca0cca74989fb446b9e076971d41ff2",
+  "src/components/chat/workbench-conversation.tsx": "a1c1c20690a1ca487d5a18127cc3e2d745fa80374a858cbff44b6e530760efff",
+  "src/components/workspace/start/start-screens.tsx": "026d6404c8376fd3c92cce48998113a0911d113244d1d4a7a0a680d8c124abf9",
+  "src/__tests__/convex/execution/large-response.test.ts": "dabdbff82c630fecdc819b9d46db7fef8e5d195cda1097c4d103da07ba455278",
+  "convex/execution/agentDefinition.ts": "091d905ea0141e3a95e0264c2188e418aac7f0a3c19cd6d94776b65d21dc0a6b",
+  "convex/domain/conversationValidation.ts": "ec27c7d428f5d31281c0ae3c29b89a6a9bad044c9d989d07e1c403d6d5d2add0",
+  "convex/domain/workbenchAgent.ts": "e928617fd974c8b73882a8c670aac9f2446e9bb61d0a26aecf2107f25e43bca5"
+}

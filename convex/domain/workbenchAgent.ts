@@ -1,7 +1,11 @@
+import type { Doc, Id } from "@convex/_generated/dataModel";
+import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
+import type { AnalystTurnWording } from "@convex/domain/preparedAnalystWording";
 import {
     type AgentDefinition,
     agentToolSchemas,
     domainSnapshot,
+    hasCompletionText,
 } from "@convex/execution/agentDefinition";
 import { conversationInstructions } from "@convex/execution/conversations";
 import { executionError } from "@convex/execution/errors";
@@ -15,6 +19,7 @@ import {
 import { MAX_WORKBENCH_TURN_OPERATIONS } from "@convex/resourcePolicy";
 import {
     completeResponseControl,
+    readResponseFacts,
     responseControlContext,
 } from "@convex/responseControl";
 import {
@@ -33,7 +38,7 @@ import {
     savedMaterialWireContract,
     WORKBENCH_DOCUMENTARY_DEFINITION_VERSION,
 } from "./savedMaterialOperations";
-import { sha256Hex } from "./sourcePassages";
+import { sha256Hex, stableStringify } from "./sourcePassages";
 import {
     adjustFramingWithReceipt,
     directedWorkbenchOperations,
@@ -58,7 +63,9 @@ import {
     supportsDirectedFraming,
     supportsFramingContractCorrections,
     supportsStatefulFramingSchema,
+    type WorkbenchOperationAdmission,
 } from "./workbenchContracts";
+import { prepareResponseReviewDraft } from "./workbenchResponseControlContracts";
 
 const framingProposalInstruction =
     "Before research starts, propose one relevant activity or workflow and a useful research program through adjust_framing. Company knowledge before acquisition is tentative, never established evidence.";
@@ -233,14 +240,9 @@ function nativeWorkbenchOperation(
     };
 }
 
-type WorkbenchToolAvailability = {
-    single: boolean;
-    framing: false | ReturnType<typeof framingWriteState>;
-    approvals: boolean;
-    sourceRequest: "legacy" | "modern" | null;
-    savedMaterial: boolean;
-    preparedNeeds: boolean;
-};
+type WorkbenchToolAvailability = NonNullable<
+    WorkbenchOperationAdmission["toolAvailability"]
+>;
 
 function projectWorkbenchOperation(
     name: string,
@@ -304,6 +306,252 @@ const workbenchConversationInstructions = [
     "A refused control did not change research state. Continue independent authorized work, such as recording a documentary request, and ask a concise clarification for ambiguous intent. The application supplies control confirmations; keep your explanation focused on the analyst's question and never announce anticipated research execution.",
     ...workbenchResponseGuidance,
 ] as const;
+
+/** Resolves the framing prerequisite and code-owned confirmations from current turn state. */
+async function readWorkbenchReplyState(
+    ctx: QueryCtx,
+    mission: Doc<"agentMissions">,
+    version: number,
+    instructionTexts?: Map<Id<"agentMessageDeliveries">, string>,
+    wording?: AnalystTurnWording,
+) {
+    const instructions =
+        wording ??
+        (await conversationInstructions(ctx, mission, instructionTexts));
+    if (!instructions?.messages.length)
+        return { kind: "ready", confirmations: [], review: undefined } as const;
+    const commands = instructions.messages.flatMap((message) => {
+        const action =
+            "contentHash" in message
+                ? message.command
+                : explicitResearchCommand(message.text);
+        return action ? [{ message, action }] : [];
+    });
+    const confirmationOnly = commands.length === instructions.messages.length;
+    const run = await ctx.db.get(mission.runId);
+    if (!run) throw executionError("run_unavailable");
+    if (
+        supportsFramingContractCorrections(version) &&
+        !run.fixedFramingRevisionId &&
+        !instructions.messages.some((message) =>
+            "preservesFraming" in message
+                ? message.preservesFraming
+                : explicitFramingPreservation(message.text),
+        ) &&
+        !confirmationOnly
+    ) {
+        const deliveries = await Promise.all(
+            instructions.messages.map((message) =>
+                ctx.db.get(message.messageId),
+            ),
+        );
+        if (
+            deliveries.some(
+                (message) =>
+                    message?.requestKey === INITIAL_FRAMING_MESSAGE_KEY,
+            )
+        ) {
+            const framing = run.currentFramingRevisionId
+                ? await ctx.db.get(run.currentFramingRevisionId)
+                : null;
+            if (!hasFramingProgram(framing?.content))
+                return {
+                    kind: "correct" as const,
+                    feedback: {
+                        code: "framing_program_required",
+                        issues: [
+                            {
+                                path: "framing",
+                                expected:
+                                    "Save a usable provisional program through adjust_framing before replying. An unresolved event can remain open; preserve analyst edits and current authority. A prose proposal alone is not a saved program.",
+                            },
+                        ],
+                    },
+                };
+        }
+    }
+    const requests = await ctx.db
+        .query("agentOperationRequests")
+        .withIndex("by_mission_and_status", (q) =>
+            q.eq("missionId", mission._id).eq("status", "completed"),
+        )
+        .take(MAX_WORKBENCH_TURN_OPERATIONS + 1);
+    if (requests.length > MAX_WORKBENCH_TURN_OPERATIONS)
+        return { kind: "blocked" as const, code: "context_capacity" };
+    const research = commands.length ? await readResearchState(ctx, run) : null;
+    const confirmations = research
+        ? commands.map(({ message, action }) => {
+              const targetApprovalAction =
+                  action === "pause"
+                      ? "pause_research"
+                      : action === "resume"
+                        ? "resume_research"
+                        : undefined;
+              const executed = requests.some((request) => {
+                  if (request.input.kind === "control_research")
+                      return (
+                          request.input.messageId === message.messageId &&
+                          request.input.action === action &&
+                          request.outcome?.kind === "success" &&
+                          !request.adoptionRefusalCode
+                      );
+                  if (
+                      targetApprovalAction === undefined ||
+                      request.input.kind !== "request_approval" ||
+                      request.input.messageId !== message.messageId
+                  )
+                      return false;
+                  const result = requestApprovalResult(request);
+                  return (
+                      result?.status === "applied" &&
+                      result.action === targetApprovalAction
+                  );
+              });
+              return researchControlConfirmation(action, executed, research);
+          })
+        : [];
+    const framingReceipt = await framingTurnReceipt(
+        ctx,
+        requests,
+        run,
+        version,
+    );
+    if (framingReceipt) confirmations.push(framingReceipt.confirmation);
+    for (const request of requests) {
+        if (
+            request.input.kind !== "transmit_source_request" ||
+            request.outcome?.kind !== "success" ||
+            request.adoptionRefusalCode
+        )
+            continue;
+        const instruction = await ctx.db
+            .query("workbenchInstructions")
+            .withIndex("by_request", (q) => q.eq("requestId", request._id))
+            .unique();
+        if (!instruction)
+            throw executionError("instruction_receipt_unavailable");
+        confirmations.push(instruction.outcome);
+    }
+    return {
+        kind: "ready" as const,
+        confirmations,
+        review: {
+            run,
+            confirmationOnly,
+            requests,
+            framingReceipt,
+        },
+    };
+}
+
+async function reviewWorkbenchReply(
+    ctx: MutationCtx,
+    mission: Doc<"agentMissions">,
+    state: Extract<
+        Awaited<ReturnType<typeof readWorkbenchReplyState>>,
+        { kind: "ready" }
+    >,
+    invocation: Doc<"agentInvocations">,
+    draft: ReturnType<typeof prepareResponseReviewDraft>,
+    input: unknown,
+    instructionTexts: Map<Id<"agentMessageDeliveries">, string>,
+    preparedFacts?: {
+        facts: Awaited<ReturnType<typeof readResponseFacts>>;
+        exactRevision?: string;
+    },
+) {
+    return state.review
+        ? completeResponseControl(
+              ctx,
+              mission,
+              { ...state.review, invocation, draft, input },
+              instructionTexts,
+              preparedFacts,
+          )
+        : { kind: "completed" as const };
+}
+
+/** Projects the exact reply inputs and binds the complete response-review facts. */
+export async function workbenchReplyPreparation(
+    ctx: QueryCtx,
+    mission: Doc<"agentMissions">,
+    instructionTexts = new Map<Id<"agentMessageDeliveries">, string>(),
+    wording?: AnalystTurnWording,
+) {
+    const state = await readWorkbenchReplyState(
+        ctx,
+        mission,
+        mission.definitionVersion,
+        instructionTexts,
+        wording,
+    );
+    if (state.kind !== "ready") return null;
+    const facts = state.review
+        ? await readResponseFacts(
+              ctx,
+              mission,
+              state.review.run,
+              state.review,
+              instructionTexts,
+              wording,
+          )
+        : null;
+    const rendering = {
+        confirmationOnly: state.review?.confirmationOnly ?? false,
+        confirmations: state.confirmations,
+    };
+    return {
+        ...rendering,
+        ...(facts?.kind === "ready" && facts.factsRevisionTemplate
+            ? { factsRevisionTemplate: facts.factsRevisionTemplate }
+            : {}),
+        async adopt(
+            mutation: MutationCtx,
+            invocation: Doc<"agentInvocations">,
+            draft: ReturnType<typeof prepareResponseReviewDraft> | undefined,
+            exactFactsRevision?: string,
+        ) {
+            if (!draft || !invocation.workbenchCompletionAdmission)
+                throw executionError("invocation_result_invalid");
+            return reviewWorkbenchReply(
+                mutation,
+                mission,
+                state,
+                invocation,
+                draft,
+                invocation.workbenchCompletionAdmission,
+                instructionTexts,
+                facts
+                    ? { facts, exactRevision: exactFactsRevision }
+                    : undefined,
+            );
+        },
+        factsHash: sha256Hex(
+            stableStringify({
+                ...rendering,
+                ...(facts?.kind === "ready" && facts.factsRevisionTemplate
+                    ? { factsRevisionHash: facts.factsRevisionHash }
+                    : {}),
+                facts:
+                    facts?.kind === "ready"
+                        ? facts.factsJson
+                        : (facts?.code ?? null),
+            }),
+        ),
+    };
+}
+
+function renderWorkbenchReply(
+    explanation: string,
+    rendering: { confirmationOnly: boolean; confirmations: readonly string[] },
+) {
+    return [
+        ...new Set([
+            ...(rendering.confirmationOnly ? [] : [explanation]),
+            ...rendering.confirmations,
+        ]),
+    ].join("\n\n");
+}
 
 /** Workbench owns its method; execution owns instruction placement and current state. */
 export const workbenchDefinition: AgentDefinition & {
@@ -412,14 +660,23 @@ export const workbenchDefinition: AgentDefinition & {
         ...workbenchMethodInstructions,
         ...workbenchConversationInstructions,
     ].join("\n"),
-    async context(ctx, mission, run) {
-        const base = await readWorkbenchFacts(ctx, run, mission);
+    async context(ctx, mission, run, options) {
+        const base = await readWorkbenchFacts(
+            ctx,
+            run,
+            mission,
+            options?.instructionTexts,
+        );
         if (base.kind === "blocked") return base;
         const state: typeof base = {
             ...base,
             context: {
                 ...base.context,
-                responseControl: await responseControlContext(ctx, mission),
+                responseControl: await responseControlContext(
+                    ctx,
+                    mission,
+                    options?.correctionAdmission,
+                ),
             },
         };
         return state;
@@ -520,155 +777,71 @@ export const workbenchDefinition: AgentDefinition & {
             return "Research has started and framing is fixed. Explain the limitation instead of editing the fixed research program.";
         return undefined;
     },
-    async complete(ctx, mission, response, admittedInput, invocation) {
-        if (!("text" in response) || !response.text.trim())
-            return { kind: "blocked", code: "invalid_completion" };
-        const completion = {
-            kind: "completed" as const,
-            result: { kind: "workbench_v1" as const, text: response.text },
-        };
-
-        if (!("text" in completion.result))
-            throw executionError("invalid_completion");
-        const instructions = await conversationInstructions(ctx, mission);
-        if (!instructions?.messages.length) return completion;
-        const commands = instructions.messages.flatMap((message) => {
-            const action = explicitResearchCommand(message.text);
-            return action ? [{ message, action }] : [];
-        });
-        const run = await ctx.db.get(mission.runId);
-        if (!run) throw executionError("run_unavailable");
-        if (
-            supportsFramingContractCorrections(this.version) &&
-            !run.fixedFramingRevisionId &&
-            !instructions.messages.some((message) =>
-                explicitFramingPreservation(message.text),
-            ) &&
-            !instructions.messages.every((message) =>
-                explicitResearchCommand(message.text),
-            )
-        ) {
-            const deliveries = await Promise.all(
-                instructions.messages.map((message) =>
-                    ctx.db.get(message.messageId),
-                ),
+    preparedCompletion: {
+        outcomeKind: "workbench_v1",
+        analystWording: true,
+        basis: workbenchReplyPreparation,
+        async correction(ctx, mission, wording) {
+            const state = await readWorkbenchReplyState(
+                ctx,
+                mission,
+                mission.definitionVersion,
+                undefined,
+                wording,
             );
-            if (
-                deliveries.some(
-                    (message) =>
-                        message?.requestKey === INITIAL_FRAMING_MESSAGE_KEY,
-                )
-            ) {
-                const framing = run.currentFramingRevisionId
-                    ? await ctx.db.get(run.currentFramingRevisionId)
-                    : null;
-                if (!hasFramingProgram(framing?.content))
-                    return {
-                        kind: "correct",
-                        feedback: {
-                            code: "framing_program_required",
-                            issues: [
-                                {
-                                    path: "framing",
-                                    expected:
-                                        "Save a usable provisional program through adjust_framing before replying. An unresolved event can remain open; preserve analyst edits and current authority. A prose proposal alone is not a saved program.",
-                                },
-                            ],
-                        },
-                    };
-            }
-        }
-        const requests = await ctx.db
-            .query("agentOperationRequests")
-            .withIndex("by_mission_and_status", (q) =>
-                q.eq("missionId", mission._id).eq("status", "completed"),
-            )
-            .take(MAX_WORKBENCH_TURN_OPERATIONS + 1);
-        if (requests.length > MAX_WORKBENCH_TURN_OPERATIONS)
-            return { kind: "blocked", code: "context_capacity" };
-        const research = commands.length
-            ? await readResearchState(ctx, run)
-            : null;
-        const confirmations = research
-            ? commands.map(({ message, action }) => {
-                  const targetApprovalAction =
-                      action === "pause"
-                          ? "pause_research"
-                          : action === "resume"
-                            ? "resume_research"
-                            : undefined;
-                  const executed = requests.some((request) => {
-                      if (request.input.kind === "control_research")
-                          return (
-                              request.input.messageId === message.messageId &&
-                              request.input.action === action &&
-                              request.outcome?.kind === "success" &&
-                              !request.adoptionRefusalCode
-                          );
-                      if (
-                          targetApprovalAction === undefined ||
-                          request.input.kind !== "request_approval" ||
-                          request.input.messageId !== message.messageId
-                      )
-                          return false;
-                      const result = requestApprovalResult(request);
-                      return (
-                          result?.status === "applied" &&
-                          result.action === targetApprovalAction
-                      );
-                  });
-                  return researchControlConfirmation(
-                      action,
-                      executed,
-                      research,
-                  );
-              })
-            : [];
-        const framingReceipt = await framingTurnReceipt(
+            return state.kind === "ready"
+                ? { kind: "blocked", code: "mission_context_changed" }
+                : state;
+        },
+        render(proposal, basis) {
+            return {
+                result: {
+                    kind: "workbench_v1",
+                    text: renderWorkbenchReply(proposal.text, basis),
+                },
+                reviewDraft: prepareResponseReviewDraft(proposal.text),
+            };
+        },
+    },
+    async complete(
+        ctx,
+        mission,
+        response,
+        admittedInput,
+        invocation,
+        preparedReviewDraft,
+    ) {
+        if (!hasCompletionText(response))
+            return { kind: "blocked", code: "invalid_completion" };
+        const instructionTexts = new Map<
+            Id<"agentMessageDeliveries">,
+            string
+        >();
+        const state = await readWorkbenchReplyState(
             ctx,
-            requests,
-            run,
+            mission,
             this.version,
+            instructionTexts,
         );
-        if (framingReceipt) confirmations.push(framingReceipt.confirmation);
-        for (const request of requests) {
-            if (
-                request.input.kind !== "transmit_source_request" ||
-                request.outcome?.kind !== "success" ||
-                request.adoptionRefusalCode
-            )
-                continue;
-            const instruction = await ctx.db
-                .query("workbenchInstructions")
-                .withIndex("by_request", (q) => q.eq("requestId", request._id))
-                .unique();
-            if (!instruction)
-                throw executionError("instruction_receipt_unavailable");
-            confirmations.push(instruction.outcome);
-        }
-        const review = await completeResponseControl(ctx, mission, {
-            run,
+        if (state.kind !== "ready") return state;
+        const review = await reviewWorkbenchReply(
+            ctx,
+            mission,
+            state,
             invocation,
-            draft: completion.result.text,
-            input: admittedInput,
-            confirmationOnly: commands.length === instructions.messages.length,
-            requests,
-            framingReceipt,
-        });
+            preparedReviewDraft ?? prepareResponseReviewDraft(response.text),
+            admittedInput,
+            instructionTexts,
+        );
         if (review.kind !== "completed") return review;
-        const explanation = completion.result.text;
         return {
             kind: "completed",
             result: {
                 kind: "workbench_v1",
-                text: [
-                    ...new Set([
-                        ...(commands.length === instructions.messages.length
-                            ? []
-                            : [explanation]),
-                        ...confirmations,
-                    ]),
-                ].join("\n\n"),
+                text: renderWorkbenchReply(response.text, {
+                    confirmationOnly: state.review?.confirmationOnly ?? false,
+                    confirmations: state.confirmations,
+                }),
             },
         };
     },
@@ -687,49 +860,27 @@ export const workbenchDefinition: AgentDefinition & {
                       false,
                       this.version,
                   );
-        if (snapshot.responseControl?.reminder) return null;
-        const messages = snapshot.conversationInstructions?.messages ?? [];
-        return projectWorkbenchOperation(
-            name,
-            operation,
-            {
-                single: messages.length === 1,
-                framing:
-                    snapshot.framing &&
-                    !snapshot.framing.fixed &&
-                    !messages.some((message) =>
-                        explicitFramingPreservation(message.text),
-                    ) &&
-                    !(
-                        messages.length > 0 &&
-                        messages.every((message) =>
-                            explicitResearchCommand(message.text),
-                        )
-                    )
-                        ? supportsStatefulFramingSchema(this.version)
-                            ? framingWriteState(snapshot.framing)
-                            : "established"
-                        : false,
-                approvals: !!snapshot.research?.controlAvailable,
-                sourceRequest: snapshot.framing?.fixed
-                    ? snapshot.modernSources
-                        ? "modern"
-                        : "legacy"
-                    : null,
-                savedMaterial: !!snapshot.availableMaterials?.length,
-                preparedNeeds:
-                    !!snapshot.documentaryPreparation?.settledNeedIds?.length,
-            },
+        const { toolAvailability } = projectWorkbenchOperationAdmission(
+            snapshot,
             this.version,
         );
+        return toolAvailability
+            ? projectWorkbenchOperation(
+                  name,
+                  operation,
+                  toolAvailability,
+                  this.version,
+              )
+            : null;
     },
     normalizeOperationInput(name, input, value) {
-        const snapshot = domainSnapshot(value) as WorkbenchModelSnapshot;
+        const admission = projectWorkbenchOperationAdmission(
+            value,
+            this.version,
+        );
         if (
             name === "consult_prepared_material" &&
-            !snapshot.documentaryPreparation?.settledNeedIds?.some(
-                (id) => id === input.needId,
-            )
+            !admission.settledNeedIds.some((id) => id === input.needId)
         )
             throw executionError("documentary_need_not_observed", [
                 {
@@ -747,12 +898,10 @@ export const workbenchDefinition: AgentDefinition & {
             name === "request_approval" ||
             name === "transmit_source_request"
         ) {
-            const messages = snapshot.conversationInstructions?.messages ?? [];
+            const { messageIds } = admission;
             const messageId =
-                messages.length === 1
-                    ? messages[0]?.messageId
-                    : input.messageId;
-            if (!messages.some((m) => m.messageId === messageId))
+                messageIds.length === 1 ? messageIds[0] : input.messageId;
+            if (!messageIds.some((id) => id === messageId))
                 throw executionError("instruction_not_observed", [
                     {
                         path: "messageId",
@@ -765,7 +914,7 @@ export const workbenchDefinition: AgentDefinition & {
                 messageId,
                 ...(name === "adjust_framing"
                     ? {
-                          expectedRevision: snapshot.framing?.revision,
+                          expectedRevision: admission.framingRevision,
                           eventBasisRequired: true,
                       }
                     : {}),
@@ -836,6 +985,53 @@ type WorkbenchModelSnapshot = {
         messages: { messageId: string; text: string }[];
     } | null;
 };
+
+/** Freezes tool availability and the references needed to normalize returned calls. */
+export function projectWorkbenchOperationAdmission(
+    input: unknown,
+    version: number,
+): WorkbenchOperationAdmission {
+    const domain = domainSnapshot(input);
+    if ("toolAvailability" in domain)
+        return domain as WorkbenchOperationAdmission;
+    const snapshot = domain as WorkbenchModelSnapshot;
+    const messages = snapshot.conversationInstructions?.messages ?? [];
+    return {
+        toolAvailability: snapshot.responseControl?.reminder
+            ? null
+            : {
+                  single: messages.length === 1,
+                  framing:
+                      snapshot.framing &&
+                      !snapshot.framing.fixed &&
+                      !messages.some((message) =>
+                          explicitFramingPreservation(message.text),
+                      ) &&
+                      !(
+                          messages.length > 0 &&
+                          messages.every((message) =>
+                              explicitResearchCommand(message.text),
+                          )
+                      )
+                          ? supportsStatefulFramingSchema(version)
+                              ? framingWriteState(snapshot.framing)
+                              : "established"
+                          : false,
+                  approvals: !!snapshot.research?.controlAvailable,
+                  sourceRequest: snapshot.framing?.fixed
+                      ? snapshot.modernSources
+                          ? "modern"
+                          : "legacy"
+                      : null,
+                  savedMaterial: !!snapshot.availableMaterials?.length,
+                  preparedNeeds:
+                      !!snapshot.documentaryPreparation?.settledNeedIds?.length,
+              },
+        messageIds: messages.map(({ messageId }) => messageId),
+        settledNeedIds: snapshot.documentaryPreparation?.settledNeedIds ?? [],
+        framingRevision: snapshot.framing?.revision,
+    };
+}
 
 const directedFramingMethod = [
     framingProposalInstruction,

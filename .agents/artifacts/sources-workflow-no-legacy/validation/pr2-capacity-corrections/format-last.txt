@@ -1,0 +1,33 @@
+$ biome format .
+scripts/evaluations/archives/20261105T182043560Z-sources-campaign-mechanics/record.json format ━━━━━━━━━━
+
+  ! The size of the file is 3.9 MiB, which exceeds the configured maximum of 1.0 MiB for this project.
+    Use the `files.maxSize` configuration to change the maximum size of files processed, or `files.includes` to ignore the file.
+  
+
+scripts/evaluations/archives/20261105T202221619Z-configurable-campaigns-v2-final/record.json format ━━━━━━━━━━
+
+  ! The size of the file is 3.0 MiB, which exceeds the configured maximum of 1.0 MiB for this project.
+    Use the `files.maxSize` configuration to change the maximum size of files processed, or `files.includes` to ignore the file.
+  
+
+scripts/evaluations/archives/20261106T105310224Z-qualification-reliability-20261106/record.json format ━━━━━━━━━━
+
+  ! The size of the file is 3.3 MiB, which exceeds the configured maximum of 1.0 MiB for this project.
+    Use the `files.maxSize` configuration to change the maximum size of files processed, or `files.includes` to ignore the file.
+  
+
+scripts/evaluations/archives/20261106T140850381Z-local-convex-timeouts-recovery-20261106/record.json format ━━━━━━━━━━
+
+  ! The size of the file is 1.1 MiB, which exceeds the configured maximum of 1.0 MiB for this project.
+    Use the `files.maxSize` configuration to change the maximum size of files processed, or `files.includes` to ignore the file.
+  
+
+scripts/evaluations/archives/20261120T105941152Z-campaign-framing-v9-qualification-20261120-ready-lot-1-assessmen/record.json format ━━━━━━━━━━
+
+  ! The size of the file is 1.0 MiB, which exceeds the configured maximum of 1.0 MiB for this project.
+    Use the `files.maxSize` configuration to change the maximum size of files processed, or `files.includes` to ignore the file.
+  
+
+Checked 1417 files in 1763ms. No fixes applied.
+Found 5 warnings.

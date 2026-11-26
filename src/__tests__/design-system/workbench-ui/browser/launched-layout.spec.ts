@@ -86,6 +86,7 @@ for (const width of [320, 390, 768]) {
                 "I can help frame this research before it starts.",
                 { exact: true },
             );
+            await readingAnchor.scrollIntoViewIfNeeded();
             await expect(readingAnchor).toBeInViewport();
             await page.setViewportSize({ width: 1440, height: 1000 });
             await expect(readingAnchor).toBeInViewport();
@@ -99,9 +100,12 @@ for (const width of [320, 390, 768]) {
                 "Keep this question while I inspect the progress.",
             );
         }
-        await dialog
-            .getByRole("button", { name: "Research context", exact: true })
-            .click();
+        const contextTrigger = dialog.getByRole("button", {
+            name: "Research context",
+            exact: true,
+        });
+        await expect(contextTrigger).toHaveAttribute("aria-expanded", "false");
+        await contextTrigger.click();
         await expect(
             page.getByRole("region", { name: "Scope", exact: true }),
         ).toBeVisible();

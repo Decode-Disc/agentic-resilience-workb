@@ -4,6 +4,7 @@ import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import {
     dispatchSourcesOperation,
+    prepareSourcesResult,
     recordDocumentaryRead,
     seedCapturedSources,
 } from "@/__tests__/setup/sources-mission";
@@ -181,22 +182,21 @@ test("admission stops before control I/O while every previously admitted qualifi
         },
     );
     assert(invocation.kind === "ready");
+    const preparedResult = await prepareSourcesResult(
+        f.t,
+        { invocationId: invocation.invocationId, expectedGeneration: 4 },
+        {
+            kind: "complete",
+            needs: [{ needId: "common-context", unfinished: [] }],
+        },
+    );
     const completed = await f.t.run((ctx) =>
         ctx.runMutation(
             internal.execution.invocations.finish,
             {
                 invocationId: invocation.invocationId,
                 expectedGeneration: 4,
-                response: {
-                    kind: "complete",
-
-                    needs: [
-                        {
-                            needId: "common-context",
-                            unfinished: [],
-                        },
-                    ],
-                },
+                preparedResult,
             },
             {
                 transactionLimits: {

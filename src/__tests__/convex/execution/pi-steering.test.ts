@@ -1,7 +1,13 @@
 import { api, internal } from "@convex/_generated/api";
+import {
+    retainedTextParts,
+    stageRetainedText,
+} from "@convex/execution/retainedText";
 import * as pi from "@earendil-works/pi-ai";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedConversation } from "@/__tests__/setup/agent-harness";
+import { readConversationPageWithBodies } from "@/__tests__/setup/retained-messages";
+import { seedWorkbench } from "@/__tests__/setup/workbench";
 
 vi.mock("@earendil-works/pi-ai", async (original) => {
     const source = await original<typeof import("@earendil-works/pi-ai")>();
@@ -12,6 +18,106 @@ afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
+});
+
+test("native input snapshots reference large analyst bodies without loading them", async () => {
+    vi.useFakeTimers();
+    const f = await seedWorkbench(
+        true,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        12,
+        "balanced",
+        { bytesRead: 128 * 1024 },
+    );
+    const active = await f.t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId: f.runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: true,
+        },
+    );
+    assert(active);
+    const message = await f.t.run((ctx) =>
+        ctx.db
+            .query("agentMessageDeliveries")
+            .withIndex("by_turn", (q) => q.eq("turnId", active.turnId))
+            .first(),
+    );
+    assert(message?.bodyTextId);
+    const { _id: messageId, bodyTextId: original } = message;
+    const content = `${"x".repeat(170_000)}界😀`;
+    const { manifest, parts } = retainedTextParts(content);
+    for (const [index, content] of parts.entries()) {
+        const textId = await f.t.run((ctx) =>
+            stageRetainedText(ctx, "historical-large-input", {
+                ...manifest,
+                index,
+                content,
+            }),
+        );
+        if (index === parts.length - 1) {
+            await f.t.run(async (ctx) => {
+                const old = await ctx.db.get(original);
+                assert(old);
+                await ctx.db.patch(original, { key: "unused-input-fixture" });
+                await ctx.db.patch(textId, { key: old.key });
+                await ctx.db.patch(messageId, {
+                    bodyTextId: textId,
+                    bodyContentHash: manifest.contentHash,
+                });
+            });
+        }
+    }
+    const lease = await f.t.mutation(internal.execution.piStore.claim, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+        writer: "large-input",
+    });
+    const snapshot = await f.t.mutation(
+        internal.execution.piStore.inputSnapshot,
+        lease,
+    );
+    expect(snapshot.inputs[0]?.messages).toEqual([
+        { messageId, contentHash: manifest.contentHash },
+    ]);
+    const fragments = [];
+    for (const index of parts.keys()) {
+        const piece = await f.t.query(
+            internal.execution.piStore.nativeInputFragment,
+            {
+                ...lease,
+                messageId,
+                index,
+                contentHash: manifest.contentHash,
+            },
+        );
+        fragments.push(piece.content);
+        expect(piece.fragmentCount).toBe(parts.length);
+    }
+    expect(fragments.join("")).toBe(content);
+    const read = internal.execution.piStore.nativeInputFragment;
+    await expect(
+        f.t.query(read, {
+            ...lease,
+            messageId,
+            index: 0,
+            contentHash: "wrong-hash",
+        }),
+    ).rejects.toThrow("native_input_unavailable");
+    await expect(
+        f.t.query(read, {
+            ...lease,
+            writer: "superseded-writer",
+            messageId,
+            index: 0,
+            contentHash: manifest.contentHash,
+        }),
+    ).rejects.toThrow("pi_writer_fenced");
 });
 
 async function gateFirstResponse() {
@@ -106,10 +212,10 @@ test("a steer received during a Pi generation prevents stale publication and rea
     expect(await f.t.run((ctx) => ctx.db.get(started.missionId))).toMatchObject(
         { status: "completed" },
     );
-    const page = await f.client.query(
-        api.execution.conversations.listMessages,
-        { runId: f.runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
+    const page = await readConversationPageWithBodies(f.client, {
+        runId: f.runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(
         page.page.filter((message) => message.role === "assistant"),
     ).toHaveLength(1);

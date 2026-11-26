@@ -1,7 +1,22 @@
-import { invocationResponses } from "@convex/execution/journal";
 import { api, internal } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
+import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { domainSnapshot } from "@convex/execution/agentDefinition";
+import { readMissionState } from "@convex/execution/missionHistory";
+import { stageObservedBody } from "@convex/execution/observedReply";
+import {
+    retainedTextParts,
+    stageRetainedText,
+} from "@convex/execution/retainedText";
+import { preparePiReply } from "@convex/integrations/piInvocation";
+import { recoverCorrectionDraft } from "@convex/responseControl";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import { readRetainedBody } from "@/__tests__/setup/retained-history";
+import {
+    readConversationPageWithBodies,
+    readWorkbenchPageWithBodies,
+} from "@/__tests__/setup/retained-messages";
 import {
     seedWorkbench,
     workbenchAdmissionInput,
@@ -13,6 +28,200 @@ afterEach(() => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
 });
+
+test("native correction reconstructs an exact draft above the transaction read limit", async () => {
+    const { t, runId } = await seedWorkbench(
+        true,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        5,
+        "balanced",
+        { bytesRead: 128 * 1024 },
+    );
+    await t.run((ctx) => ctx.db.patch(runId, { agentExecutionVersion: 3 }));
+    const active = await t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: true,
+        },
+    );
+    assert(active);
+    const scope = { missionId: active.missionId, expectedGeneration: 1 };
+    const begun = await t.mutation(internal.execution.invocations.begin, {
+        ...scope,
+        taskKey: "large-correction",
+        provenance: "simulation",
+        nativeInput: await workbenchAdmissionInput(t, active.missionId),
+    });
+    assert(begun.kind === "ready");
+    await t.run(async (ctx) => {
+        const delivery = await ctx.db
+            .query("agentMessageDeliveries")
+            .withIndex("by_turn", (q) => q.eq("turnId", active.turnId))
+            .first();
+        assert(delivery?.bodyTextId);
+        const old = await ctx.db.get(delivery.bodyTextId);
+        assert(old);
+        const { manifest, parts } = retainedTextParts("a".repeat(30_000));
+        const [content] = parts;
+        assert(content && parts.length === 1);
+        const replacement = await stageRetainedText(
+            ctx,
+            "large-correction-instruction",
+            {
+                ...manifest,
+                index: 0,
+                content,
+            },
+        );
+        await ctx.db.patch(old._id, { key: "small-correction-fixture" });
+        await ctx.db.patch(replacement, { key: old.key });
+        await ctx.db.patch(delivery._id, {
+            bodyTextId: replacement,
+            bodyContentHash: manifest.contentHash,
+        });
+    });
+    await expect(
+        t.mutation(internal.execution.invocations.finish, {
+            invocationId: begun.invocationId,
+            expectedGeneration: 1,
+            response: { kind: "complete", text: "Research is running." },
+        }),
+    ).resolves.toMatchObject({
+        kind: "blocked",
+        code: "mission_context_changed",
+    });
+    expect(await t.run((ctx) => ctx.db.get(active.turnId))).toMatchObject({
+        responseControl: {
+            correction: {
+                invocationId: begun.invocationId,
+                instructionVersion: 1,
+            },
+        },
+    });
+    const draft = `Research is running. ${"x".repeat(175_000)} 🧭`;
+    const { manifest, parts } = retainedTextParts(
+        JSON.stringify({ kind: "complete", text: draft }),
+    );
+    let textId: Id<"retainedTexts"> | undefined;
+    for (const [index, content] of parts.entries())
+        textId = await t.run((ctx) =>
+            stageRetainedText(
+                ctx,
+                `${begun.invocationId}:response:${manifest.contentHash}`,
+                { ...manifest, index, content },
+            ),
+        );
+    assert(textId);
+    await t.run((ctx) =>
+        ctx.db.patch(begun.invocationId, {
+            receivedOutputTextId: textId,
+            receivedOutputJson: undefined,
+        }),
+    );
+    const defaultContext = await t.query(
+        internal.execution.context.build,
+        scope,
+    );
+    assert(defaultContext.kind === "ready");
+    expect(
+        JSON.parse(defaultContext.inputJson).domain.responseControl,
+    ).toMatchObject({ draftResponseHash: manifest.contentHash });
+    expect(
+        JSON.parse(defaultContext.inputJson).domain.responseControl,
+    ).not.toHaveProperty("draft");
+    const admitted = await t.query(internal.execution.context.build, {
+        ...scope,
+        correctionAdmission: true,
+    });
+    assert(admitted.kind === "ready");
+    const { draftResponseHash } = JSON.parse(admitted.inputJson).domain
+        .responseControl;
+    expect(draftResponseHash).toBe(manifest.contentHash);
+    await expect(
+        t.run((ctx) => readMissionState(ctx, scope, 8_192)),
+    ).resolves.toMatchObject({
+        kind: "ready",
+        state: {
+            version: 2,
+            requiredState: {
+                contentHash: sha256Hex(admitted.inputJson),
+                generation: scope.expectedGeneration,
+            },
+        },
+    });
+    const recover = () =>
+        t.action((ctx) =>
+            recoverCorrectionDraft(ctx, {
+                ...scope,
+                contentHash: draftResponseHash,
+            }),
+        );
+    expect(await recover()).toBe(draft);
+    const retainedId = textId;
+    const last = await t.run(async (ctx) => {
+        const fragment = await ctx.db
+            .query("retainedTextFragments")
+            .withIndex("by_text_and_index", (q) =>
+                q.eq("textId", retainedId).eq("index", parts.length - 1),
+            )
+            .unique();
+        assert(fragment);
+        await ctx.db.patch(fragment._id, { content: "Corrupted tail" });
+        return fragment;
+    });
+    await expect(recover()).rejects.toThrow("retained_text_invalid");
+    await t.run((ctx) => ctx.db.patch(last._id, { content: last.content }));
+    expect(await recover()).toBe(draft);
+});
+
+async function prepareDraft(
+    t: Awaited<ReturnType<typeof seedWorkbench>>["t"],
+    invocationId: Id<"agentInvocations">,
+    text: string,
+) {
+    const authority = { invocationId, expectedGeneration: 1 };
+    const response = { kind: "complete" as const, text };
+    const json = stableStringify(response);
+    const responseTextId = await t.action((ctx) =>
+        stageObservedBody(ctx, authority, "response", json),
+    );
+    const envelope = stableStringify({
+        version: 1,
+        provenance: "simulation",
+        response,
+    });
+    const observableReplyTextId = await t.action((ctx) =>
+        stageObservedBody(ctx, authority, "reply", envelope),
+    );
+    await t.mutation(internal.execution.invocations.retainOutput, {
+        ...authority,
+        ...(responseTextId ? { responseTextId } : { responseJson: json }),
+        ...(observableReplyTextId
+            ? { observableReplyTextId }
+            : { observableReplyJson: envelope }),
+    });
+    const { mission } = await t.query(
+        internal.execution.invocationLifecycle.forExecution,
+        authority,
+    );
+    const prepared = await t.action((ctx) =>
+        preparePiReply(
+            ctx,
+            authority,
+            response,
+            json,
+            getAgentDefinition(mission.definitionId, mission.definitionVersion),
+        ),
+    );
+    assert(prepared && "textId" in prepared);
+    return prepared;
+}
 
 test.each([
     "Research is running.",
@@ -38,10 +247,11 @@ test.each([
         nativeInput: await workbenchAdmissionInput(t, active.missionId),
     });
     assert(invocation.kind === "ready");
+    const preparedDraft = await prepareDraft(t, invocation.invocationId, draft);
     const pending = await t.mutation(internal.execution.invocations.finish, {
         invocationId: invocation.invocationId,
         expectedGeneration: 1,
-        response: { kind: "complete", text: draft },
+        preparedReply: preparedDraft,
     });
     expect(pending).toMatchObject({
         kind: "blocked",
@@ -49,12 +259,52 @@ test.each([
     });
     expect(
         (
-            await client.query(api.execution.conversations.listMessages, {
+            await readConversationPageWithBodies(client, {
                 runId,
                 paginationOpts: { numItems: 20, cursor: null },
             })
         ).page.filter((m) => m.role === "assistant"),
     ).toHaveLength(0);
+    const originalAdopted = await t.run(async (ctx) => {
+        const original = await ctx.db.get(invocation.invocationId);
+        assert(original);
+        const textId = original.receivedOutputTextId ?? original.outputTextId;
+        await ctx.db.patch(original._id, {
+            receivedOutputJson:
+                original.receivedOutputJson ?? original.outputJson,
+            receivedOutputTextId: textId,
+            outputTextId: textId,
+            outputJson: textId
+                ? "unrelated adopted reply"
+                : original.outputJson,
+        });
+        return {
+            outputJson: original.outputJson,
+            outputTextId: original.outputTextId,
+            receivedOutputJson: original.receivedOutputJson,
+            receivedOutputTextId: original.receivedOutputTextId,
+        };
+    });
+    const admission = await t.query(internal.execution.context.build, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+        correctionAdmission: true,
+    });
+    assert(admission.kind === "ready");
+    const admissionInput = JSON.parse(admission.inputJson);
+    expect(admissionInput.domain.responseControl.reminder).toContain(
+        "Research has not started.",
+    );
+    expect(admissionInput.domain.responseControl).not.toHaveProperty("draft");
+    expect(admissionInput.constraints.operations).toEqual([]);
+    await expect(
+        t.query(internal.responseControl.correctionFragment, {
+            missionId: active.missionId,
+            expectedGeneration: 1,
+            contentHash: "0".repeat(64),
+            index: 0,
+        }),
+    ).rejects.toThrow("mission_context_changed");
     const context = await t.query(internal.execution.context.build, {
         missionId: active.missionId,
         expectedGeneration: 1,
@@ -64,8 +314,54 @@ test.each([
     expect(input.domain.responseControl.reminder).toContain(
         "Research has not started.",
     );
-    expect(input.domain.responseControl.draft).toBe(draft);
+    if (originalAdopted.receivedOutputTextId) {
+        expect(input.domain.responseControl).not.toHaveProperty("draft");
+        const contentHash = sha256Hex(
+            stableStringify({ kind: "complete", text: draft }),
+        );
+        expect(input.domain.responseControl.draftResponseHash).toBe(
+            contentHash,
+        );
+        expect(
+            await t.action((ctx) =>
+                recoverCorrectionDraft(ctx, {
+                    missionId: active.missionId,
+                    expectedGeneration: 1,
+                    contentHash,
+                }),
+            ),
+        ).toBe(draft);
+    } else expect(input.domain.responseControl.draft).toBe(draft);
     expect(input.constraints.operations).toEqual([]);
+    await t.run((ctx) =>
+        ctx.db.patch(invocation.invocationId, {
+            outputJson: originalAdopted.outputJson,
+            outputTextId: originalAdopted.outputTextId,
+            receivedOutputJson: originalAdopted.receivedOutputJson,
+            receivedOutputTextId: originalAdopted.receivedOutputTextId,
+        }),
+    );
+    const lease = await t.mutation(internal.execution.piStore.claim, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+        writer: "historical-correction-anchor",
+    });
+    await t.run((ctx) =>
+        ctx.db.patch(lease.sessionId, {
+            observationSequence: undefined,
+            observationEntry: undefined,
+        }),
+    );
+    const recovered = await t.mutation(
+        internal.execution.piStore.inputSnapshot,
+        lease,
+    );
+    assert(recovered.anchor);
+    const anchorControl = JSON.parse(recovered.anchor).domain.responseControl;
+    expect(anchorControl).not.toHaveProperty("draft");
+    expect(anchorControl.draftResponseHash).toBe(
+        admissionInput.domain.responseControl.draftResponseHash,
+    );
     const correction = await t.mutation(internal.execution.invocations.begin, {
         missionId: active.missionId,
         expectedGeneration: 1,
@@ -74,26 +370,31 @@ test.each([
         nativeInput: await workbenchAdmissionInput(t, active.missionId),
     });
     assert(correction.kind === "ready");
+    const preparedCorrection = await prepareDraft(
+        t,
+        correction.invocationId,
+        draft,
+    );
     const final = await t.mutation(internal.execution.invocations.finish, {
         invocationId: correction.invocationId,
         expectedGeneration: 1,
-        response: { kind: "complete", text: draft },
+        preparedReply: preparedCorrection,
     });
     expect(final.kind).toBe("completed");
-    const messages = await client.query(
-        api.execution.conversations.listMessages,
-        { runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
+    const messages = await readConversationPageWithBodies(client, {
+        runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(messages.page.find((m) => m.role === "assistant")).toMatchObject({
         text: draft,
         responseControl: { status: "review_needed" },
     });
-    const original = await t.run(async (ctx) => {
-        const stored = await ctx.db.get(invocation.invocationId);
-        assert(stored);
-        return invocationResponses(ctx, stored);
-    });
-    expect(JSON.parse(original?.outputJson ?? "{}").text).toBe(draft);
+    const stored = await t.run((ctx) => ctx.db.get(invocation.invocationId));
+    assert(stored);
+    const original = stored.outputTextId
+        ? await readRetainedBody(t, stored.outputTextId)
+        : stored.outputJson;
+    expect(JSON.parse(original ?? "{}").text).toBe(draft);
 });
 
 test("an enabled controller defers an operation-bearing reply for a host-owned check", async () => {
@@ -399,7 +700,7 @@ test.each([
         }),
     ).toMatchObject({ kind: "completed" });
     const reply = (
-        await client.query(api.execution.conversations.listMessages, {
+        await readConversationPageWithBodies(client, {
             runId,
             paginationOpts: { numItems: 20, cursor: null },
         })
@@ -408,7 +709,7 @@ test.each([
         text: response.text,
         responseControl: { status: "review_needed", support: 0.03 },
     });
-    const history = await client.query(api.workbench.history, {
+    const history = await readWorkbenchPageWithBodies(client, {
         runId,
         paginationOpts: { numItems: 20, cursor: null },
     });
@@ -478,7 +779,7 @@ test("an unavailable correction profile preserves the draft with an explicit res
     expect(result.kind).toBe("completed");
     expect(
         (
-            await client.query(api.execution.conversations.listMessages, {
+            await readConversationPageWithBodies(client, {
                 runId,
                 paginationOpts: { numItems: 20, cursor: null },
             })
@@ -569,7 +870,7 @@ test("unknown advisory work becomes unavailable without redispatch or refunding 
     ).toBe(1);
     expect(
         (
-            await client.query(api.execution.conversations.listMessages, {
+            await readConversationPageWithBodies(client, {
                 runId,
                 paginationOpts: { numItems: 20, cursor: null },
             })
@@ -708,7 +1009,7 @@ test.each([
         ).kind,
     ).toBe("completed");
     const reply = (
-        await client.query(api.execution.conversations.listMessages, {
+        await readConversationPageWithBodies(client, {
             runId,
             paginationOpts: { numItems: 20, cursor: null },
         })
@@ -753,6 +1054,52 @@ test("an enabled controller reviews the first reply even without operations", as
     expect(requests[0]?.input.kind).toBe("check_response_coherence");
 });
 
+test("a draft above advisory capacity publishes exact text and retains its review digest without a request", async () => {
+    const { sha256Hex } = await import("@convex/domain/sourcePassages");
+    const { RESPONSE_CONTROL_MAX_INPUT_BYTES } = await import(
+        "@convex/resourcePolicy"
+    );
+    const { t, client, runId, missionId, draft } = await liveReviewFixture();
+    const row = await draft("oversized-advisory-draft");
+    const turnId = row.conversationTurnId;
+    assert(turnId);
+    const text = `${"é".repeat(RESPONSE_CONTROL_MAX_INPUT_BYTES / 2)}!`;
+    await expect(
+        t.mutation(internal.execution.invocations.finish, {
+            invocationId: row._id,
+            expectedGeneration: 1,
+            response: { kind: "complete", text },
+        }),
+    ).resolves.toMatchObject({ kind: "completed" });
+    const turn = await t.run((ctx) => ctx.db.get(turnId));
+    expect(turn?.responseControl).toMatchObject({
+        publicationReason: "context_capacity",
+        summary: { status: "unavailable" },
+        checks: [
+            {
+                draftHash: sha256Hex(text),
+                result: { status: "unavailable", reason: "context_capacity" },
+            },
+        ],
+    });
+    const requests = await t.run((ctx) =>
+        ctx.db
+            .query("agentOperationRequests")
+            .withIndex("by_mission", (q) => q.eq("missionId", missionId))
+            .take(1),
+    );
+    expect(requests).toEqual([]);
+    const history = await readConversationPageWithBodies(client, {
+        runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
+    expect(
+        history.page
+            .filter((entry) => entry.role === "assistant")
+            .map((entry) => entry.text),
+    ).toEqual([text]);
+});
+
 test("the actual Pi worker delivers the reminder and publishes only the revised explanation", async () => {
     const { directedWorkbenchDefinition: workbenchDefinition } = await import(
         "@convex/domain/workbenchAgent"
@@ -792,7 +1139,7 @@ test("the actual Pi worker delivers the reminder and publishes only the revised 
             (await t.run((ctx) => ctx.db.get(active.missionId)))?.status,
         ).toBe("completed");
         const messages = (
-            await client.query(api.execution.conversations.listMessages, {
+            await readConversationPageWithBodies(client, {
                 runId,
                 paginationOpts: { numItems: 20, cursor: null },
             })
@@ -841,9 +1188,10 @@ test("the actual Pi worker delivers the reminder and publishes only the revised 
             )
             .join("\n");
         expect(actualMessageText).toContain('"draft":"Research is running."');
-        expect(
-            JSON.parse(corrected.inputJson).domain.responseControl.draft,
-        ).toBe("Research is running.");
+        const admittedControl = JSON.parse(corrected.inputJson).domain
+            .responseControl;
+        expect(admittedControl.draftResponseHash).toMatch(/^[0-9a-f]{64}$/);
+        expect(admittedControl).not.toHaveProperty("draft");
         expect(
             invocations.map(
                 (i) => JSON.parse(i.receivedOutputJson ?? "{}").text,
@@ -902,10 +1250,10 @@ test("the native provider request receives the exact rejected draft with current
     expect(currentState).toContain('"draft":"Research is running."');
     expect(currentState).toContain('"summary":"Research has not started."');
     expect(correctedRequest.tools ?? []).toEqual([]);
-    const messages = await client.query(
-        api.execution.conversations.listMessages,
-        { runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
+    const messages = await readConversationPageWithBodies(client, {
+        runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(
         messages.page
             .filter((message) => message.role === "assistant")
@@ -1041,7 +1389,7 @@ test.each([
     ).toBe("completed");
     expect(
         (
-            await client.query(api.workbench.history, {
+            await readWorkbenchPageWithBodies(client, {
                 runId,
                 paginationOpts: { numItems: 20, cursor: null },
             })
@@ -1115,7 +1463,7 @@ test("changed facts require a new bounded check and never adopt the stale score"
         ).kind,
     ).toBe("completed");
     const reply = (
-        await client.query(api.workbench.history, {
+        await readWorkbenchPageWithBodies(client, {
             runId,
             paginationOpts: { numItems: 20, cursor: null },
         })
@@ -1170,7 +1518,7 @@ test("cancellation retains received review facts without publishing or adopting 
     });
     expect(
         (
-            await client.query(api.workbench.history, {
+            await readWorkbenchPageWithBodies(client, {
                 runId,
                 paginationOpts: { numItems: 20, cursor: null },
             })
@@ -1199,7 +1547,7 @@ test("a correction refused by the shared model budget publishes the original wit
     ).toBe("completed");
     expect(
         (
-            await client.query(api.workbench.history, {
+            await readWorkbenchPageWithBodies(client, {
                 runId,
                 paginationOpts: { numItems: 20, cursor: null },
             })
@@ -1298,7 +1646,7 @@ test("oversized saved operation facts cannot expand turn audit or strand publica
     ).toBeLessThan(40000);
     expect(
         (
-            await client.query(api.workbench.history, {
+            await readWorkbenchPageWithBodies(client, {
                 runId,
                 paginationOpts: { numItems: 20, cursor: null },
             })
@@ -1717,12 +2065,13 @@ test("disabled advisory control preserves factual status correction without extr
     expect(after.preparation).toEqual(initial.preparation);
     expect(after.calls).toEqual(initial.calls);
     expect(after.requests).toEqual(initial.requests);
-    const messages = await f.t
-        .withIdentity({ subject: f.userId })
-        .query(api.execution.conversations.listMessages, {
+    const messages = await readConversationPageWithBodies(
+        f.t.withIdentity({ subject: f.userId }),
+        {
             runId: f.runId,
             paginationOpts: { numItems: 20, cursor: null },
-        });
+        },
+    );
     expect(messages.page.filter((m) => m.role === "assistant")).toEqual(
         expect.arrayContaining([
             expect.objectContaining({

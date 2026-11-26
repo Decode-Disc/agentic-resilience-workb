@@ -11,6 +11,8 @@ import { installModel } from "@/__tests__/setup/model-configuration";
 import { providerFixtureResponse } from "@/__tests__/setup/model-stream";
 import {
     dispatchSourcesOperation,
+    prepareSourcesResult,
+    retainSourcesProposal,
     seedObservedSources,
     startSourcesOperation,
 } from "@/__tests__/setup/sources-mission";
@@ -789,6 +791,11 @@ test("reservation admission and completion allow a response beyond 64 KiB within
     expect(
         new TextEncoder().encode(JSON.stringify(response)).length,
     ).toBeGreaterThan(65536);
+    await retainSourcesProposal(
+        f.t,
+        { invocationId: f.invocationId, expectedGeneration: 4 },
+        response,
+    );
     expect(
         await f.t.mutation(internal.execution.invocations.finish, {
             invocationId: f.invocationId,
@@ -803,11 +810,16 @@ test("reservation admission and completion allow a response beyond 64 KiB within
         provenance: "simulation",
     });
     assert(fresh.kind === "ready");
+    const preparedResult = await prepareSourcesResult(
+        f.t,
+        { invocationId: fresh.invocationId, expectedGeneration: 4 },
+        response,
+    );
     expect(
         await f.t.mutation(internal.execution.invocations.finish, {
             invocationId: fresh.invocationId,
             expectedGeneration: 4,
-            response,
+            preparedResult,
         }),
     ).toMatchObject({ kind: "completed" });
 });

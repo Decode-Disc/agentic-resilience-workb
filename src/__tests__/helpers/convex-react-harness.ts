@@ -52,6 +52,13 @@ const useQuery = vi.fn(
     },
 );
 
+const convexClient = {
+    query: vi.fn(async (reference: AnyFunctionReference, args: unknown) => {
+        const resolver = queryResolvers.get(functionName(reference));
+        return resolver ? resolver(args) : missingMock("query", reference);
+    }),
+};
+
 const usePaginatedQuery = vi.fn(
     (
         reference: AnyFunctionReference,
@@ -184,6 +191,7 @@ function reset() {
     mutationFunctions.clear();
     actionFunctions.clear();
     useQuery.mockClear();
+    convexClient.query.mockClear();
     usePaginatedQuery.mockClear();
     useMutation.mockClear();
     useAction.mockClear();
@@ -198,6 +206,7 @@ export const convexReactHarness = {
     reset,
     module: {
         useQuery,
+        useConvex: () => convexClient,
         usePaginatedQuery,
         useMutation,
         useAction,

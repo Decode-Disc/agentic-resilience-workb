@@ -751,8 +751,8 @@ describe("SEC HTML Provenance Tracer", () => {
             }),
         ]);
 
-        expect(action1.status).toBe("succeeded");
-        expect(action2.status).toBe("succeeded");
+        expect(action1).toMatchObject({ status: "succeeded" });
+        expect(action2).toMatchObject({ status: "succeeded" });
 
         // One is the winner (reused: false), one is the concurrent loser that adopted the winner (reused: true)
         const results = [action1, action2];

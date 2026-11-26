@@ -1,5 +1,6 @@
 import { api, internal } from "@convex/_generated/api";
 import { afterEach, assert, beforeEach, expect, test, vi } from "vitest";
+import { readConversationPageWithBodies } from "@/__tests__/setup/retained-messages";
 import { activateSourcesMission } from "@/__tests__/setup/sources-mission";
 import {
     seedWorkbench,
@@ -116,7 +117,7 @@ test.each([
             text: "Switching restrictions deserve inspection.",
         },
     });
-    const page = await client.query(api.execution.conversations.listMessages, {
+    const page = await readConversationPageWithBodies(client, {
         runId,
         paginationOpts: { numItems: 20, cursor: null },
     });
@@ -181,7 +182,7 @@ test("a control and an independent question retain the explanation and the actua
             text: "Switching costs can constrain substitution.",
         },
     });
-    const page = await client.query(api.execution.conversations.listMessages, {
+    const page = await readConversationPageWithBodies(client, {
         runId,
         paginationOpts: { numItems: 20, cursor: null },
     });
@@ -349,7 +350,7 @@ test.each([
             },
         }),
     ).toMatchObject({ kind: "completed" });
-    const page = await client.query(api.execution.conversations.listMessages, {
+    const page = await readConversationPageWithBodies(client, {
         runId,
         paginationOpts: { numItems: 20, cursor: null },
     });

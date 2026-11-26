@@ -1,14 +1,9 @@
-import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
-import { RETAINED_TEXT_INLINE_BYTES } from "@convex/resourcePolicy";
-import { validate } from "convex-helpers/validators";
-import { agentResultValidator } from "./agentSchemas";
-import {
-    retainCompleteText,
-    completeRetainedText,
-    readRetainedText,
-} from "./retainedText";
 import type { Doc, Id } from "@convex/_generated/dataModel";
+import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
+import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { supportsResearchControl } from "@convex/domain/transitions";
+import { retainedReplyKey } from "@convex/execution/conversationBodies";
+import { RETAINED_TEXT_INLINE_BYTES } from "@convex/resourcePolicy";
 import type {
     AgentProgressMission,
     AgentResult,
@@ -18,6 +13,7 @@ import type {
     OperationPin,
 } from "./agentDefinition";
 import { executionError } from "./errors";
+import { adoptRetainedTextKey, completeRetainedText } from "./retainedText";
 
 /** Stable persisted identity for a mission's objective across attempts and definition versions. */
 export function missionObjectiveKey(
@@ -184,39 +180,100 @@ export function operationReuseIdentity(
         : { runId, version, pin, input };
 }
 
-/** Domain completion keeps its full result while mission metadata stays within document capacity. */
+export function textualMissionOutcomePatch(
+    kind: "workbench_v1" | "conversation_validation_v1",
+    textId: Id<"retainedTexts">,
+    contentHash: string,
+) {
+    return {
+        result: undefined,
+        resultTextId: undefined,
+        textualOutcome: { version: 1 as const, kind, textId, contentHash },
+    };
+}
+
+/** Returns a validated completion identity for bounded inspection and replay. */
+export async function retainedTextualOutcome(
+    ctx: QueryCtx,
+    mission: Doc<"agentMissions">,
+) {
+    if (!("protocolVersion" in mission) || !mission.textualOutcome)
+        return undefined;
+    const outcome = mission.textualOutcome;
+    const text = await completeRetainedText(ctx, outcome.textId);
+    if (
+        text.key !== textualOutcomeKey(mission) ||
+        text.contentHash !== outcome.contentHash ||
+        outcome.kind !== mission.definitionId
+    )
+        throw executionError("invocation_result_invalid");
+    return text;
+}
+
 export async function missionResultPatch(
     ctx: MutationCtx,
     mission: Doc<"agentMissions">,
     result: AgentResult,
+    publication?: Pick<
+        Doc<"agentMessageDeliveries">,
+        "bodyTextId" | "contentHash"
+    >,
+    preparedResult?: Doc<"retainedTexts">,
 ) {
+    if (
+        "protocolVersion" in mission &&
+        publication?.bodyTextId &&
+        (result.kind === "workbench_v1" ||
+            result.kind === "conversation_validation_v1")
+    )
+        return textualMissionOutcomePatch(
+            result.kind,
+            publication.bodyTextId,
+            publication.contentHash,
+        );
+    if (preparedResult) {
+        if (preparedResult.contentHash !== sha256Hex(stableStringify(result)))
+            throw executionError("invocation_result_conflict");
+        await adoptRetainedTextKey(
+            ctx,
+            preparedResult._id,
+            `${mission._id}:result`,
+        );
+        return { result: undefined, resultTextId: preparedResult._id };
+    }
     const json = JSON.stringify(result);
     if (
         !("protocolVersion" in mission) ||
         new TextEncoder().encode(json).length <= RETAINED_TEXT_INLINE_BYTES
     )
         return domainDataPatch(mission, { result });
-    return {
-        result: undefined,
-        resultTextId: await retainCompleteText(
-            ctx,
-            `${mission._id}:result`,
-            json,
-        ),
-    };
+    throw executionError("invocation_result_not_prepared");
 }
 
-export async function missionResult(
+/** Resolves the immutable JSON result owned by a non-conversation mission. */
+export async function retainedMissionResult(
     ctx: QueryCtx,
     mission: Doc<"agentMissions">,
+    textId: Id<"retainedTexts">,
 ) {
-    if (!("protocolVersion" in mission)) return undefined;
-    if (!mission.resultTextId) return mission.result;
-    const text = await completeRetainedText(ctx, mission.resultTextId);
+    const text = await completeRetainedText(ctx, textId);
     if (text.key !== `${mission._id}:result`)
         throw executionError("invocation_result_invalid");
-    const result: unknown = JSON.parse(await readRetainedText(ctx, text._id));
-    if (!validate(agentResultValidator, result, { db: ctx.db }))
-        throw executionError("invalid_completion");
-    return result;
+    return text;
+}
+
+export function missionTextualResultKey(missionId: Id<"agentMissions">) {
+    return `${missionId}:textual_outcome`;
+}
+
+/** A completed result either shares a published delivery or owns its own exact text. */
+export function textualOutcomeKey(mission: Doc<"agentMissions">) {
+    if (
+        "protocolVersion" in mission &&
+        mission.textualOutcome?.ownership === "mission"
+    )
+        return missionTextualResultKey(mission._id);
+    if (mission.conversationTurnId)
+        return retainedReplyKey(mission.conversationTurnId);
+    throw executionError("invocation_result_invalid");
 }

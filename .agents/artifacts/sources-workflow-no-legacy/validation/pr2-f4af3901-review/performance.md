@@ -1,0 +1,46 @@
+**REQUEST CHANGES — two remaining capacity gaps.** Review covers PR #2 head `f4af3901a9946b849d052b0317f188ce998ef970` against `ab98abfb6800eb35f8262ceb7fd034e2c6ee23bb`. All locations below refer to the candidate. Both findings are source-derived; I did not reproduce them.
+
+1. **Medium — public history still permits aggregate body hydration.** At [agentStorage.ts:1008](/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/integrations/agentStorage.ts:1008), omitting `bodyAccess: "separate"` sends every delivery to `readConversationMessages`, whose retained-body branch reads every fragment in the same query transaction ([agentStorage.ts:954](/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/integrations/agentStorage.ts:954)). Both [conversations.ts:1151](/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/execution/conversations.ts:1151) and [workbench.ts:805](/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/workbench.ts:805) expose this optional mode.
+
+   **Trigger and consequence:** a valid history request without the option, containing one sufficiently large retained reply or several replies whose combined bodies exceed transaction capacity. Delivery pagination bounds rows, while downstream work remains proportional to all body bytes on that page. Separate fragment queries in the main UI avoid this branch, but the public server contract still permits it. This affects newly retained bodies, independently of pending legacy retirement.
+
+   **Fix:** make retained-body references and independent continuation the server-enforced history contract for both readers. Preserve complete text through the body reader rather than making capacity depend on a caller-selected flag.
+
+   **Proposed verification:** stage replies in separate transactions, then call both authenticated history APIs with the default argument shape and with explicit separate access. Include a body beyond the supplied 16 MiB transaction limit and an aggregate page exceeding it. Verify bounded list-query metrics, exact reconstruction, and unchanged delivery pagination.
+
+2. **Medium — unsuccessful preparation returns large responses to the mutation boundary.** [piInvocation.ts:336](/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/integrations/piInvocation.ts:336) returns no prepared reply when original completion arguments fail validation. Preparation also does not apply to operation responses. [piMission.ts:1525](/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/integrations/piMission.ts:1525) consequently passes the complete `currentResponse` to `finish` whenever `useReference` is false. The mutation then serializes it and, for completion submissions, parses and validates the original argument string ([invocationLifecycle.ts:1801](/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/execution/invocationLifecycle.ts:1801), [invocationLifecycle.ts:2196](/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/execution/invocationLifecycle.ts:2196)).
+
+   **Trigger and consequence:** an oversized malformed completion, a preparation refusal needing correction, or an operation envelope containing large original argument strings. Fragmented receipt storage succeeds, but adoption/correction still transfers and processes the whole normalized response in one mutation. Above the supplied 16 MiB function-argument limit, the call cannot reach its intended correction/adoption logic. Below that limit, full serialization and validation remain aggregate work. The successful prepared-text path does not close these sibling branches.
+
+   **Fix:** extend the existing retained-response preparation mechanism to carry bounded, digest-bound refusal/correlation results. Preserve original arguments in immutable storage; keep current authority, database-backed validation and effects in the mutation.
+
+   **Proposed verification:** exercise malformed completion and operation-envelope cases independently, using large retained original arguments. Assert the expected correction or normalized operation outcome, unchanged original bytes and receipt accounting, and bounded finalization arguments. A focused low-budget regression should accompany a real-limit capacity probe.
+
+The source does establish useful improvements: manifest-backed sealing avoids rereading the packed body; current hashed context history and retained conversation consultation use intersecting fragment ranges; and the revised purge traversals remove processed parents, allowing later parent batches to become reachable. These conclusions concern execution structure, not fresh runtime qualification.
+
+The following remain **acceptance watches**, rather than additional confirmed defects:
+
+- **Action memory:** reconstruction remains proportional to complete body size. [piInvocation.ts:220](/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/integrations/piInvocation.ts:220), [missionData.ts:737](/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/execution/missionData.ts:737), [journal.ts:353](/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/execution/journal.ts:353) and [agentStorage.ts:705](/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/integrations/agentStorage.ts:705) retain fragment arrays and construct complete strings; some then parse, render or serialize additional representations. Native Pi runs in Node, whereas migration/backfill actions use the default runtime. Measure peak memory and elapsed time in each actual runtime at the largest retained cases. Fragment-sized queries alone do not establish action-memory safety.
+
+- **Whole-conversation reconciliation:** [agentStorage.ts:249](/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/integrations/agentStorage.ts:249) scans all delivery, mission and component pages in one action, verifies migrated bodies and retains the physical ownership set. Individual transactions are bounded; the action’s aggregate work is proportional to the entire conversation. An interrupted reconciliation starts again. Measure the largest selected scope before deciding whether resumable reconciliation checkpoints are necessary.
+
+- **Manifest amplification:** staging repeatedly reads/writes the complete growing manifest; fragment readers reload that manifest for each fragment. For `F` fragments, full traversal can therefore incur quadratic aggregate manifest traffic, while `retainedTextRange` also scans preceding offsets in memory. This is not whole-body database hydration, and no material latency regression is established. Include manifest bytes and late-offset reads in capacity measurements. The 8,192-entry array guard represents a platform constraint, not an arbitrary generation allowance.
+
+- **Purge and retirement:** [retainedText.ts:928](/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/execution/retainedText.ts:928) now selects fragment batches from remaining transaction metrics. The supplied 16 MiB observation fixture supports that tested case. It does not establish every combination of large manifests, parent scans, owner updates and shared references. Component deletion evidence covers one 75,000-byte plain-text record per mutation, without embeddings, files or active streams; it does not qualify their related-record costs. Retain largest-record metrics and interruption/resumption evidence as operational prerequisites.
+
+- **Retained context costs:** Sources context, Workbench context, standalone consultation and legacy cursor ancestry remain unqualified on complete retained graphs. Per-assembly instruction caching addresses overlapping retained wording reads, but it does not establish total context-construction cost. The supplied stale-authority refusals on both revisions leave the full Sources benchmark open.
+
+The supplied retained traversal reports establish **no measured improvement for that workload**:
+
+| Recorded measure | Base | Candidate |
+| --- | ---: | ---: |
+| Consultations | 2 | 2 |
+| Handler-yielded document reads | 65 | 65 |
+| Handler-yielded document bytes | 109,193 | 109,205 |
+| Event reads / bytes | 28 / 53,313 | 28 / 53,313 |
+
+Both reports verify the 27 original payload hashes. These are handler-level logical document measurements; they exclude outer dispatch, index-scan overhead, deployment I/O, action memory and the missing retained preparation graph.
+
+I inspected source, candidate tests, corrected TDD 29, candidate outline 31, report 44 and supplied measurements. I ran no tests, benchmarks, live services or providers and changed no files. The checkout remains clean at the base SHA. Cloud cutover, Convex Agent retirement and the explicitly excluded unfinished browser-test conversations are outside this verdict; the supplied local-copy counts—68 idle scopes, 257 deliveries and 96 outcomes—do not establish deployment-wide acceptance.
+
+

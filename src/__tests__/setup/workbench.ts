@@ -7,7 +7,6 @@ import { conversationInstructions } from "@convex/execution/conversations";
 import { agentToolSetKey } from "@convex/integrations/modelInput";
 import type { ModelRoute } from "@convex/integrations/modelRouting";
 import schema from "@convex/schema";
-import agentTest from "@convex-dev/agent/test";
 import { convexTest } from "convex-test";
 import { assert, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
@@ -27,7 +26,9 @@ export async function seedWorkbench(
         | "balanced"
         | "first_party_depth"
         | "independent_scrutiny" = "balanced",
-    transactionLimits = false,
+    transactionLimits: NonNullable<
+        Parameters<typeof convexTest>[0]["transactionLimits"]
+    > = false,
 ) {
     vi.useFakeTimers();
     const t = convexTest({
@@ -35,7 +36,7 @@ export async function seedWorkbench(
         modules: import.meta.glob("/convex/**/*.ts"),
         transactionLimits,
     });
-    agentTest.register(t);
+
     workflowTest.register(t);
     const { userId, preflightId } = await createAdmittedPreflight(t, company);
     const client = t.withIdentity({ subject: userId });

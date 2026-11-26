@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
@@ -321,24 +321,53 @@ const checks = [
         ],
     },
 ];
-type CheckExecutor = (
-    binary: string,
-    args: string[],
-) => {
+type CheckResult = {
     status: number | null;
     stdout?: string | null;
     stderr?: string | null;
     error?: Error | undefined;
 };
-const executeCheck: CheckExecutor = (binary, args) =>
-    spawnSync(binary, args, {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"],
-        timeout: TOOLING_POLICY.candidateValidationTimeoutMs,
+type CheckExecutor = (
+    binary: string,
+    args: string[],
+    signal?: AbortSignal,
+) => CheckResult | Promise<CheckResult>;
+const executeCheck: CheckExecutor = (binary, args, signal) =>
+    new Promise((resolve) => {
+        const timeout = AbortSignal.timeout(
+            TOOLING_POLICY.candidateValidationTimeoutMs,
+        );
+        const effectiveSignal = signal
+            ? AbortSignal.any([signal, timeout])
+            : timeout;
+        const child = spawn(binary, args, {
+            stdio: ["ignore", "pipe", "pipe"],
+            signal: effectiveSignal,
+        });
+        let stdout = "";
+        let stderr = "";
+        let settled = false;
+        const finish = (result: CheckResult) => {
+            if (settled) return;
+            settled = true;
+            resolve(result);
+        };
+        child.stdout?.setEncoding("utf8");
+        child.stderr?.setEncoding("utf8");
+        child.stdout?.on("data", (chunk: string) => {
+            stdout += chunk;
+        });
+        child.stderr?.on("data", (chunk: string) => {
+            stderr += chunk;
+        });
+        child.on("error", (error) =>
+            finish({ status: null, stdout, stderr, error }),
+        );
+        child.on("close", (status) => finish({ status, stdout, stderr }));
     });
 
-/** No setup or paid admission may follow unless every sequential check passed on these exact source bytes. */
-export function verifyQualificationCandidate(
+/** No setup or paid admission may follow unless every read-only check passed on these exact source bytes. */
+export async function verifyQualificationCandidate(
     root: string,
     fingerprints: Record<string, string>,
     execute: CheckExecutor = executeCheck,
@@ -411,22 +440,46 @@ export function verifyQualificationCandidate(
                 return cached as typeof record;
         }
         persist();
+        const controller = new AbortController();
+        const outcomes = new Map<string, "passed" | "failed">();
+        let firstError: unknown;
+        await Promise.all(
+            checks.map(async (check) => {
+                try {
+                    const result = await execute(
+                        "pnpm",
+                        check.args,
+                        controller.signal,
+                    );
+                    writeFileSync(
+                        join(root, "checks", `${check.id}.log`),
+                        `${result.stdout ?? ""}\n${result.stderr ?? ""}`,
+                        { mode: 0o600 },
+                    );
+                    const passed = result.status === 0 && !result.error;
+                    outcomes.set(check.id, passed ? "passed" : "failed");
+                    if (!passed) {
+                        if (!firstError)
+                            firstError = new assert.AssertionError({
+                                message: `Qualification prerequisite failed: ${check.id}`,
+                            });
+                        controller.abort();
+                        return;
+                    }
+                    verify();
+                } catch (error) {
+                    outcomes.set(check.id, "failed");
+                    if (!firstError) firstError = error;
+                    controller.abort();
+                }
+            }),
+        );
         for (const check of checks) {
-            const result = execute("pnpm", check.args);
-            writeFileSync(
-                join(root, "checks", `${check.id}.log`),
-                `${result.stdout ?? ""}\n${result.stderr ?? ""}`,
-                { mode: 0o600 },
-            );
-            const passed = result.status === 0 && !result.error;
-            record.checks.push({
-                id: check.id,
-                status: passed ? "passed" : "failed",
-            });
-            persist();
-            assert(passed, `Qualification prerequisite failed: ${check.id}`);
-            verify();
+            const status = outcomes.get(check.id);
+            if (status) record.checks.push({ id: check.id, status });
         }
+        if (firstError) throw firstError;
+        verify();
         record.status = "passed";
         persist();
         return record;

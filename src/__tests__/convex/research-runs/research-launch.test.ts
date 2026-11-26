@@ -1,7 +1,6 @@
 import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import schema from "@convex/schema";
-import agentTest from "@convex-dev/agent/test";
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -30,7 +29,7 @@ const researchProgram = {
 
 test("confirmation refuses a reservation key belonging to a historical dossier", async () => {
     const t = convexTest(schema, modules);
-    agentTest.register(t);
+
     workflowTest.register(t);
     const { userId, preflightId } = await createAdmittedPreflight(t);
     const analyst = t.withIdentity({ subject: userId });
@@ -65,7 +64,7 @@ test("invalid preparation concurrency rejects explicit research start before res
         const t = convexTest(schema, modules);
         workflowTest.register(t);
         const { userId, preflightId } = await createAdmittedPreflight(t);
-        agentTest.register(t);
+
         const analyst = t.withIdentity({ subject: userId });
         const { runId } = await analyst.mutation(api.framing.confirmCompany, {
             preflightId,
@@ -134,7 +133,7 @@ const transition = makeFunctionReference<
 >("researchRuns:transition");
 test("keeps the confirmed company snapshot when canonical SEC metadata changes", async () => {
     const t = convexTest(schema, modules);
-    agentTest.register(t);
+
     const { userId, preflightId } = await createAdmittedPreflight(t);
     const analyst = t.withIdentity({ subject: userId });
     const first = await analyst.mutation(api.framing.confirmCompany, {
@@ -186,7 +185,6 @@ test("persists validated launch references as pending sources in corpus revision
         }),
     );
 
-    agentTest.register(t);
     const { runId } = await analyst.mutation(api.framing.confirmCompany, {
         preflightId,
         idempotencyKey: "launch-with-public-reference",
@@ -276,7 +274,6 @@ test("replays a launch after its preparation receipt was consumed", async () => 
         manualSourcePreparationIds: [preparationId],
     };
 
-    agentTest.register(t);
     const first = await analyst.mutation(api.framing.confirmCompany, args);
     const replay = await analyst.mutation(api.framing.confirmCompany, args);
 
@@ -456,7 +453,6 @@ test("adopts a pre-admission preflight for the admitted session", async () => {
         subject: `${userId}|pre-admission-session`,
     });
 
-    agentTest.register(t);
     const result = await admittedSession.mutation(api.framing.confirmCompany, {
         preflightId,
         idempotencyKey: "launch-after-admission",
@@ -480,7 +476,7 @@ test("adopts a pre-admission preflight for the admitted session", async () => {
 test("explicit research start atomically admits one workflow per visitor and permits another after pause", async () => {
     activateSourcesMission();
     const t = convexTest(schema, modules);
-    agentTest.register(t);
+
     rateLimiterTest.register(t);
     workflowTest.register(t);
     const { userId, preflightId } = await createAdmittedPreflight(t);
