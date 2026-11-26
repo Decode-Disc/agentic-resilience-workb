@@ -6,6 +6,7 @@ import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
 import { LOCAL_RUNTIME_POLICY } from "../convex/resourcePolicy.ts";
+import { expandRoundRobinShardArgs } from "./e2e-shards.ts";
 import { LocalProcessError } from "./local-processes.ts";
 import {
     assertRuntimeStartupLock,
@@ -39,6 +40,10 @@ type Child = ReturnType<typeof spawn>;
 const STARTUP_TIMEOUT_MS = positiveInteger(
     process.env.LOCAL_RUNTIME_STARTUP_TIMEOUT_MS,
     LOCAL_RUNTIME_POLICY.maxStartupTimeoutMs,
+);
+const E2E_WEB_STARTUP_TIMEOUT_MS = positiveInteger(
+    process.env.LOCAL_RUNTIME_STARTUP_TIMEOUT_MS,
+    LOCAL_RUNTIME_POLICY.e2eWebStartupTimeoutMs,
 );
 
 async function main(): Promise<number> {
@@ -290,6 +295,7 @@ async function runNativeWatcher(
                 root,
                 [],
                 runE2e ? () => runE2eTests(root, args) : undefined,
+                runE2e ? E2E_WEB_STARTUP_TIMEOUT_MS : STARTUP_TIMEOUT_MS,
             );
         releaseRuntimeStartupLock();
         if (runE2e) return runE2eTests(root, args);
@@ -306,6 +312,7 @@ async function runNativeWatcher(
         [
             cli,
             "dev",
+            ...(runE2e ? ["--typecheck", "disable"] : []),
             ...backendVersionArgs,
             "--local-cloud-port",
             String(ports.convex),
@@ -343,7 +350,13 @@ async function runNativeWatcher(
     try {
         await waitForBackend(root, deploymentName, child, runId, exit);
         if (startWeb)
-            await waitForOrigin(root, "web", child, exit, STARTUP_TIMEOUT_MS);
+            await waitForOrigin(
+                root,
+                "web",
+                child,
+                exit,
+                runE2e ? E2E_WEB_STARTUP_TIMEOUT_MS : STARTUP_TIMEOUT_MS,
+            );
         releaseRuntimeStartupLock();
         if (!runE2e) return (await exit).code;
         return await runE2eTests(root, args);
@@ -363,12 +376,18 @@ async function runE2eTests(root: string, args: string[]): Promise<number> {
     const runtime = await resolveLocalRuntime(root, {
         requiredOrigins: ["convex", "web"],
     });
-    return runCommand("pnpm", ["exec", "playwright", "test", ...args], root, {
-        ...process.env,
-        PLAYWRIGHT_BASE_URL: runtime.origins.web,
-        LOCAL_RUNTIME_CONVEX_ORIGIN: runtime.origins.convex,
-        LOCAL_RUNTIME_WORKTREE_ID: runtime.identity.worktreeId,
-    });
+    const playwrightArgs = expandRoundRobinShardArgs(root, args);
+    return runCommand(
+        "pnpm",
+        ["exec", "playwright", "test", ...playwrightArgs],
+        root,
+        {
+            ...process.env,
+            PLAYWRIGHT_BASE_URL: runtime.origins.web,
+            LOCAL_RUNTIME_CONVEX_ORIGIN: runtime.origins.convex,
+            LOCAL_RUNTIME_WORKTREE_ID: runtime.identity.worktreeId,
+        },
+    );
 }
 
 async function prepareStartup(
@@ -508,6 +527,7 @@ async function runWeb(
     root: string,
     args: string[],
     onReady?: () => Promise<number>,
+    timeoutMs: number = STARTUP_TIMEOUT_MS,
 ): Promise<number> {
     const port = portArgument(args, "--port");
     const ports = getLocalRuntimePorts(
@@ -538,7 +558,7 @@ async function runWeb(
         "pnpm",
         ["exec", "vite", "dev", ...args],
         root,
-        STARTUP_TIMEOUT_MS,
+        timeoutMs,
         onReady,
     );
 }

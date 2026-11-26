@@ -11,6 +11,9 @@ export default defineConfig({
     ...base,
     test: {
         ...base.test,
+        projects: undefined,
+        environment: "node",
+        setupFiles: [],
         include: ["src/__tests__/live/**/*.contract.test.ts"],
         exclude: [...configDefaults.exclude],
     },

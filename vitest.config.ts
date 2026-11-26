@@ -5,15 +5,32 @@ export default defineConfig({
     resolve: { tsconfigPaths: true },
     plugins: [viteReact()],
     test: {
-        environment: "jsdom",
-        // Browser storage belongs to jsdom, not Node's optional disk-backed globals.
-        execArgv: ["--no-experimental-webstorage"],
-        include: ["src/__tests__/**/*.test.{ts,tsx}"],
         exclude: [...configDefaults.exclude, "src/__tests__/live/**"],
         isolate: true,
         maxWorkers: 4,
         // Concurrent UI, CLI and workflow integration tests exceed Vitest's 5s default.
         testTimeout: 15_000,
-        setupFiles: ["./src/__tests__/setup/cleanup.ts"],
+        projects: [
+            {
+                extends: true,
+                test: {
+                    name: "node",
+                    environment: "node",
+                    include: ["src/__tests__/**/*.test.ts"],
+                    setupFiles: [],
+                },
+            },
+            {
+                extends: true,
+                test: {
+                    name: "jsdom",
+                    environment: "jsdom",
+                    // Browser storage belongs to jsdom, not Node's optional disk-backed globals.
+                    execArgv: ["--no-experimental-webstorage"],
+                    include: ["src/__tests__/**/*.test.tsx"],
+                    setupFiles: ["./src/__tests__/setup/cleanup.ts"],
+                },
+            },
+        ],
     },
 });

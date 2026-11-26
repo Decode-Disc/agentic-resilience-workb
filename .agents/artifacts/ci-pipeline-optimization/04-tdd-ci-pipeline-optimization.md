@@ -72,6 +72,8 @@ vitest.config.ts (root: tsconfigPaths, viteReact, exclude live/**, isolate: true
 vitest.live.config.ts -> projects: undefined, environment: "node", include: ["src/__tests__/live/**/*.contract.test.ts"]
 ```
 
+Review refinement (2026-11-26): a same-task mount and unmount leaves no live element for the observer's `querySelector`. The observer now inspects `addedNodes` from each record and calls `takeRecords()` before disconnecting, with a regression that renders and unmounts the real `InputOTP` component in one task.
+
 ### 3. CI consolidates setup, installs headless Chromium shell, halves `workbench-ui` shards, and round-robins `browser-e2e`
 
 Today, `.github/workflows/quality.yml` runs 10 jobs (43.7 runner-minutes on green HEAD `45811442776`), duplicates setup across 3 job definitions, installs full Chromium across 8 jobs, runs 4 `workbench-ui` shards where setup nearly equals test time (325s vs 363s), and relies on Playwright's contiguous `--shard=N/4` in `browser-e2e`, clustering the heaviest `src/__tests__/e2e/` specs into shard 4 (433s vs 165s in shard 1).
@@ -93,7 +95,11 @@ Key behaviors:
 - **Local composite action (`.github/actions/setup-node-pnpm/action.yml`)** owns `pnpm/action-setup`, `actions/setup-node` (with `cache: pnpm`), `pnpm install --frozen-lockfile`, and optional `pnpm exec playwright install --with-deps --only-shell chromium`. Callers still run `actions/checkout` first.
 - **Chromium headless shell (`--only-shell chromium`)** replaces full Chromium in both `workbench-ui` and `browser-e2e`, matching `preview-service` (`quality.yml:58`). Verified against Playwright 1.62.1: headless launches with no `channel` override (`playwright.config.ts:63-68`, `workbench-ui.playwright.config.ts:1-24`, `e2e/global-setup.ts:117`) resolve to `chromium-headless-shell` directly.
 - **`workbench-ui` drops from 4 shards to 2 shards**, eliminating 2 runners per PR and reducing queue contention while finishing in ~3.5-4 min (off the critical path).
-- **`browser-e2e` stays at 4 shards using deterministic round-robin file selection** (`index % totalShards === shard - 1` over sorted spec files). The `testMatch` and `testIgnore` patterns live in one shared module imported by both `playwright.config.ts` and the shard selector so discovery cannot drift. Because Playwright converts positional CLI arguments via `forceRegExp`, the selector emits regex-escaped, end-anchored file patterns (and CI passes `--pass-with-no-tests` so an empty shard never errors). Every shard automatically mixes `e2e/` and `src/__tests__/e2e/` specs (~3.5-4.5 min per shard) with zero manual spec table.
+- **`browser-e2e` stays at 4 shards using deterministic round-robin file selection** (`index % totalShards === shard - 1` over sorted spec files). The `testMatch` and `testIgnore` patterns live in one shared module imported by both `playwright.config.ts` and the shard selector so discovery cannot drift. Because Playwright converts positional CLI arguments via `forceRegExp`, the selector emits regex-escaped file patterns (and CI passes `--pass-with-no-tests` so an empty shard never errors). Every shard automatically mixes `e2e/` and `src/__tests__/e2e/` specs (~3.5-4.5 min per shard) with zero manual spec table.
+
+Implementation refinement (2026-11-26): Playwright matches those regular expressions against absolute file paths, so an end-anchored relative pattern would select both `e2e/a.spec.ts` and `src/__tests__/e2e/a.spec.ts`. `selectE2eShardPatterns` anchors the escaped absolute path instead; a regression test covers a filename present in both trees and one with a regex metacharacter.
+
+Review refinement (2026-11-26): Playwright ORs positional file filters and treats an empty filter list as "all tests". An empty shard now emits the never-match filter `(?!)` beside `--pass-with-no-tests`, verified by `playwright --list` selecting zero tests. Positional spec arguments cannot be combined with `--round-robin-shard`; option values such as `--config` remain allowed.
 
 ## Program Design
 
@@ -166,6 +172,8 @@ Inside `runNativeWatcher` (`scripts/local-dev.ts:288-346`):
 ```
 
 `src/__tests__/config/local-runtime.test.ts:845-855` updates its expected `test:e2e` Convex argv to include `"--typecheck", "disable"`, and a new focused test verifies that `test:e2e` exits at `e2eWebStartupTimeoutMs` (via `LOCAL_RUNTIME_STARTUP_TIMEOUT_MS` / mock watcher staying alive without starting Vite) instead of hanging.
+
+Review refinement (2026-11-26): the second startup path (Convex already verified, web listener missing) now has its own test. It starts `convex:dev` first, patches the fixture policy to an 800ms e2e web budget, and asserts `test:e2e` fails promptly while the general startup budget stays untouched. Removing the dedicated timeout from `runWeb` was verified to make that test time out.
 
 ### 2. Vitest splits `node` and `jsdom` projects cleanly without breaking `vitest.live.config.ts`, and `cleanup.ts` latches `input-otp` mounts
 

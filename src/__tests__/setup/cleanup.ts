@@ -1,5 +1,5 @@
 import { cleanup } from "@testing-library/react";
-import { afterEach, vi } from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
 
 vi.mock("@paper-design/shaders", () => ({
     liquidMetalFragmentShader: "",
@@ -74,9 +74,65 @@ if (
     });
 }
 
+const INPUT_OTP_SELECTOR = '[data-slot="input-otp"]';
+let inputOtpMounted = false;
+let inputOtpObserver: MutationObserver | undefined;
+
+function isInputOtpNode(node: Node): boolean {
+    return (
+        node instanceof Element &&
+        (node.matches(INPUT_OTP_SELECTOR) ||
+            node.querySelector(INPUT_OTP_SELECTOR) !== null)
+    );
+}
+
+/** Added nodes are checked before a live query: a same-task unmount leaves no live element. */
+function hasInputOtp(records: Iterable<MutationRecord>): boolean {
+    for (const record of records) {
+        for (const node of record.addedNodes)
+            if (isInputOtpNode(node)) return true;
+    }
+    return false;
+}
+
+function latchInputOtp(): void {
+    inputOtpMounted = true;
+    inputOtpObserver?.disconnect();
+    inputOtpObserver = undefined;
+}
+
+beforeEach(() => {
+    inputOtpMounted = false;
+    if (typeof document === "undefined" || !document.body) return;
+    if (document.body.querySelector(INPUT_OTP_SELECTOR)) {
+        inputOtpMounted = true;
+        return;
+    }
+    inputOtpObserver = new MutationObserver((records) => {
+        if (
+            hasInputOtp(records) ||
+            document.body.querySelector(INPUT_OTP_SELECTOR)
+        )
+            latchInputOtp();
+    });
+    inputOtpObserver.observe(document.body, { childList: true, subtree: true });
+});
+
 afterEach(async () => {
+    if (
+        inputOtpObserver &&
+        (hasInputOtp(inputOtpObserver.takeRecords()) ||
+            document.body.querySelector(INPUT_OTP_SELECTOR))
+    )
+        inputOtpMounted = true;
+    inputOtpObserver?.disconnect();
+    inputOtpObserver = undefined;
+    const shouldDrainInputOtp = inputOtpMounted;
+    inputOtpMounted = false;
     cleanup();
-    // input-otp schedules 0/10/50 ms synchronization callbacks without a
-    // cleanup handle. Keep jsdom alive until those callbacks have drained.
-    await new Promise((resolve) => setTimeout(resolve, 60));
+    if (shouldDrainInputOtp) {
+        // input-otp schedules 0/10/50 ms synchronization callbacks without a
+        // cleanup handle. Keep jsdom alive until those callbacks have drained.
+        await new Promise((resolve) => setTimeout(resolve, 60));
+    }
 });
