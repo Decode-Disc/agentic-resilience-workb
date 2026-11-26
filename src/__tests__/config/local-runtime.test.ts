@@ -415,6 +415,10 @@ function initializeRuntimeFixture(root: string, selector: string) {
         join(root, "scripts/local-dev.ts"),
     );
     copyFileSync(
+        resolve(process.cwd(), "scripts/e2e-shards.ts"),
+        join(root, "scripts/e2e-shards.ts"),
+    );
+    copyFileSync(
         resolve(process.cwd(), "scripts/local-processes.ts"),
         join(root, "scripts/local-processes.ts"),
     );
@@ -844,6 +848,8 @@ it("forwards e2e arguments through the startup lock to Playwright", async () => 
     ]);
     expect(JSON.parse(readFileSync(convexArgsPath, "utf8"))).toEqual([
         "dev",
+        "--typecheck",
+        "disable",
         "--local-backend-version",
         "precompiled-fixture",
         "--local-cloud-port",
@@ -854,6 +860,91 @@ it("forwards e2e arguments through the startup lock to Playwright", async () => 
         "pnpm exec vite dev",
     ]);
     expect(output).not.toMatch(/startup-lock-held/);
+}, 20_000);
+
+it("fails e2e startup at the dedicated web budget when the watcher never starts Vite", async () => {
+    const { first } = await createWorktreePair();
+    const backendServer = await backend("runtime-first");
+    configureNativeRuntime(first, "runtime-first", backendServer.origin);
+    const policyPath = join(first, "convex/resourcePolicy.ts");
+    const policy = readFileSync(policyPath, "utf8");
+    writeFileSync(
+        policyPath,
+        policy.replace(
+            /e2eWebStartupTimeoutMs:\s*[\d_]+,/,
+            "e2eWebStartupTimeoutMs: 800,",
+        ),
+    );
+    const child = spawnLocalDev(
+        first,
+        "test:e2e",
+        { LOCAL_RUNTIME_FIXTURE_KEEP_CONFIG: "yes" },
+        [],
+        "pipe",
+    );
+    let output = "";
+    child.stdout?.on("data", (chunk: Buffer) => (output += chunk.toString()));
+    child.stderr?.on("data", (chunk: Buffer) => (output += chunk.toString()));
+
+    expect(await processExit(child), output).toBe(1);
+    expect(output).toMatch(
+        /web listener did not become ready before the startup timeout/,
+    );
+}, 20_000);
+
+it("bounds web readiness at the e2e budget when Convex is already running", async () => {
+    const { first } = await createWorktreePair();
+    const policyPath = join(first, "convex/resourcePolicy.ts");
+    writeFileSync(
+        policyPath,
+        readFileSync(policyPath, "utf8").replace(
+            /e2eWebStartupTimeoutMs:\s*[\d_]+,/,
+            "e2eWebStartupTimeoutMs: 800,",
+        ),
+    );
+    const convex = spawnLocalDev(first, "convex:dev");
+    await waitForRuntimeManifest(first);
+
+    const child = spawnLocalDev(first, "test:e2e", {}, [], "pipe");
+    let output = "";
+    child.stdout?.on("data", (chunk: Buffer) => (output += chunk.toString()));
+    child.stderr?.on("data", (chunk: Buffer) => (output += chunk.toString()));
+
+    expect(await processExit(child), output).toBe(1);
+    expect(output).toMatch(
+        /web listener did not become ready before the startup timeout/,
+    );
+    convex.kill("SIGTERM");
+    expect(await processExit(convex)).toBe(0);
+}, 20_000);
+
+it("expands a round-robin shard into anchored Playwright spec patterns", async () => {
+    const { first } = await createWorktreePair();
+    for (const relative of ["e2e/a.spec.ts", "src/__tests__/e2e/b.spec.ts"]) {
+        const path = join(first, relative);
+        mkdirSync(join(path, ".."), { recursive: true });
+        writeFileSync(path, "");
+    }
+    const argsPath = join(first, "playwright-args.json");
+    const child = spawnLocalDev(
+        first,
+        "test:e2e",
+        {
+            ...(await fakeWebPnpm(first)),
+            LOCAL_RUNTIME_PLAYWRIGHT_ARGS_FILE: argsPath,
+            LOCAL_RUNTIME_STARTUP_TIMEOUT_MS: "5000",
+        },
+        ["--round-robin-shard=1/2"],
+        "pipe",
+    );
+
+    expect(await processExit(child)).toBe(0);
+    const playwrightArgs: string[] = JSON.parse(readFileSync(argsPath, "utf8"));
+    expect(playwrightArgs[0]).toBe("--pass-with-no-tests");
+    expect(playwrightArgs).toHaveLength(2);
+    expect(
+        new RegExp(playwrightArgs[1] ?? "").test(join(first, "e2e/a.spec.ts")),
+    ).toBe(true);
 }, 20_000);
 
 it.each([

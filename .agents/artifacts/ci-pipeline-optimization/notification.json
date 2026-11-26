@@ -1,0 +1,20 @@
+[
+  {
+    "project": "agentic-resilience-workb",
+    "sender": "OpenCode",
+    "event": "implementation-validated",
+    "key": "ci-pipeline-optimization-implementation-902a71e",
+    "revision": "902a71e",
+    "messageId": 1135,
+    "receipt": "/home/abdwhb/.local/state/agent-stack/notify/b86f4aee91c9764ee8518195130e8e2e99f5e0372f23014eb9455022a64657f4.json"
+  },
+  {
+    "project": "agentic-resilience-workb",
+    "sender": "OpenCode",
+    "event": "review-findings-fixed",
+    "key": "ci-pipeline-optimization-review-fixes-902a71e",
+    "revision": "902a71e",
+    "messageId": 1137,
+    "receipt": "/home/abdwhb/.local/state/agent-stack/notify/3c83a1f2c0b68c4966c12e6f44f027dc17ae07ebec36b514d1070b2719bbd73f.json"
+  }
+]

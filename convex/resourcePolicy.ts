@@ -483,6 +483,8 @@ export const SOURCES_HANDOFF_BASE_READ_RESERVE_BYTES = 64 * 1024;
 export const GIT_METADATA_TIMEOUT_MS = 5_000;
 export const LOCAL_RUNTIME_POLICY = {
     maxStartupTimeoutMs: 600_000,
+    /** Post-backend web readiness for test:e2e; Convex typechecking belongs to the quality job. */
+    e2eWebStartupTimeoutMs: 120_000,
     portReservationTimeoutMs: 20_000,
     unlockTimeoutMs: 2_000,
     backendIdentityTimeoutMs: 3_000,

@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { defineConfig, devices } from "@playwright/test";
+import { E2E_TEST_IGNORE, E2E_TEST_MATCH } from "./scripts/e2e-shards.ts";
 import { resolveLocalRuntime } from "./scripts/local-runtime.ts";
 
 const runtime = await resolveLocalRuntime(process.cwd(), {
@@ -29,9 +30,9 @@ const configuredWorkers = resolvePlaywrightWorkers();
 
 export default defineConfig({
     testDir: ".",
-    testMatch: ["e2e/**/*.spec.ts", "src/__tests__/e2e/**/*.spec.ts"],
+    testMatch: [...E2E_TEST_MATCH],
     // Retired specs are kept verbatim outside the build.
-    testIgnore: ["archive/**"],
+    testIgnore: [...E2E_TEST_IGNORE],
     outputDir: join(outputRoot, "results"),
     fullyParallel: true,
     forbidOnly: Boolean(process.env.CI),
