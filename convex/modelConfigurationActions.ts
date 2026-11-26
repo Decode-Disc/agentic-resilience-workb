@@ -11,8 +11,8 @@ import {
     MODEL_MAX_INPUT_PRICE_PER_MILLION,
     MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
     MODEL_METADATA_REQUEST_TIMEOUT_MS,
-    NATIVE_PROFILE_PREPARATION_TIMEOUT_MS,
     NATIVE_PROFILE_BATCH_SIZE,
+    NATIVE_PROFILE_PREPARATION_TIMEOUT_MS,
 } from "@convex/resourcePolicy";
 import type { FunctionReturnType } from "convex/server";
 import { type Infer, v } from "convex/values";
@@ -27,8 +27,8 @@ import {
 import { prepareNativeProfiles } from "./integrations/piModelProfiles";
 import { modelPrepared, revisionRoute } from "./modelConfiguration";
 import {
-    type nativeProfile,
     modelPreparationInput,
+    type nativeProfile,
     reasoningEffortValues,
 } from "./modelConfigurationSchema";
 
@@ -326,21 +326,34 @@ export const verifyResponseControlModel = action({
 async function refreshRevision(
     ctx: ActionCtx,
     revision: Doc<"modelRevisions">,
+    needsCatalogStamp: boolean,
 ) {
+    const retainedKeys = new Set<string>();
     const profiles = await prepareNativeProfiles(
         revisionRoute(revision),
         revision.descriptor,
         AbortSignal.timeout(NATIVE_PROFILE_PREPARATION_TIMEOUT_MS),
-        (keys) => readProfileBatches(ctx, keys),
+        async (keys) => {
+            const existing = await readProfileBatches(ctx, keys);
+            for (const profile of existing) retainedKeys.add(profile.key);
+            return existing;
+        },
     );
+    const missing = profiles.filter(
+        (profile) => !retainedKeys.has(profile.key),
+    );
+    if (missing.length === 0 && !needsCatalogStamp) return;
     await ctx.runMutation(internal.modelConfiguration.retainRefreshedProfiles, {
         revisionId: revision._id,
         profileCatalog: NATIVE_PROFILE_CATALOG,
-        profiles: await stageProfilePrefixBatches(ctx, profiles),
+        profiles:
+            missing.length > 0
+                ? await stageProfilePrefixBatches(ctx, missing)
+                : [],
     });
 }
 
-/** Recalibrates one retained revision per call; the caller follows the bounded continuation to include old pins. */
+/** Recalibrates one distinct retained revision per call; the caller follows the bounded continuation to include old pins. */
 export const refreshProfiles = action({
     args: {
         catalogId: v.id("modelCatalog"),
@@ -358,7 +371,13 @@ export const refreshProfiles = action({
             internal.modelConfiguration.profileRevisions,
             args,
         );
-        for (const revision of page.page) await refreshRevision(ctx, revision);
+        for (const revision of page.page)
+            await refreshRevision(
+                ctx,
+                revision,
+                revision._id === page.currentRevisionId &&
+                    !page.catalogPrepared,
+            );
         return {
             isDone: page.isDone,
             continueCursor: page.isDone ? null : page.continueCursor,
@@ -388,7 +407,7 @@ export const initialize = action({
                 const revision = page.page[0];
                 if (!revision || revision._id !== existing.currentRevisionId)
                     return { ready: false };
-                await refreshRevision(ctx, revision);
+                await refreshRevision(ctx, revision, true);
             }
             const outcome =
                 existing?.status === "ready"

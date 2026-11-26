@@ -263,7 +263,9 @@ function modelInputSchema<Schema extends z.ZodObject>(
 ) {
     const strictValidator = validator.strict();
     type Input = z.output<typeof strictValidator>;
+    let cachedSchema: JSONSchema7 | undefined;
     const createJsonSchema = () => {
+        if (cachedSchema) return cachedSchema;
         const convertedIdPaths = new Set<string>();
         const schema = z.toJSONSchema(strictValidator, {
             target: "draft-7",
@@ -290,7 +292,8 @@ function modelInputSchema<Schema extends z.ZodObject>(
         )
             throw new Error("Canonical Convex ID schema was not converted");
         // Zod declares a cross-draft union; the explicit target above produces draft-7.
-        return schema as JSONSchema7;
+        cachedSchema = schema as JSONSchema7;
+        return cachedSchema;
     };
 
     return jsonSchema<Input>(createJsonSchema, {

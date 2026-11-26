@@ -120,7 +120,7 @@ export async function sourcesQualificationPhase(
         const journal = openQualificationJournal(root, protocol);
         journal.begin("qualification");
         const fingerprints = preserveQualificationCandidate(root);
-        verifyQualificationCandidate(root, fingerprints);
+        await verifyQualificationCandidate(root, fingerprints);
         const publication = await client.query(
             ref(internal.execution.piControl.publicationStatus),
         );

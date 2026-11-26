@@ -471,6 +471,7 @@ export const PERSISTENCE_PAGE_SIZE = {
     qualificationFixtures: 32,
     researchResumeRequests: 20,
     nativeRebind: 20,
+    modelRevisionRefreshScan: 128,
 } as const;
 export const SOURCES_HANDOFF_BASE_READ_RESERVE_BYTES = 64 * 1024;
 

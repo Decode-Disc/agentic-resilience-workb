@@ -32,6 +32,10 @@ function campaignModelRoles(manifest: CampaignManifest) {
         : (["workbench"] as const);
 }
 
+function modelChoiceKey(choice: { model: string; provider?: string }) {
+    return JSON.stringify([choice.model, choice.provider ?? null]);
+}
+
 /** Prepares selected catalogue profiles before admission without changing live role assignments. */
 export async function prepareCampaignModels(
     client: Pick<ConvexHttpClient, "query" | "action">,
@@ -41,22 +45,42 @@ export async function prepareCampaignModels(
     const profiles = configurationId
         ? [campaignConfiguration(manifest, configurationId)]
         : campaignConfigurations(manifest);
+    const preparedModels = new Map<
+        string,
+        Awaited<ReturnType<typeof prepareQualificationModel>>
+    >();
+    const verifiedControllers = new Map<
+        string,
+        FunctionReturnType<
+            typeof api.modelConfigurationActions.verifyResponseControlModel
+        >
+    >();
     const prepared = [];
     for (const profile of profiles) {
         for (const role of campaignModelRoles(manifest)) {
             const choice = profile.models[role];
             assert(choice);
+            const key = modelChoiceKey(choice);
+            let outcome = preparedModels.get(key);
+            if (!outcome) {
+                outcome = await prepareQualificationModel(client, choice);
+                preparedModels.set(key, outcome);
+            }
             prepared.push({
                 configurationId: profile.id,
                 role,
-                ...(await prepareQualificationModel(client, choice)),
+                ...outcome,
             });
         }
         if (profile.controllerModel) {
-            const controller = await client.action(
-                api.modelConfigurationActions.verifyResponseControlModel,
-                { model: profile.controllerModel },
-            );
+            let controller = verifiedControllers.get(profile.controllerModel);
+            if (!controller) {
+                controller = await client.action(
+                    api.modelConfigurationActions.verifyResponseControlModel,
+                    { model: profile.controllerModel },
+                );
+                verifiedControllers.set(profile.controllerModel, controller);
+            }
             prepared.push({
                 configurationId: profile.id,
                 role: "controller" as const,
@@ -79,6 +103,7 @@ export async function configureCampaign(
     const original = await client.query(api.modelConfiguration.list, {});
     const state: Saved = { original, changes: [] };
     save(root, state);
+    const preparedKeys = new Set<string>();
     for (const role of campaignModelRoles(manifest)) {
         const choice = profile.models[role];
         assert(choice);
@@ -123,7 +148,11 @@ export async function configureCampaign(
                 },
             );
         }
-        await prepareQualificationModel(client, choice);
+        const key = modelChoiceKey(choice);
+        if (!selected.compatible && !preparedKeys.has(key)) {
+            await prepareQualificationModel(client, choice);
+            preparedKeys.add(key);
+        }
         current = await client.query(api.modelConfiguration.list, {});
         selected = current.models.find((m) => m._id === selected?._id);
         assert(selected);

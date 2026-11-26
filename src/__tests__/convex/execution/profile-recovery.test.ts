@@ -399,3 +399,168 @@ test("initialization refreshes existing defaults offline and preserves administr
         await f.t.run((ctx) => ctx.db.query("modelRevisions").collect()),
     ).toEqual(state.revisions);
 });
+
+test("refreshProfiles collapses contiguous identical-descriptor revisions and reaches distinct historical descriptors", async () => {
+    const f = await seedWorkbench();
+    const installed = await installModel(
+        f.t,
+        { ...nativePiFixtureRoute, reasoningEffort: "low" },
+        "workbench",
+        {
+            reasoningEfforts: ["low", "medium", "high"],
+            reasoningDefault: "medium",
+        },
+    );
+    const catalog = await f.t.run((ctx) => ctx.db.get(installed.catalogId));
+    assert(catalog?.currentRevisionId);
+    const currentRevisionId = catalog.currentRevisionId;
+    const baseRevision = await f.t.run((ctx) => ctx.db.get(currentRevisionId));
+    assert(baseRevision);
+    // Insert an older historical revision with a distinct descriptor below the current one.
+    await f.t.run(async (ctx) => {
+        const { _id, _creationTime, ...fields } = baseRevision;
+        await ctx.db.insert("modelRevisions", {
+            ...fields,
+            revision: 0,
+            descriptor: {
+                ...baseRevision.descriptor,
+                maxTokens: baseRevision.descriptor.maxTokens - 1024,
+            },
+        });
+    });
+    // Create 4 additional revisions via reasoning preference toggles (identical descriptor).
+    let expectedRevision = catalog.revision;
+    for (const [index, preference] of (
+        ["high", "low", "medium", "recommended"] as const
+    ).entries()) {
+        const updated = await installed.admin.mutation(
+            api.modelConfiguration.setReasoningPreference,
+            {
+                catalogId: installed.catalogId,
+                expectedRevision,
+                requestKey: `toggle-${index}`,
+                preference,
+            },
+        );
+        expectedRevision = updated.revision;
+    }
+    const totalRevisions = await f.t.run((ctx) =>
+        ctx.db
+            .query("modelRevisions")
+            .withIndex("by_catalog_and_revision", (q) =>
+                q.eq("catalogId", installed.catalogId),
+            )
+            .collect(),
+    );
+    expect(totalRevisions).toHaveLength(6);
+
+    const page1 = await installed.admin.action(
+        api.modelConfigurationActions.refreshProfiles,
+        { catalogId: installed.catalogId, cursor: null },
+    );
+    expect(page1.isDone).toBe(false);
+    assert(page1.continueCursor);
+
+    const page2 = await installed.admin.action(
+        api.modelConfigurationActions.refreshProfiles,
+        { catalogId: installed.catalogId, cursor: page1.continueCursor },
+    );
+    expect(page2).toEqual({ isDone: true, continueCursor: null });
+}, 30_000);
+
+test("refreshProfiles advances strictly across the 128-revision scan boundary without truncation", async () => {
+    const f = await seedWorkbench();
+    const installed = await installModel(
+        f.t,
+        { ...nativePiFixtureRoute, reasoningEffort: "low" },
+        "workbench",
+        { reasoningEfforts: ["low", "medium"], reasoningDefault: "low" },
+    );
+    const catalog = await f.t.run((ctx) => ctx.db.get(installed.catalogId));
+    assert(catalog?.currentRevisionId);
+    const currentRevisionId = catalog.currentRevisionId;
+    const current = await f.t.run((ctx) => ctx.db.get(currentRevisionId));
+    assert(current);
+    // Total identical revisions = 129 (1 existing + 128 inserted).
+    await f.t.run(async (ctx) => {
+        const { _id, _creationTime, ...fields } = current;
+        let rev = current.revision;
+        let lastId = current._id;
+        for (let i = 0; i < 128; i++) {
+            rev++;
+            lastId = await ctx.db.insert("modelRevisions", {
+                ...fields,
+                revision: rev,
+                reasoningEffort: i % 2 === 0 ? "medium" : "low",
+            });
+        }
+        await ctx.db.patch(installed.catalogId, {
+            revision: rev,
+            currentRevisionId: lastId,
+        });
+    });
+
+    const serializer = vi
+        .spyOn(Harness, "open")
+        .mockRejectedValue(
+            new Error("Already retained profiles need no serializer"),
+        );
+    const page1 = await installed.admin.action(
+        api.modelConfigurationActions.refreshProfiles,
+        { catalogId: installed.catalogId, cursor: null },
+    );
+    expect(page1.isDone).toBe(false);
+    assert(page1.continueCursor);
+    const page2 = await installed.admin.action(
+        api.modelConfigurationActions.refreshProfiles,
+        { catalogId: installed.catalogId, cursor: page1.continueCursor },
+    );
+    expect(page2).toEqual({ isDone: true, continueCursor: null });
+    expect(serializer).not.toHaveBeenCalled();
+});
+
+test("refreshProfiles preserves historical revisions whose reasoningEffort is outside advertised choices", async () => {
+    const f = await seedWorkbench();
+    const installed = await installModel(
+        f.t,
+        { ...nativePiFixtureRoute, reasoningEffort: "low" },
+        "workbench",
+        { reasoningEfforts: ["low", "medium"], reasoningDefault: "low" },
+    );
+    const catalog = await f.t.run((ctx) => ctx.db.get(installed.catalogId));
+    assert(catalog?.currentRevisionId);
+    const currentRevisionId = catalog.currentRevisionId;
+    const current = await f.t.run((ctx) => ctx.db.get(currentRevisionId));
+    assert(current);
+    await f.t.run(async (ctx) => {
+        const { _id, _creationTime, ...fields } = current;
+        await ctx.db.insert("modelRevisions", {
+            ...fields,
+            revision: 0,
+            reasoningEffort: "high",
+        });
+    });
+
+    const page1 = await installed.admin.action(
+        api.modelConfigurationActions.refreshProfiles,
+        { catalogId: installed.catalogId, cursor: null },
+    );
+    expect(page1.isDone).toBe(false);
+    assert(page1.continueCursor);
+    const page2 = await installed.admin.action(
+        api.modelConfigurationActions.refreshProfiles,
+        { catalogId: installed.catalogId, cursor: page1.continueCursor },
+    );
+    expect(page2).toEqual({ isDone: true, continueCursor: null });
+}, 30_000);
+
+test("refreshProfiles rejects malformed continuation cursors", async () => {
+    const f = await seedWorkbench();
+    const installed = await installModel(f.t, nativePiFixtureRoute);
+    await expect(
+        installed.admin.action(api.modelConfigurationActions.refreshProfiles, {
+            catalogId: installed.catalogId,
+            cursor: "not-a-valid-cursor",
+        }),
+    ).rejects.toThrow("invalid_model_configuration");
+});

@@ -1864,7 +1864,7 @@ async function executeCampaign(
             );
             mkdirSync(validationRoot, { recursive: true, mode: 0o700 });
             const candidate = preserveQualificationCandidate(validationRoot);
-            verifyQualificationCandidate(validationRoot, candidate);
+            await verifyQualificationCandidate(validationRoot, candidate);
         }
     }
     const publication = await client.query(
@@ -2141,7 +2141,7 @@ async function executeCampaign(
             candidateHash(current),
             "Candidate changed before validation",
         );
-        verifyQualificationCandidate(lotRoot, validatedFingerprints);
+        await verifyQualificationCandidate(lotRoot, validatedFingerprints);
         if (manifest.mode === "live") {
             assert(adminCode);
             await withQualificationAdministrator(

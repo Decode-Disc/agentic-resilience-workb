@@ -5,11 +5,11 @@ import {
     validResponseControlConfiguration,
 } from "@convex/domain/workbenchResponseControlContracts";
 import {
-    NATIVE_PROFILE_BATCH_SIZE,
     MODEL_MAX_INPUT_PRICE_PER_MILLION,
     MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
+    NATIVE_PROFILE_BATCH_SIZE,
+    PERSISTENCE_PAGE_SIZE,
 } from "@convex/resourcePolicy";
-import { paginationResultValidator } from "convex/server";
 import { type Infer, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -357,24 +357,98 @@ async function retainNativeProfiles(
     }
 }
 
-/** Bounded offline refresh enumerates historical descriptors without changing their revisions. */
+/** Revisions with identical route, descriptor and covered effort produce identical nativeInputProfiles keys. */
+function revisionCalibrationSignature(revision: Doc<"modelRevisions">): string {
+    const covered = new Set([
+        recommendedReasoningEffort(revision.descriptor),
+        ...reasoningChoices(revision.descriptor),
+    ]);
+    const extraEffort =
+        revision.reasoningEffort !== undefined &&
+        !covered.has(revision.reasoningEffort)
+            ? revision.reasoningEffort
+            : null;
+    return sha256Hex(
+        stableStringify({
+            model: revision.model,
+            provider: revision.provider ?? null,
+            profileKey: modelConfigurationKey(revision.descriptor),
+            extraEffort,
+        }),
+    );
+}
+
+function parseRevisionCursor(cursor: string | null | undefined): number | null {
+    if (cursor === undefined || cursor === null) return null;
+    const match = /^rev:(-?\d+)$/.exec(cursor);
+    if (!match) throw executionError("invalid_model_configuration");
+    const value = Number(match[1]);
+    if (!Number.isSafeInteger(value))
+        throw executionError("invalid_model_configuration");
+    return value;
+}
+
+/** Bounded offline refresh yields one distinct calibration revision per page, skipping contiguous identical descriptors. */
 export const profileRevisions = internalQuery({
     args: {
         catalogId: v.id("modelCatalog"),
         cursor: v.optional(v.union(v.string(), v.null())),
     },
-    returns: paginationResultValidator(schema.doc("modelRevisions")),
+    returns: v.object({
+        page: v.array(schema.doc("modelRevisions")),
+        isDone: v.boolean(),
+        continueCursor: v.union(v.string(), v.null()),
+        currentRevisionId: v.union(v.id("modelRevisions"), v.null()),
+        catalogPrepared: v.boolean(),
+    }),
     handler: async (ctx, args) => {
         await requireAdmin(ctx);
-        if (!(await ctx.db.get(args.catalogId)))
-            throw executionError("model_unavailable");
-        return ctx.db
+        const catalog = await ctx.db.get(args.catalogId);
+        if (!catalog) throw executionError("model_unavailable");
+        const beforeRevision = parseRevisionCursor(args.cursor);
+        const scanLimit = PERSISTENCE_PAGE_SIZE.modelRevisionRefreshScan;
+        const rows = await ctx.db
             .query("modelRevisions")
             .withIndex("by_catalog_and_revision", (q) =>
-                q.eq("catalogId", args.catalogId),
+                beforeRevision === null
+                    ? q.eq("catalogId", args.catalogId)
+                    : q
+                          .eq("catalogId", args.catalogId)
+                          .lt("revision", beforeRevision),
             )
             .order("desc")
-            .paginate({ numItems: 1, cursor: args.cursor ?? null });
+            .take(scanLimit + 1);
+        const target = rows[0];
+        if (!target)
+            return {
+                page: [],
+                isDone: true,
+                continueCursor: null,
+                currentRevisionId: catalog.currentRevisionId ?? null,
+                catalogPrepared: modelPrepared(catalog),
+            };
+        const targetSignature = revisionCalibrationSignature(target);
+        let nextRevision: number | null = null;
+        for (let i = 1; i < Math.min(rows.length, scanLimit); i++) {
+            const candidate = rows[i];
+            if (
+                candidate &&
+                revisionCalibrationSignature(candidate) !== targetSignature
+            ) {
+                nextRevision = candidate.revision;
+                break;
+            }
+        }
+        if (nextRevision === null && rows.length > scanLimit)
+            nextRevision = rows[scanLimit]?.revision ?? null;
+        return {
+            page: [target],
+            isDone: nextRevision === null,
+            continueCursor:
+                nextRevision === null ? null : `rev:${nextRevision + 1}`,
+            currentRevisionId: catalog.currentRevisionId ?? null,
+            catalogPrepared: modelPrepared(catalog),
+        };
     },
 });
 
@@ -424,7 +498,8 @@ export const retainRefreshedProfiles = internalMutation({
         const revision = await ctx.db.get(args.revisionId);
         const catalog = revision ? await ctx.db.get(revision.catalogId) : null;
         if (!revision || !catalog) throw executionError("model_unavailable");
-        await retainNativeProfiles(ctx, args.profiles);
+        if (args.profiles.length > 0)
+            await retainNativeProfiles(ctx, args.profiles);
         if (
             catalog.currentRevisionId === revision._id &&
             catalog.status === "ready"

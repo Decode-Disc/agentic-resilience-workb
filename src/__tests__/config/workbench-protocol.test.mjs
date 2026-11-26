@@ -40,19 +40,43 @@ function fixture() {
     );
     return { root, file, fingerprints };
 }
-test("one failed prerequisite blocks validation before later checks can run", () => {
+test("one failed prerequisite aborts sibling checks and blocks validation", async () => {
     const f = fixture();
-    let checks = 0;
+    let started = 0;
+    let siblingAborted = false;
     try {
-        assert.throws(
+        await assert.rejects(
             () =>
-                verifyQualificationCandidate(f.root, f.fingerprints, () => ({
-                    status: ++checks === 2 ? 1 : 0,
-                    stderr: "diagnostic",
-                })),
+                verifyQualificationCandidate(
+                    f.root,
+                    f.fingerprints,
+                    (_binary, _args, signal) => {
+                        const index = ++started;
+                        if (index === 2)
+                            return Promise.resolve({
+                                status: 1,
+                                stderr: "diagnostic",
+                            });
+                        return new Promise((resolve) => {
+                            if (signal?.aborted) {
+                                siblingAborted = true;
+                                resolve({ status: null });
+                                return;
+                            }
+                            signal?.addEventListener(
+                                "abort",
+                                () => {
+                                    siblingAborted = true;
+                                    resolve({ status: null });
+                                },
+                                { once: true },
+                            );
+                        });
+                    },
+                ),
             /prerequisite failed/,
         );
-        assert.equal(checks, 2);
+        assert.equal(siblingAborted, true);
         assert.equal(
             JSON.parse(readFileSync(join(f.root, "validation.json"))).status,
             "failed",
@@ -61,10 +85,10 @@ test("one failed prerequisite blocks validation before later checks can run", ()
         rmSync(f.root, { recursive: true });
     }
 });
-test("source changes while checks run invalidate their result", () => {
+test("source changes while checks run invalidate their result", async () => {
     const f = fixture();
     try {
-        assert.throws(
+        await assert.rejects(
             () =>
                 verifyQualificationCandidate(f.root, f.fingerprints, () => {
                     writeFileSync(f.file, "changed");
@@ -80,16 +104,45 @@ test("source changes while checks run invalidate their result", () => {
         rmSync(f.root, { recursive: true });
     }
 });
-test("validation returns only after all checks passed on the frozen candidate", () => {
+test("validation runs all six read-only checks concurrently and returns only after all pass", async () => {
     const f = fixture();
     try {
         let checks = 0;
-        const r = verifyQualificationCandidate(f.root, f.fingerprints, () => {
-            checks++;
-            return { status: 0 };
+        let inFlight = 0;
+        let peakConcurrency = 0;
+        let releaseBarrier;
+        const barrier = new Promise((resolve) => {
+            releaseBarrier = resolve;
         });
+        const r = await verifyQualificationCandidate(
+            f.root,
+            f.fingerprints,
+            async () => {
+                checks++;
+                inFlight++;
+                peakConcurrency = Math.max(peakConcurrency, inFlight);
+                if (checks >= 2) releaseBarrier();
+                await Promise.race([
+                    barrier,
+                    new Promise((_, reject) =>
+                        setTimeout(
+                            () =>
+                                reject(
+                                    new Error(
+                                        "Checks did not run concurrently",
+                                    ),
+                                ),
+                            1000,
+                        ),
+                    ),
+                ]);
+                inFlight--;
+                return { status: 0 };
+            },
+        );
         assert.equal(r.status, "passed");
         assert.equal(checks, 6);
+        assert(peakConcurrency >= 2);
         assert(r.checks.every((c) => c.status === "passed"));
     } finally {
         rmSync(f.root, { recursive: true });
@@ -228,7 +281,7 @@ test("a material failed expectation blocks acceptance despite completed missions
     }
 });
 
-test("repeated validation of identical source bytes and tools reuses its successful checks", () => {
+test("repeated validation of identical source bytes and tools reuses its successful checks", async () => {
     const f = fixture();
     try {
         let checks = 0;
@@ -236,8 +289,8 @@ test("repeated validation of identical source bytes and tools reuses its success
             checks++;
             return { status: 0 };
         };
-        verifyQualificationCandidate(f.root, f.fingerprints, execute);
-        verifyQualificationCandidate(f.root, f.fingerprints, execute);
+        await verifyQualificationCandidate(f.root, f.fingerprints, execute);
+        await verifyQualificationCandidate(f.root, f.fingerprints, execute);
         assert.equal(checks, 6);
     } finally {
         rmSync(f.root, { recursive: true });
