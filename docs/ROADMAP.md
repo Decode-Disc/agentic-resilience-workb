@@ -65,7 +65,7 @@ Outcome: the analyst can frame one persistent dossier, launch the question-led w
 
 Outcome: one controlled execution mechanism supports adaptive documentary inquiry and preserves useful work across interruptions.
 
-- [x] Complete the scoped documentary examination and interruption transition on the authorized local copy. Retained examinations and receipts were preserved, and retired execution bindings were removed. The local runtime verified scheduled recovery, partial handoff and native Sources and Workbench continuation with controlled provider responses. Live semantic qualification remains a separate task.
+- [x] Complete the scoped documentary examination and interruption transition on the authorized local copy. Retained examinations and receipts were preserved, and retired execution bindings were removed. The local runtime verified scheduled recovery, partial handoff and native Sources and Workbench continuation with controlled provider responses. New examinations reject contradictory fidelity and use decisions. The reader preserves the citation and labels an unavailable finding explanation. The corrected examiner’s semantic accuracy on live contributions remains to be qualified.
 
 - [x] Implement durable scheduled execution for the four Sources I/O families, native visible-prefix diagnostics, consistent campaign accounting, immediate milestone capture and safe independent-case continuation. Deterministic integration, isolated local wait/resume and resource replay establish the execution mechanism; provider compatibility and documentary usefulness remain subject to a newly authorized live qualification. See the [execution and evaluator verification](verification/2026-11-19-sources-execution-and-evaluator.md).
 
