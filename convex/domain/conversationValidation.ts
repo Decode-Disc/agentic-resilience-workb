@@ -5,8 +5,8 @@ import {
     hasCompletionText,
 } from "@convex/execution/agentDefinition";
 import { executionError } from "@convex/execution/errors";
-import { localBrowserFixturesEnabled } from "@convex/runWorkspace";
 import { v } from "convex/values";
+import { localBrowserFixturesEnabled } from "./browserFixtureAccess";
 import { conversationValidationSchemas as schemas } from "./conversationValidationContracts";
 import {
     conversationValidationOperations,

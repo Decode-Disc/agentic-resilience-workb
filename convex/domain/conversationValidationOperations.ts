@@ -8,12 +8,12 @@ import {
     observeOperationOutcome,
     operationResultValidator,
 } from "@convex/execution/operationResults";
+import { v } from "convex/values";
 import {
     localBrowserFixturesEnabled,
     requireBrowserFixtureContext,
     requireBrowserTestRunOwner,
-} from "@convex/runWorkspace";
-import { v } from "convex/values";
+} from "./browserFixtureAccess";
 export async function requireFixtureScope(
     ctx: QueryCtx,
     runId: Id<"researchRuns">,

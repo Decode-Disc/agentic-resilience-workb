@@ -4,11 +4,11 @@ import {
 } from "@convex/execution/agentDefinition";
 import { executionError } from "@convex/execution/errors";
 import { missionScope, missionState } from "@convex/execution/missionData";
+import { validate } from "convex-helpers/validators";
 import {
     requireBrowserFixtureContext,
     requireBrowserTestRunOwner,
-} from "@convex/runWorkspace";
-import { validate } from "convex-helpers/validators";
+} from "./browserFixtureAccess";
 import {
     validationCompletionValidator,
     validationResultValidator,
