@@ -1499,6 +1499,188 @@ test.each([
     else expect(state.usage?.usage.costUsd).toBeGreaterThan(0);
 }, 30000);
 
+test("a paused Sources scenario terminates on the exhausted case or lot ledger only after local work and accounting settle", async () => {
+    const f = await liveFixture(12);
+    const first = f.bindings[0];
+    assert(first);
+    const { preparationId, run: startedRun } = await startQualifiedSources(f);
+    const missionId = await f.t.mutation(internal.execution.missions.start, {
+        runId: first.runId,
+        expectedGeneration: startedRun.executionGeneration,
+        definitionId: "sources_v1",
+        scope: { kind: "sources_v1", preparationId },
+        requestKey: `sources:${preparationId}`,
+    });
+    const state = await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(first.runId);
+        const mission = await ctx.db.get(missionId);
+        const conversation = await ctx.db
+            .query("agentConversations")
+            .withIndex("by_run", (q) => q.eq("runId", first.runId))
+            .unique();
+        assert(conversation?.activeTurnId);
+        const turn = await ctx.db.get(conversation.activeTurnId);
+        assert(turn?.missionId);
+        await ctx.db.patch(conversation._id, {
+            activeTurnId: undefined,
+            queuedCount: 0,
+        });
+        const prior = await ctx.db
+            .query("piSessions")
+            .withIndex("by_conversation", (q) =>
+                q.eq("conversationId", conversation._id),
+            )
+            .unique();
+        if (prior)
+            await ctx.db.patch(prior._id, {
+                settledSequence: prior.sequence,
+                leaseUntil: Date.now() - 1,
+            });
+        else
+            await ctx.db.insert("piSessions", {
+                conversationId: conversation._id,
+                missionId: turn.missionId,
+                generation: startedRun.executionGeneration,
+                epoch: 1,
+                writer: "settled",
+                leaseUntil: Date.now() - 1,
+                sequence: 1,
+                settledSequence: 1,
+                nextId: 2,
+            });
+        const rows = await ctx.db
+            .query("qualificationUsage")
+            .withIndex("by_context_and_run", (q) =>
+                q.eq("contextId", f.contextId),
+            )
+            .collect();
+        const total = rows.find((r) => !r.runId),
+            local = rows.find((r) => r.runId === first.runId);
+        const lot = await ctx.db.get(f.lotId);
+        const context = await ctx.db.get(f.contextId);
+        assert(
+            run &&
+                mission &&
+                total &&
+                local &&
+                lot &&
+                context?.paidQualification,
+        );
+        const limit = Math.min(
+            lot.allocation.model,
+            context.paidQualification.maximumRequests,
+        );
+        await ctx.db.patch(run._id, {
+            sourcePreparationId: preparationId,
+            executionStatus: "paused",
+        });
+        await ctx.db.patch(mission._id, {
+            requestKey: `sources:${preparationId}`,
+            status: "blocked",
+            blockCode: "qualification_budget_exhausted",
+            piWakeId: undefined,
+            piActiveWriter: undefined,
+        });
+        await ctx.db.patch(total._id, {
+            usage: { ...total.usage, model: limit },
+        });
+        return { total, local, limit, mission };
+    });
+    const observe = async () =>
+        (
+            await f.t.query(
+                internal.execution.fixtures.qualificationContinuation,
+                { runId: first.runId, fixtureKey: first.fixtureKey },
+            )
+        ).terminalModelBudgetStop;
+    expect(await observe()).toBe(true);
+    await f.t.run((ctx) =>
+        ctx.db.patch(state.total._id, {
+            usage: { ...state.total.usage, model: state.limit - 1 },
+        }),
+    );
+    expect(await observe()).toBe(false);
+    await f.t.run((ctx) =>
+        ctx.db.patch(state.local._id, {
+            usage: { ...state.local.usage, model: 12 },
+        }),
+    );
+    expect(await observe()).toBe(true);
+    await f.t.run((ctx) => ctx.db.patch(state.total._id, { pending: 1 }));
+    expect(await observe()).toBe(false);
+    await f.t.run(async (ctx) => {
+        await ctx.db.patch(state.total._id, { pending: 0 });
+        await ctx.db.patch(state.mission._id, {
+            piActiveWriter: "pending-writer",
+        });
+    });
+    expect(await observe()).toBe(false);
+    const wake = await f.t.run(async (ctx) => {
+        const m = state.mission;
+        const id = await ctx.scheduler.runAfter(
+            60_000,
+            internal.execution.missions.resume,
+            {
+                missionId: m._id,
+                expectedGeneration: m.generation,
+                simulation: true,
+            },
+        );
+        await ctx.db.patch(m._id, { piActiveWriter: undefined, piWakeId: id });
+        return id;
+    });
+    expect(await observe()).toBe(false);
+    const effect = await f.t.run(async (ctx) => {
+        const m = state.mission;
+        await ctx.scheduler.cancel(wake);
+        await ctx.db.patch(m._id, { piWakeId: undefined });
+        return ctx.db.insert("agentOperationRequests", {
+            runId: m.runId,
+            missionId: m._id,
+            actor: "agent",
+            cause: "awaiting-authorized-effect",
+            input: { kind: "consult_mission_state" },
+            operationVersion: 3,
+            expectedGeneration: m.generation,
+            logicalKey: "qualification-stop-test",
+            status: "waiting",
+            createdAt: Date.now(),
+        });
+    });
+    expect(await observe()).toBe(false);
+    await f.t.run((ctx) => ctx.db.patch(effect, { status: "observed" }));
+    expect(await observe()).toBe(false);
+    await f.t.run((ctx) => ctx.db.patch(effect, { status: "completed" }));
+    await f.t.run(async (ctx) => {
+        const m = state.mission;
+        const id = await ctx.db.insert("agentInvocations", {
+            missionId: m._id,
+            runId: m.runId,
+            status: "returned",
+            definitionVersion: m.definitionVersion,
+            generation: m.generation,
+            taskKey: "awaiting-settlement",
+            inputJson: "{}",
+            outputJson: "{}",
+            provenance: "live",
+            createdAt: Date.now(),
+        });
+        await ctx.db.patch(m._id, {
+            piActiveWriter: undefined,
+            lastInvocationId: id,
+        });
+    });
+    expect(await observe()).toBe(false);
+    await f.t.run(async (ctx) => {
+        const m = await ctx.db.get(state.mission._id);
+        assert(m?.lastInvocationId);
+        await ctx.db.patch(m.lastInvocationId, {
+            blockCode: "qualification_budget_exhausted",
+        });
+    });
+    expect(await observe()).toBe(true);
+});
+
 test("qualificationContinuation treats a quiet local generation block as safe while refusing active, retrying or systemic blocks", async () => {
     const f = await liveFixture();
     const first = f.bindings[0];

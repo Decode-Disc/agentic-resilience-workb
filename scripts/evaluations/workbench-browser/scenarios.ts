@@ -614,7 +614,21 @@ export async function runCampaignScenarios(
                         s.run.executionStatus === "paused" &&
                         s.sourcesMission?.status === "blocked" &&
                         !s.sourcesMission.piActiveWriter &&
-                        s.sourcesMission.deadlineAt <= Date.now()
+                        (s.sourcesMission.deadlineAt <= Date.now() ||
+                            (s.sourcesMission.blockCode ===
+                                "qualification_budget_exhausted" &&
+                                (
+                                    await client.query(
+                                        ref(
+                                            internal.execution.fixtures
+                                                .qualificationContinuation,
+                                        ),
+                                        {
+                                            runId: c.runId,
+                                            fixtureKey: c.fixtureKey,
+                                        },
+                                    )
+                                ).terminalModelBudgetStop))
                     )
                         throw new Error(
                             `Sources blocked before sources_prepared: ${s.sourcesMission.blockCode ?? "mission_blocked"}`,

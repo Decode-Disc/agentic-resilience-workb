@@ -1219,7 +1219,7 @@ test("backend authentication refreshes expiring credentials before protected req
     assert(signedOut);
 });
 
-for (const status of ["failed", "cancelled", "idle"])
+for (const status of ["failed", "cancelled", "idle", "paused"])
     test(`research handoff ${status === "idle" ? "accepts a blocked Sources mission after its idle partial handoff" : `stops on terminal ${status} state before another scenario`}`, async () => {
         const root = mkdtempSync(join(tmpdir(), "backend-terminal-research-"));
         const base = configurableCampaign();
@@ -1265,6 +1265,13 @@ for (const status of ["failed", "cancelled", "idle"])
                 {
                     query: async (reference) => {
                         if (
+                            getFunctionName(reference) ===
+                            "execution/fixtures:qualificationContinuation"
+                        )
+                            return {
+                                terminalModelBudgetStop: status === "paused",
+                            };
+                        if (
                             getFunctionName(reference) !==
                             "execution/fixtures:qualificationSnapshot"
                         )
@@ -1289,7 +1296,11 @@ for (const status of ["failed", "cancelled", "idle"])
                                         : "draft",
                                 executionStatus: status,
                             },
-                            sourcesMission: { status: "blocked" },
+                            sourcesMission: {
+                                status: "blocked",
+                                blockCode: "qualification_budget_exhausted",
+                                deadlineAt: Date.now() + 3600000,
+                            },
                         };
                     },
                     mutation: async (reference) => {
@@ -1327,7 +1338,9 @@ for (const status of ["failed", "cancelled", "idle"])
         );
         assert.match(
             failure.reason,
-            new RegExp(`Research ${status} before sources_prepared`),
+            status === "paused"
+                ? /Sources blocked before sources_prepared: qualification_budget_exhausted/
+                : new RegExp(`Research ${status} before sources_prepared`),
         );
         assert.equal(failure.step, "handoff");
         assert.equal(existsSync(join(root, "creative")), false);

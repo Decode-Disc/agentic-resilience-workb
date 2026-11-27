@@ -136,19 +136,12 @@ export function qualificationUsageResolved(
     return !!row && row.unknown === 0 && row.conflicts === 0;
 }
 
-/** Reservation, including an optional case cap, is atomic with the actual provider receipt. */
-export async function assertQualificationAllowance(
-    ctx: MutationCtx,
-    contextId: Id<"browserTestContexts">,
+export function qualificationAllowanceScopes(
+    context: Doc<"browserTestContexts"> | null,
+    lot: Doc<"qualificationLots"> | null,
+    campaign: Doc<"qualificationCampaigns"> | null,
     runId: Id<"researchRuns">,
-    call: Pick<Doc<"providerCalls">, "service" | "operation">,
-    reservationUsd: number,
 ) {
-    const context = await ctx.db.get(contextId);
-    const lot = context?.campaignLotId
-        ? await ctx.db.get(context.campaignLotId)
-        : null;
-    const campaign = lot ? await ctx.db.get(lot.campaignId) : null;
     if (
         !context ||
         !lot ||
@@ -156,27 +149,15 @@ export async function assertQualificationAllowance(
         campaign.manifest.version === 1 ||
         !context.paidQualification?.scenarios
     )
-        throw new Error("Configurable qualification grant required");
+        return null;
     const binding = context.paidQualification.scenarios.find(
         (s) => s.runId === runId,
     );
     const scenario = campaign.manifest.scenarios.find(
         (s) => s.id === binding?.id,
     );
-    if (!scenario) throw new Error("Campaign scenario binding unavailable");
-    const expired = await ctx.db
-        .query("providerCalls")
-        .withIndex("by_qualification_context_and_status_and_lease", (q) =>
-            q
-                .eq("qualificationContextId", contextId)
-                .eq("status", "started")
-                .lte("leaseExpiresAt", Date.now()),
-        )
-        .first();
-    if (expired)
-        throw sourcePreparationError("qualification_outcome_unresolved");
-    const kind = qualificationCategory(call);
-    for (const [scopedRunId, limits] of [
+    if (!scenario) return null;
+    return [
         [
             undefined,
             {
@@ -192,7 +173,40 @@ export async function assertQualificationAllowance(
             },
         ],
         [runId, scenario.limits ?? {}],
-    ] as const) {
+    ] as const;
+}
+
+/** Reservation, including an optional case cap, is atomic with the actual provider receipt. */
+export async function assertQualificationAllowance(
+    ctx: MutationCtx,
+    contextId: Id<"browserTestContexts">,
+    runId: Id<"researchRuns">,
+    call: Pick<Doc<"providerCalls">, "service" | "operation">,
+    reservationUsd: number,
+) {
+    const context = await ctx.db.get(contextId);
+    const lot = context?.campaignLotId
+        ? await ctx.db.get(context.campaignLotId)
+        : null;
+    const campaign = lot ? await ctx.db.get(lot.campaignId) : null;
+    const scopes = qualificationAllowanceScopes(context, lot, campaign, runId);
+    if (!scopes)
+        throw new Error(
+            "Configurable qualification grant and scenario binding required",
+        );
+    const expired = await ctx.db
+        .query("providerCalls")
+        .withIndex("by_qualification_context_and_status_and_lease", (q) =>
+            q
+                .eq("qualificationContextId", contextId)
+                .eq("status", "started")
+                .lte("leaseExpiresAt", Date.now()),
+        )
+        .first();
+    if (expired)
+        throw sourcePreparationError("qualification_outcome_unresolved");
+    const kind = qualificationCategory(call);
+    for (const [scopedRunId, limits] of scopes) {
         const row = await readQualificationUsage(ctx, contextId, scopedRunId);
         if (!row) throw new Error("Qualification usage unavailable");
         if (!qualificationUsageResolved(row))

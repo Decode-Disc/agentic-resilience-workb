@@ -47,6 +47,7 @@ import { campaignConfiguration } from "@convex/qualificationCampaignPolicy";
 import { requireCampaignLot } from "@convex/qualificationCampaigns";
 import {
     initializeQualificationUsage,
+    qualificationAllowanceScopes,
     qualificationUsageResolved,
     readQualificationUsage,
 } from "@convex/qualificationUsage";
@@ -2172,6 +2173,44 @@ export const qualificationSnapshot = internalQuery({
     },
 });
 /** Assess shared lot state only at a case boundary, never on every polling snapshot. */
+async function sourcesCanStillSettle(
+    ctx: QueryCtx,
+    sources: Doc<"agentMissions">,
+) {
+    if (
+        sources.piActiveWriter ||
+        sources.piWakeId ||
+        sources.piResultWakePending ||
+        sources.piRebinding
+    )
+        return true;
+    if (
+        sources.lastInvocationId &&
+        sources.lastInvocationId !== sources.lastSettledInvocationId
+    ) {
+        const last = await ctx.db.get(sources.lastInvocationId);
+        if (
+            !last ||
+            last.status === "started" ||
+            (last.status === "returned" &&
+                last.blockCode !== "qualification_budget_exhausted")
+        )
+            return true;
+    }
+    for (const status of ["pending", "observed"] as const) {
+        if (
+            await ctx.db
+                .query("agentOperationRequests")
+                .withIndex("by_run_and_status", (q) =>
+                    q.eq("runId", sources.runId).eq("status", status),
+                )
+                .first()
+        )
+            return true;
+    }
+    return false;
+}
+
 export const qualificationContinuation = internalQuery({
     args: { runId: v.id("researchRuns"), fixtureKey: v.string() },
     returns: v.object({
@@ -2180,6 +2219,7 @@ export const qualificationContinuation = internalQuery({
         authorized: v.boolean(),
         accountingSettled: v.boolean(),
         scenarioQuiet: v.boolean(),
+        terminalModelBudgetStop: v.boolean(),
         executionStatus: v.string(),
         sourcesStatus: v.union(v.string(), v.null()),
         conversation: continuationConversationValidator,
@@ -2265,14 +2305,53 @@ export const qualificationContinuation = internalQuery({
                 context.paidQualification?.costAccountingPolicy ===
                     "known_final_v1");
         const accounting = await readQualificationUsage(ctx, context._id);
+        const accountingSettled =
+            qualificationUsageResolved(accounting) &&
+            accounting?.pending === 0 &&
+            accounting.overruns === 0;
+        const sources = execution.sourcesMission;
+        let terminalModelBudgetStop = false;
+        if (
+            authorized &&
+            accountingSettled &&
+            !hasEngagedEffects &&
+            (!execution.conversation || quietConversation) &&
+            run.executionStatus === "paused" &&
+            run.lifecycleState !== "sources_prepared" &&
+            sources?.status === "blocked" &&
+            sources.blockCode === "qualification_budget_exhausted"
+        ) {
+            const scopes = qualificationAllowanceScopes(
+                context,
+                lot,
+                campaign,
+                run._id,
+            );
+            if (scopes) {
+                const local = await readQualificationUsage(
+                    ctx,
+                    context._id,
+                    run._id,
+                );
+                const [[, lotLimits], [, caseLimits]] = scopes;
+                if (
+                    local &&
+                    (accounting.usage.model >= lotLimits.model ||
+                        local.usage.model >= (caseLimits.model ?? Infinity))
+                ) {
+                    terminalModelBudgetStop = !(await sourcesCanStillSettle(
+                        ctx,
+                        sources,
+                    ));
+                }
+            }
+        }
         return {
             accounting,
             hasEngagedEffects,
             authorized,
-            accountingSettled:
-                qualificationUsageResolved(accounting) &&
-                accounting?.pending === 0 &&
-                accounting.overruns === 0,
+            accountingSettled,
+            terminalModelBudgetStop,
             scenarioQuiet,
             executionStatus: run.executionStatus,
             sourcesStatus: execution.sourcesMission?.status ?? null,
