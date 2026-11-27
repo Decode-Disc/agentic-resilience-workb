@@ -620,9 +620,14 @@ test.each([
 test.each([
     ":g5566066:",
     ":x42:",
+    "n/a",
+    "null",
+    "supported",
+    "objection",
+    "issuer_product_claim_no_outcome",
     "",
     "   ",
-    "S&P describes this as a forecast.",
+    "S&P describes issuer_product_claim_no_outcome as a reporting label.",
 ])("shows the recorded finding or an actionable explanation for %j", (diagnostic) => {
     const fallback = "Explanation unavailable. Inspect the cited passage.";
     convexReactHarness.query(api.sourcesWorkspace.getSource).returns({

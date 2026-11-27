@@ -73,12 +73,6 @@ export const documentaryContributionValidator = v.object({
     ),
     evidence: v.array(documentaryQuoteValidator),
 });
-/** Converts recorded blank or legacy label-only diagnostics to explicit explanation absence. */
-export function documentaryExplanation(diagnostic: string | null | undefined) {
-    const text = diagnostic?.trim();
-    return text && !/^:[a-z0-9]*[0-9][a-z0-9]*:$/i.test(text) ? text : null;
-}
-
 export const documentaryFindingValidator = v.object({
     contributionId: v.string(),
     conclusion: v.union(
@@ -94,6 +88,28 @@ export const documentaryFindingValidator = v.object({
     ),
     diagnostic: v.string(),
 });
+const documentaryDispositionLabels = new Set<string>([
+    ...documentaryFindingValidator.fields.conclusion.members.map(
+        (item) => item.value,
+    ),
+    ...documentaryFindingValidator.fields.permittedUse.members.map(
+        (item) => item.value,
+    ),
+    "objection",
+]);
+
+/** Interpret whole-field placeholders for readers while preserving the recorded examination for audit. */
+export function documentaryExplanation(diagnostic: string | null | undefined) {
+    const text = diagnostic?.trim();
+    if (!text || documentaryDispositionLabels.has(text.toLowerCase()))
+        return null;
+    const absent = /^(?:null|n\/a)$/i.test(text);
+    const identifier =
+        /^:[a-z0-9]*[0-9][a-z0-9]*:$/i.test(text) ||
+        /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/.test(text);
+    return absent || identifier ? null : text;
+}
+
 export const documentaryRestrictionValidator = v.union(
     v.literal("attributed_argument_only"),
     v.literal("context_only"),
