@@ -347,8 +347,10 @@ test("a stored contradictory finding keeps its reported permission inspectable a
         assert(task?.output.kind === "documentary_control");
         const examination = task.output.examination;
         assert(examination.state === "examined");
-        const id = qualification.output.contributions[0].id;
-        const finding = examination.control.findings[id];
+        const contribution = qualification.output.contributions[0];
+        assert(contribution);
+        const finding = examination.control.findings[contribution.id];
+        assert(finding);
         // Restore the recorded shape from before the admission rule changed.
         await ctx.db.patch(task._id, {
             output: {
@@ -358,7 +360,7 @@ test("a stored contradictory finding keeps its reported permission inspectable a
                     control: {
                         ...examination.control,
                         findings: {
-                            [id]: {
+                            [contribution.id]: {
                                 ...finding,
                                 permittedUse: "attributed_argument_only",
                                 needs: {
