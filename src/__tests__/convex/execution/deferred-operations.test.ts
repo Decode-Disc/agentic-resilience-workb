@@ -661,7 +661,7 @@ test("explicit resume reclaims the research slot and adopts retained work withou
     ).default;
     workflowTest.register(f.t);
     const budget = {
-        version: 1 as const,
+        version: 2 as const,
         work: 5,
         incidents: 1,
         reserved: 2,

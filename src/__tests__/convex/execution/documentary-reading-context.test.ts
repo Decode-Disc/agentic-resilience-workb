@@ -243,6 +243,7 @@ test("shared reading exposes acquisition destinations only to capable missions a
         expectedGeneration: 4,
     });
     const reserved = await f.t.mutation(internal.sourcesMission.reserve, {
+        epoch: 1,
         requestId,
         expectedGeneration: 4,
     });
@@ -393,7 +394,10 @@ test("Sources 7 can reserve an observed link before its destination is a candida
         expectedGeneration: 4,
     };
     await startSourcesOperation(f.t, args);
-    const reserved = await f.t.mutation(internal.sourcesMission.reserve, args);
+    const reserved = await f.t.mutation(internal.sourcesMission.reserve, {
+        ...args,
+        epoch: 1,
+    });
     const sourceId = reserved.sourceId;
     assert(sourceId);
     expect(await f.t.run((ctx) => ctx.db.get(sourceId))).toMatchObject({

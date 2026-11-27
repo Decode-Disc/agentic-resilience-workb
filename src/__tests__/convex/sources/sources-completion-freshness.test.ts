@@ -139,10 +139,12 @@ test("Pi refreshes a retained completion after late reservation and completes wi
         ),
     ).toHaveLength(1);
     await f.t.mutation(internal.sourcesMission.reserve, {
+        epoch: 1,
         requestId,
         expectedGeneration: 4,
     });
     await f.t.mutation(internal.execution.operations.recordResult, {
+        epoch: 1,
         requestId,
         expectedGeneration: 4,
         outcome: { kind: "unavailable", code: "missing_configuration" },
@@ -213,10 +215,12 @@ test.each([
     const f = await seedObservedSources();
     const requestId = await claimNativeCheck(f);
     await f.t.mutation(internal.sourcesMission.reserve, {
+        epoch: 1,
         requestId,
         expectedGeneration: 4,
     });
     await f.t.mutation(internal.execution.operations.recordResult, {
+        epoch: 1,
         requestId,
         expectedGeneration: 4,
         outcome: { kind: "unavailable", code: "missing_configuration" },
@@ -240,10 +244,12 @@ test.each([
             "Additional activity context",
         );
         await f.t.mutation(internal.sourcesMission.reserve, {
+            epoch: 1,
             requestId: lateRequest,
             expectedGeneration: 4,
         });
         await f.t.mutation(internal.execution.operations.recordResult, {
+            epoch: 1,
             requestId: lateRequest,
             expectedGeneration: 4,
             outcome: { kind: "unavailable", code: "missing_configuration" },
@@ -285,7 +291,7 @@ test("Sources v8 native_tool completion refuses stale work accounting with missi
     );
     const f = await seedObservedSources();
     await installModel(f.t, nativePiFixtureRoute, "sources");
-    await f.t.run((ctx) => ctx.db.patch(f.missionId, { definitionVersion: 8 }));
+    await f.t.run((ctx) => ctx.db.patch(f.missionId, { definitionVersion: 9 }));
     let turn = 0;
     const seenToolResults: string[] = [];
     const network = vi.fn(
@@ -302,10 +308,12 @@ test("Sources v8 native_tool completion refuses stale work accounting with missi
                     "Late activity check",
                 );
                 await f.t.mutation(internal.sourcesMission.reserve, {
+                    epoch: 1,
                     requestId: lateRequest,
                     expectedGeneration: 4,
                 });
                 await f.t.mutation(internal.execution.operations.recordResult, {
+                    epoch: 1,
                     requestId: lateRequest,
                     expectedGeneration: 4,
                     outcome: {

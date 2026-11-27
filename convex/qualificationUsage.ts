@@ -1,6 +1,7 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
 import {
+    PREPARATION_BUDGET_VERSION,
     preparationBudgetOutcome,
     preparationFailureClass,
     readPreparationBudget,
@@ -76,6 +77,7 @@ export async function initializeQualificationUsage(
             await ctx.db.insert("qualificationUsage", {
                 contextId,
                 runId,
+                projectionVersion: PREPARATION_BUDGET_VERSION,
                 ...empty(),
             });
     }
@@ -218,36 +220,42 @@ export async function patchQualificationReceipt(
     if (
         call.service === "model" &&
         (call.preparationId || call.missionId) &&
-        call.operation !== "source_embedding" &&
-        before !== after
+        call.operation !== "source_embedding"
     ) {
         const run = call.runId ? await ctx.db.get(call.runId) : null;
-        const preparation = call.preparationId
-            ? await ctx.db.get(call.preparationId)
-            : null;
-        if (!run || (!preparation && !call.missionId))
-            throw sourcePreparationError("stale_execution");
-        const budget = await readPreparationBudget(
-            ctx.db,
-            run,
-            preparation ?? undefined,
-        );
-        if (before !== "released") budget[before]--;
-        if (after !== "released") budget[after]++;
-        else {
-            budget.dispatches--;
-            if (preparation)
-                await ctx.db.patch(preparation._id, {
-                    modelAttemptCount: Math.max(
-                        0,
-                        (preparation.modelAttemptCount ?? 0) - 1,
-                    ),
-                });
+        if (!run) throw sourcePreparationError("stale_execution");
+        if (!run.sourcePreparationBudget)
+            throw sourcePreparationError(
+                "preparation_budget_conversion_required",
+            );
+        if (before !== after) {
+            const preparation = call.preparationId
+                ? await ctx.db.get(call.preparationId)
+                : null;
+            if (!preparation && !call.missionId)
+                throw sourcePreparationError("stale_execution");
+            const budget = await readPreparationBudget(
+                ctx.db,
+                run,
+                preparation ?? undefined,
+            );
+            if (before !== "released") budget[before]--;
+            if (after !== "released") budget[after]++;
+            else {
+                budget.dispatches--;
+                if (preparation)
+                    await ctx.db.patch(preparation._id, {
+                        modelAttemptCount: Math.max(
+                            0,
+                            (preparation.modelAttemptCount ?? 0) - 1,
+                        ),
+                    });
+            }
+            await ctx.db.patch(run._id, {
+                sourcePreparationBudget: budget,
+                sourceQualificationAttemptCount: budget.dispatches,
+            });
         }
-        await ctx.db.patch(run._id, {
-            sourcePreparationBudget: budget,
-            sourceQualificationAttemptCount: budget.dispatches,
-        });
     }
     await updateQualificationUsage(ctx, call, next);
     await ctx.db.patch(call._id, patch);

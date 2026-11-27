@@ -41,7 +41,10 @@ import {
     readPreparationLimits,
 } from "./sourcePreparationAuthority";
 import { SourceReviewReads } from "./sourceReviewReads";
-import { controlledDocumentaryUse } from "./sourceSelectionPolicy";
+import {
+    controlledDocumentaryUses,
+    documentaryFindingFor,
+} from "./sourceSelectionPolicy";
 import {
     type authorizedDiscovery,
     type DocumentaryContribution,
@@ -49,6 +52,7 @@ import {
     type documentaryAssessmentAuthorValidator,
     type materializedQualificationInput,
     type preparedMaterialValidator,
+    retainedDocumentaryControl,
     SOURCES_PROTOCOL,
     type SourceCaptureIdentity,
     type SourceDocumentState,
@@ -850,21 +854,40 @@ export async function readPreparedNeed(
         )
             .map((qualification) => ({
                 ...qualification,
-                contributions: qualification.contributions.filter(
-                    (contribution) => contribution.needIds.includes(needId),
-                ),
+                contributions: qualification.contributions
+                    .filter((contribution) =>
+                        contribution.needIds.includes(needId),
+                    )
+                    .map((contribution) => ({
+                        ...contribution,
+                        permittedUse:
+                            contribution.needs[needId] ?? ("blocked" as const),
+                        objections: contribution.objections.filter(
+                            (objection) =>
+                                objection.needIds.includes(null) ||
+                                objection.needIds.includes(needId),
+                        ),
+                        useStatus:
+                            contribution.needs[needId] &&
+                            contribution.needs[needId] !== "blocked"
+                                ? ("support_with_restrictions" as const)
+                                : ("inspection_only" as const),
+                    })),
             }))
             .filter((qualification) => qualification.contributions.length),
         documents: prepared.material.documents.filter((document) =>
             qualifications.has(document.qualificationTaskId),
         ),
-        restrictions: prepared.restrictions.filter((restriction) =>
-            restrictedVersions.has(
-                JSON.stringify([
-                    restriction.contributionId,
-                    restriction.version,
-                ]),
-            ),
+        restrictions: prepared.restrictions.filter(
+            (restriction) =>
+                (restriction.needId === undefined ||
+                    restriction.needId === needId) &&
+                restrictedVersions.has(
+                    JSON.stringify([
+                        restriction.contributionId,
+                        restriction.version,
+                    ]),
+                ),
         ),
         nextCapability: prepared.nextCapability,
     };
@@ -970,7 +993,11 @@ export async function controlledSourcesContributions(
                 controlTask.output.kind !== "documentary_control"
             )
                 throw executionError("documentary_control_unavailable");
-            const control = controlTask.output.control;
+            const control = retainedDocumentaryControl(controlTask.output);
+            const historicalExamination =
+                controlTask.output.examination.state === "not_examined"
+                    ? controlTask.output.examination
+                    : null;
             const capture = await reads.capture(qualification.captureId);
             if (
                 !capture ||
@@ -991,21 +1018,51 @@ export async function controlledSourcesContributions(
                 contentHash: qualification.contentHash,
                 version: qualification.version,
                 controlTaskId: qualification.controlTaskId,
-                coherence: control.coherence,
-                limitations: control.limitations,
+                limitations: [],
+                ...(control
+                    ? { objectionCount: control.objections.length }
+                    : {}),
+                ...(historicalExamination
+                    ? { examination: historicalExamination }
+                    : {}),
                 contributions: qualification.contributions.map(
                     ({ evidence, ...contribution }) => {
-                        const permittedUse =
-                            sourceDecision === "rejected"
-                                ? ("blocked" as const)
-                                : controlledDocumentaryUse(
-                                      { ...contribution, evidence },
-                                      control,
-                                      data.restrictedContributions,
-                                  );
-                        const finding = control.findings.find(
-                            (item) => item.contributionId === contribution.id,
+                        const { permittedUse, needs } =
+                            controlledDocumentaryUses(
+                                { ...contribution, evidence },
+                                sourceDecision === "rejected" ? null : control,
+                                data.restrictedContributions,
+                            );
+                        const finding = documentaryFindingFor(
+                            control,
+                            contribution.id,
                         );
+                        const objections =
+                            control?.objections.flatMap((objection) => {
+                                const needIds = objection.targets.flatMap(
+                                    (target) =>
+                                        target.contributionId ===
+                                        contribution.id
+                                            ? [target.needId]
+                                            : [],
+                                );
+                                if (!needIds.length) return [];
+                                const diagnosticPreview = Array.from(
+                                    objection.diagnostic,
+                                )
+                                    .slice(0, 96)
+                                    .join("");
+                                return [
+                                    {
+                                        needIds,
+                                        maximumUse: objection.maximumUse,
+                                        diagnosticPreview,
+                                        diagnosticComplete:
+                                            diagnosticPreview ===
+                                            objection.diagnostic,
+                                    },
+                                ];
+                            }) ?? [];
                         return {
                             ...contribution,
                             evidence: evidence.map(
@@ -1015,13 +1072,15 @@ export async function controlledSourcesContributions(
                                 }),
                             ),
                             permittedUse,
+                            needs,
+                            objections,
                             useStatus:
                                 permittedUse === "blocked"
                                     ? ("inspection_only" as const)
                                     : ("support_with_restrictions" as const),
                             finding: finding
                                 ? {
-                                      contributionId: finding.contributionId,
+                                      contributionId: contribution.id,
                                       conclusion: finding.conclusion,
                                       diagnostic: finding.diagnostic,
                                       reportedUse: finding.permittedUse,
@@ -1488,25 +1547,26 @@ export async function prepareSourcesMaterial(
             preparation.corpusRevisionId,
             q.contributions.flatMap((c) => c.evidence),
         );
-        for (const contribution of q.contributions)
+        const examination = retainedDocumentaryControl(control.output);
+        for (const contribution of q.contributions) {
+            const uses = controlledDocumentaryUses(
+                contribution,
+                examination,
+                data.restrictedContributions,
+            );
             if (
-                controlledDocumentaryUse(
-                    contribution,
-                    control.output.kind === "documentary_control"
-                        ? control.output.control
-                        : null,
-                    data.restrictedContributions,
-                ) !== "blocked" &&
-                (await documentaryContributionEvidenceAvailable(
+                uses.permittedUse === "blocked" ||
+                !(await documentaryContributionEvidenceAvailable(
                     reads,
                     run._id,
                     preparation.corpusRevisionId,
                     contribution,
                 ))
             )
-                permitted.push(contribution);
-        for (const contribution of permitted)
+                continue;
+            permitted.push(contribution);
             for (const id of contribution.needIds) {
+                if (uses.needs[id] === "blocked") continue;
                 const references = coveredNeeds.get(id) ?? [];
                 references.push({
                     qualificationTaskId: task._id,
@@ -1515,6 +1575,7 @@ export async function prepareSourcesMaterial(
                 });
                 coveredNeeds.set(id, references);
             }
+        }
         if (permitted.length)
             documents.push({
                 sourceId: capture.sourceId,

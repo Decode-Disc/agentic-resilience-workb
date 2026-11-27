@@ -2,6 +2,7 @@ import { internal } from "@convex/_generated/api";
 import { extractObservedDestinations } from "@convex/integrations/evidenceNormalization";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
+import { scopedFixtureControl } from "@/__tests__/setup/model-stream";
 import {
     dispatchSourcesOperation,
     prepareSourcesResult,
@@ -36,16 +37,15 @@ test("admission stops before control I/O while every previously admitted qualifi
             model: route.model,
             latencyMs: 1,
             dispatchOutcome: "response_received",
-            output: {
-                coherence: true,
-                limitations: [],
-                findings: input.contributions.map((c: { id: string }) => ({
+            output: scopedFixtureControl(
+                input.contributions,
+                input.contributions.map((c: { id: string }) => ({
                     contributionId: c.id,
                     conclusion: "supported",
                     permittedUse: "context_only",
                     diagnostic: "Controlled context.",
                 })),
-            },
+            ),
         };
     });
     const documents = await f.t.run(async (ctx) => {

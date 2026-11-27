@@ -160,6 +160,7 @@ export async function discoverForNeed(
                 preparationId: preparation._id,
                 executionGeneration: preparation.executionGeneration,
                 operationKey: attempt.operationKey,
+                operationEpoch: args.epoch,
                 candidates: validated.candidates.map((c) => ({
                     ...c,
                     origin: "exa" as const,

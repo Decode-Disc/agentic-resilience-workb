@@ -1,8 +1,10 @@
 import { api, internal } from "@convex/_generated/api";
 import { controlledDocumentaryUse } from "@convex/domain/sourceSelectionPolicy";
 import { completeSources } from "@convex/domain/sources";
+import { retainedDocumentaryControl } from "@convex/domain/sourcesContracts";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
+import { scopedFixtureControl } from "@/__tests__/setup/model-stream";
 import { readRetainedBody } from "@/__tests__/setup/retained-history";
 import {
     dispatchSourcesOperation,
@@ -70,16 +72,15 @@ test("a controlled reply after public Resume settles its original receipt withou
             latencyMs: 1,
             reportedCost: 0.01,
             dispatchOutcome: "response_received",
-            output: {
-                coherence: true,
-                limitations: [],
-                findings: input.contributions.map((c: { id: string }) => ({
+            output: scopedFixtureControl(
+                input.contributions,
+                input.contributions.map((c: { id: string }) => ({
                     contributionId: c.id,
                     conclusion: "supported",
                     permittedUse: "context_only",
                     diagnostic: "Supported context.",
                 })),
-            },
+            ),
         };
     });
     expect((await qualify(f)).outcome).not.toMatchObject({ kind: "success" });
@@ -187,16 +188,15 @@ test("capacity planning preserves independent qualification when earlier contrib
             model: route.model,
             latencyMs: 1,
             dispatchOutcome: "response_received",
-            output: {
-                coherence: true,
-                limitations: [],
-                findings: input.contributions.map((c: { id: string }) => ({
+            output: scopedFixtureControl(
+                input.contributions,
+                input.contributions.map((c: { id: string }) => ({
                     contributionId: c.id,
                     conclusion: "supported",
                     permittedUse: "context_only",
                     diagnostic: "Controlled context.",
                 })),
-            },
+            ),
         };
     });
     expect((await qualify(f)).outcome.kind).toBe("success");
@@ -294,16 +294,15 @@ test.each([
             model: route.model,
             latencyMs: 1,
             dispatchOutcome: "response_received",
-            output: {
-                coherence: true,
-                limitations: [],
-                findings: input.contributions.map((c: { id: string }) => ({
+            output: scopedFixtureControl(
+                input.contributions,
+                input.contributions.map((c: { id: string }) => ({
                     contributionId: c.id,
                     conclusion: "supported",
                     permittedUse,
                     diagnostic: "Use within the examined scope only.",
                 })),
-            },
+            ),
         };
     });
     const qualification = await qualify(f);
@@ -359,7 +358,7 @@ test.each([
     expect(
         controlledDocumentaryUse(
             contribution,
-            originalControl.output.control,
+            retainedDocumentaryControl(originalControl.output),
             current?.sourcesMission?.restrictedContributions,
         ),
     ).toBe(narrowerUse);
@@ -394,7 +393,7 @@ test.each([
     expect(
         controlledDocumentaryUse(
             { ...contribution, version: contribution.version + 1 },
-            originalControl.output.control,
+            retainedDocumentaryControl(originalControl.output),
             current?.sourcesMission?.restrictedContributions,
         ),
     ).toBe("documentary");
@@ -417,13 +416,13 @@ test.each([
     });
     assert(reading.kind === "success");
     expect(
-        JSON.parse(reading.valueJson).documentaryStatus.qualification
-            .contributions,
+        JSON.parse(reading.valueJson).documentaryStatus.examination
+            .qualification.contributions,
     ).toContainEqual(
         expect.objectContaining({
             id: contribution.id,
             version: contribution.version,
-            permittedUse: narrowerUse,
+            needs: { "common-context": narrowerUse },
         }),
     );
     const result = await f.t.run((ctx) =>
@@ -472,16 +471,15 @@ test("one examination loads a shared capture once and supplies each exact contex
             model: route.model,
             latencyMs: 1,
             dispatchOutcome: "response_received",
-            output: {
-                coherence: true,
-                limitations: [],
-                findings: input.contributions.map((c: { id: string }) => ({
+            output: scopedFixtureControl(
+                input.contributions,
+                input.contributions.map((c: { id: string }) => ({
                     contributionId: c.id,
                     conclusion: "supported",
                     permittedUse: "context_only",
                     diagnostic: "Supported context.",
                 })),
-            },
+            ),
         };
     });
     const capture = await f.t.run((ctx) => ctx.db.get(f.captureId));
@@ -552,17 +550,16 @@ test("controlled material is handed off partially with exact contribution versio
             model: route.model,
             latencyMs: 1,
             dispatchOutcome: "response_received",
-            output: {
-                coherence: true,
-                limitations: [],
-                findings: input.contributions.map((c: { id: string }) => ({
+            output: scopedFixtureControl(
+                input.contributions,
+                input.contributions.map((c: { id: string }) => ({
                     contributionId: c.id,
                     conclusion: "supported",
                     permittedUse: "context_only",
                     diagnostic:
                         "The publisher's statement is supported as context.",
                 })),
-            },
+            ),
         };
     });
     const { requestId, outcome } = await qualify(f);
@@ -705,16 +702,15 @@ test("a control already dispatched when the analyst pauses retains its controlle
             model: route.model,
             latencyMs: 1,
             dispatchOutcome: "response_received",
-            output: {
-                coherence: true,
-                limitations: [],
-                findings: input.contributions.map((c: { id: string }) => ({
+            output: scopedFixtureControl(
+                input.contributions,
+                input.contributions.map((c: { id: string }) => ({
                     contributionId: c.id,
                     conclusion: "supported",
                     permittedUse: "context_only",
                     diagnostic: "Supported as attributed context.",
                 })),
-            },
+            ),
         };
     });
     const { outcome } = await qualify(f);

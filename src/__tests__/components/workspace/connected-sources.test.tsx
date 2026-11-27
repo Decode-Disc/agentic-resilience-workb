@@ -207,13 +207,14 @@ const reading: Reading = {
             needIds: ["workflow"],
             passageOrders: [3],
             permittedUse: "blocked",
+            needs: { "common-context": "blocked" },
+            objections: [],
             reportedUse: "attributed_argument_only",
             conclusion: "documentary_conflict",
             diagnostic: "The call defines scope differently.",
             restricted: false,
         },
     ],
-    coherence: false,
     observedLinks: [
         {
             index: 0,

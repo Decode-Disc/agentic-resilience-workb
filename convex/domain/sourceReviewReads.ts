@@ -283,6 +283,27 @@ export class SourceReviewReads {
         }
         return value;
     }
+    /** Looks up the latest revision for one capture and shares the row with the projection. */
+    async latestDocumentaryQualification(
+        preparationId: Id<"sourceSelectionProposalRebuilds">,
+        captureId: Id<"sourceCaptures">,
+    ) {
+        this.range();
+        const row = await this.db
+            .query("aiTaskResults")
+            .withIndex("by_preparation_and_capture_and_task_type", (q) =>
+                q
+                    .eq("output.preparationId", preparationId)
+                    .eq("output.captureId", captureId)
+                    .eq("taskType", "documentary_qualification"),
+            )
+            .order("desc")
+            .first();
+        if (row && !this.tasks.has(row._id))
+            this.tasks.set(row._id, Promise.resolve(this.observe(row)));
+        return row;
+    }
+
     task(id: Id<"aiTaskResults">) {
         let value = this.tasks.get(id);
         if (!value) {

@@ -46,7 +46,7 @@ afterEach(() => {
 });
 
 async function documentaryTurn(
-    definitionVersion: 7 | 10 | 11 | 12 | null = 7,
+    definitionVersion: 7 | 10 | 11 | 13 | null = 7,
     excerpt = "Investigate insurer estimate review after the latest announcement.",
     requireContextRead = false,
 ) {
@@ -173,8 +173,8 @@ test.each([
     { basis: "event", requireContextRead: false, definitionVersion: 10 },
     { basis: "condition", requireContextRead: true, definitionVersion: 11 },
     { basis: "condition", requireContextRead: false, definitionVersion: 10 },
-    { basis: "event", requireContextRead: true, definitionVersion: 12 },
-    { basis: "condition", requireContextRead: false, definitionVersion: 12 },
+    { basis: "event", requireContextRead: true, definitionVersion: 13 },
+    { basis: "condition", requireContextRead: false, definitionVersion: 13 },
 ] as const)("Workbench $definitionVersion $basis citation follows the frozen context requirement $requireContextRead", async ({
     basis,
     requireContextRead,
@@ -194,10 +194,7 @@ test.each([
     });
     const acquired = await t.action(
         internal.sourceCaptureActions.acquireDocument,
-        {
-            requestId: acquire.id,
-            expectedGeneration: 1,
-        },
+        { epoch: 1, requestId: acquire.id, expectedGeneration: 1 },
     );
     assert(acquired?.kind === "success");
     const document = JSON.parse(acquired.valueJson);
@@ -342,7 +339,7 @@ test.each([
               };
     expect(JSON.parse(receipt.valueJson)).toEqual({
         revision: revision + 1,
-        ...(definitionVersion === 11 || definitionVersion === 12
+        ...(definitionVersion === 11 || definitionVersion === 13
             ? {
                   eventBasis: basis === "event" ? "public" : "open",
                   publicCitations,
@@ -453,10 +450,7 @@ test("acquires an analyst's exact URL and reuses its capture after a provisional
             options?.observeDispatch?.("unknown");
             competingOutcome = await t.action(
                 internal.sourceCaptureActions.acquireDocument,
-                {
-                    requestId: competing.id,
-                    expectedGeneration: 1,
-                },
+                { epoch: 1, requestId: competing.id, expectedGeneration: 1 },
             );
             options?.observeDispatch?.("response_received");
             return new Response(text, {
@@ -464,6 +458,7 @@ test("acquires an analyst's exact URL and reuses its capture after a provisional
             });
         });
     await t.action(internal.sourceCaptureActions.acquireDocument, {
+        epoch: 1,
         requestId: initial.id,
         expectedGeneration: 1,
     });
@@ -520,6 +515,7 @@ test("acquires an analyst's exact URL and reuses its capture after a provisional
     expect(reuse.id).not.toBe(initial.id);
     assert(reuse.outcome.kind === "waiting", JSON.stringify(reuse.outcome));
     await t.action(internal.sourceCaptureActions.acquireDocument, {
+        epoch: 1,
         requestId: reuse.id,
         expectedGeneration: 1,
     });
@@ -578,7 +574,7 @@ test("an uncertain scheduled acquisition preserves its receipt without fetching 
     const args = { requestId: admitted.id, expectedGeneration: 1 };
     const outcome = await t.action(
         internal.sourceCaptureActions.acquireDocument,
-        args,
+        { ...args, epoch: 1 },
     );
     expect(outcome).toMatchObject({ kind: "unavailable" });
     expect(
@@ -654,7 +650,7 @@ test.each([
                     return result;
                 },
             },
-            args,
+            { ...args, epoch: 1 },
         ),
     );
     expect(lost).toBe(true);
@@ -723,6 +719,7 @@ test("a stopped Workbench turn settles the provider response without adopting it
     });
     assert(admitted.outcome.kind === "waiting");
     await t.action(internal.sourceCaptureActions.acquireDocument, {
+        epoch: 1,
         requestId: admitted.id,
         expectedGeneration: 1,
     });
@@ -763,6 +760,7 @@ test("Workbench exposes each retained capture and issues references for each act
     });
     assert(acquisition.outcome.kind === "waiting");
     await t.action(internal.sourceCaptureActions.acquireDocument, {
+        epoch: 1,
         requestId: acquisition.id,
         expectedGeneration: 1,
     });
@@ -895,6 +893,7 @@ test.each([
         JSON.stringify(acquisition.outcome),
     );
     await t.action(internal.sourceCaptureActions.acquireDocument, {
+        epoch: 1,
         requestId: acquisition.id,
         expectedGeneration: 1,
     });
@@ -1087,10 +1086,7 @@ test.each([
     assert(uncited.outcome.kind === "waiting", JSON.stringify(uncited.outcome));
     const uncitedResult = await t.action(
         internal.sourceCaptureActions.acquireDocument,
-        {
-            requestId: uncited.id,
-            expectedGeneration: 1,
-        },
+        { epoch: 1, requestId: uncited.id, expectedGeneration: 1 },
     );
     assert(uncitedResult?.kind === "success", JSON.stringify(uncitedResult));
     const uncitedCaptureId = JSON.parse(uncitedResult.valueJson).captureId;
@@ -1242,6 +1238,7 @@ test.each([
     const reused = await t.action(
         internal.sourceCaptureActions.acquireDocument,
         {
+            epoch: 1,
             requestId: sourcesAcquisition,
             expectedGeneration: started.executionGeneration,
         },
@@ -1298,15 +1295,27 @@ test.each([
                 latencyMs: 1,
                 dispatchOutcome: "response_received",
                 output: {
-                    coherence: true,
-                    limitations: [],
-                    findings: input.contributions.map(({ id }) => ({
-                        contributionId: id,
-                        conclusion: "supported",
-                        permittedUse: "attributed_argument_only",
-                        diagnostic:
-                            "The cited publisher explicitly describes the insurer's control.",
-                    })),
+                    objections: [],
+                    findings: Object.fromEntries(
+                        input.contributions.map(({ id, needIds }) => [
+                            id,
+                            {
+                                conclusion: "supported",
+                                permittedUse: "attributed_argument_only",
+                                needs: Object.fromEntries(
+                                    needIds.map(
+                                        (needId) =>
+                                            [
+                                                needId,
+                                                "attributed_argument_only",
+                                            ] as const,
+                                    ),
+                                ),
+                                diagnostic:
+                                    "The cited publisher explicitly describes the insurer's control.",
+                            },
+                        ]),
+                    ),
                 },
             };
         },
@@ -1683,6 +1692,7 @@ test("framing refuses a new source when it would overflow the eventual Sources l
     const outcome =
         acquisition.outcome.kind === "waiting"
             ? await t.action(internal.sourceCaptureActions.acquireDocument, {
+                  epoch: 1,
                   requestId: acquisition.id,
                   expectedGeneration: 1,
               })
@@ -1726,7 +1736,7 @@ test("an issued refresh gets a new version while the original capture remains re
         );
         const outcome = await t.action(
             internal.sourceCaptureActions.acquireDocument,
-            { requestId: admitted.id, expectedGeneration: 1 },
+            { epoch: 1, requestId: admitted.id, expectedGeneration: 1 },
         );
         assert(outcome?.kind === "success", JSON.stringify(outcome));
         return JSON.parse(outcome.valueJson);
@@ -1783,10 +1793,7 @@ test.each([
     });
     const captured = await t.action(
         internal.sourceCaptureActions.acquireDocument,
-        {
-            requestId: acquisition.id,
-            expectedGeneration: 1,
-        },
+        { epoch: 1, requestId: acquisition.id, expectedGeneration: 1 },
     );
     assert(captured?.kind === "success");
     const document = JSON.parse(captured.valueJson);

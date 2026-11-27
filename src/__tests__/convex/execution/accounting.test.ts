@@ -56,7 +56,7 @@ test("reasoning reserves the same final dossier budget unit atomically", async (
     await t.run((ctx) =>
         ctx.db.patch(args.runId, {
             sourcePreparationBudget: {
-                version: 1,
+                version: 2,
                 work: 119,
                 incidents: 0,
                 reserved: 0,

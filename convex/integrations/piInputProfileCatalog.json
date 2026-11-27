@@ -1,4 +1,4 @@
 {
-    "profileCatalog": "4ce5209ae48d6ff44b60ac8adf252fde9c709e90352d70fe59cae68a53c0e113",
+    "profileCatalog": "790af9f7da6b9ede2b883a17f2748726ebad1d531a84f2448ca915a9066cab35",
     "generatedBy": "UPDATE_PI_INPUT_PROFILES=1 pnpm exec vitest run src/__tests__/convex/execution/pi-input-capacity.test.ts --maxWorkers=1"
 }

@@ -25,16 +25,7 @@ import {
     validationFeedbackValidator,
 } from "./operationContracts";
 
-/** The preparation model operations that own a one-shot visible output stream. */
-export const ONE_SHOT_PREPARATION_OPERATIONS = [
-    "source_qualification",
-    "source_comparison",
-    "source_documentary_control",
-] as const;
-
-export function isOneShotPreparationOperation(operation: string) {
-    return ONE_SHOT_PREPARATION_OPERATIONS.some((value) => value === operation);
-}
+export { isOneShotPreparationOperation } from "@convex/domain/sourcePreparationAuthority";
 
 export {
     agentDefinitionIdValidator,
@@ -152,12 +143,21 @@ export type AgentOperationDefinition = AgentOperationContract &
               | { execute: EffectExecutor; scheduledAction?: never }
               | {
                     execute?: never;
+                    scheduledRecovery?: "structured_model_v1";
+                    recoverScheduledResult?: (
+                        ctx: import("@convex/_generated/server").MutationCtx,
+                        request: Doc<"agentOperationRequests">,
+                        generation: number,
+                    ) => Promise<Infer<
+                        typeof operationOutcomeValidator
+                    > | null>;
                     scheduledAction: FunctionReference<
                         "action",
                         "internal",
                         {
                             requestId: Id<"agentOperationRequests">;
                             expectedGeneration: number;
+                            epoch: number;
                         },
                         unknown
                     >;
@@ -175,13 +175,39 @@ export type AgentOperationDefinition = AgentOperationContract &
           }
     );
 
+export const scheduledOperationArgs = {
+    requestId: v.id("agentOperationRequests"),
+    expectedGeneration: v.number(),
+    epoch: v.number(),
+};
+export type ScheduledOperationArgs = Infer<
+    VObject<
+        {
+            requestId: Id<"agentOperationRequests">;
+            expectedGeneration: number;
+            epoch: number;
+        },
+        typeof scheduledOperationArgs
+    >
+>;
+
+export function ownsScheduledEpoch(
+    request: Doc<"agentOperationRequests">,
+    generation: number,
+    epoch: number,
+) {
+    return (
+        request.scheduledExecution?.epoch === epoch &&
+        request.scheduledExecution.dispatchGeneration === generation
+    );
+}
+
 /** Waiting is executable only after the scheduler's worker has claimed its retained job. */
 export function operationHasStarted(request: Doc<"agentOperationRequests">) {
     return (
         request.status === "running" ||
         (request.status === "waiting" &&
-            request.scheduledJobId !== undefined &&
-            request.scheduledStartedAt !== undefined)
+            request.scheduledExecution?.phase === "running")
     );
 }
 
@@ -218,6 +244,10 @@ export function requireSupportedMissionBackend({
 }
 
 export type ModelAttemptReceipt = {
+    termination?: Extract<
+        NonNullable<Doc<"providerCalls">["providerObservation"]>["termination"],
+        { kind: "finished" }
+    >;
     observableReplyJson?: string;
     backendOutputJson?: string;
     model: string;

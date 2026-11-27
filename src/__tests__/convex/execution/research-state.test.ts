@@ -1273,35 +1273,41 @@ test("running preparation exposes compact progress across Sources, Workbench and
                 preparationId: f.preparationId,
                 evidence: [],
                 inputHash: "ctrl-1",
-                control: {
-                    coherence: true,
-                    limitations: [],
-                    findings: [
-                        {
-                            contributionId: "c-doc",
-                            conclusion: "supported",
-                            permittedUse: "documentary",
-                            diagnostic: "ok",
+                examination: {
+                    state: "examined",
+                    contractVersion: 2,
+                    control: {
+                        findings: {
+                            "c-doc": {
+                                conclusion: "supported",
+                                permittedUse: "documentary",
+                                diagnostic: "ok",
+                                needs: { "common-context": "documentary" },
+                            },
+                            "c-attr": {
+                                conclusion: "supported",
+                                permittedUse: "attributed_argument_only",
+                                diagnostic: "attributed",
+                                needs: {
+                                    "common-context":
+                                        "attributed_argument_only",
+                                },
+                            },
+                            "c-ctx": {
+                                conclusion: "supported",
+                                permittedUse: "context_only",
+                                diagnostic: "context",
+                                needs: { "common-context": "context_only" },
+                            },
+                            "c-blk": {
+                                conclusion: "not_established",
+                                permittedUse: "blocked",
+                                diagnostic: "blocked",
+                                needs: { "common-context": "blocked" },
+                            },
                         },
-                        {
-                            contributionId: "c-attr",
-                            conclusion: "supported",
-                            permittedUse: "attributed_argument_only",
-                            diagnostic: "attributed",
-                        },
-                        {
-                            contributionId: "c-ctx",
-                            conclusion: "supported",
-                            permittedUse: "context_only",
-                            diagnostic: "context",
-                        },
-                        {
-                            contributionId: "c-blk",
-                            conclusion: "not_established",
-                            permittedUse: "blocked",
-                            diagnostic: "blocked",
-                        },
-                    ],
+                        objections: [],
+                    },
                 },
             },
         });
@@ -1394,17 +1400,20 @@ test("running preparation exposes compact progress across Sources, Workbench and
                 preparationId: f.preparationId,
                 evidence: [],
                 inputHash: "ctrl-obs",
-                control: {
-                    coherence: true,
-                    limitations: [],
-                    findings: [
-                        {
-                            contributionId: "c-obs",
-                            conclusion: "supported",
-                            permittedUse: "documentary",
-                            diagnostic: "ok",
+                examination: {
+                    state: "examined",
+                    contractVersion: 2,
+                    control: {
+                        findings: {
+                            "c-obs": {
+                                conclusion: "supported",
+                                permittedUse: "documentary",
+                                diagnostic: "ok",
+                                needs: { "common-context": "documentary" },
+                            },
                         },
-                    ],
+                        objections: [],
+                    },
                 },
             },
         });

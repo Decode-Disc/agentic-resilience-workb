@@ -88,11 +88,60 @@ export const documentaryFindingValidator = v.object({
     ),
     diagnostic: v.string(),
 });
-export const documentaryControlValidator = v.object({
-    findings: v.array(documentaryFindingValidator),
-    coherence: v.boolean(),
-    limitations: v.array(v.string()),
+export const documentaryRestrictionValidator = v.union(
+    v.literal("attributed_argument_only"),
+    v.literal("context_only"),
+    v.literal("blocked"),
+);
+const documentaryScopedFindingValidator = v.object({
+    conclusion: documentaryFindingValidator.fields.conclusion,
+    permittedUse: documentaryFindingValidator.fields.permittedUse,
+    diagnostic: documentaryFindingValidator.fields.diagnostic,
+    needs: v.record(
+        v.string(),
+        documentaryFindingValidator.fields.permittedUse,
+    ),
 });
+export const documentaryControlV2Validator = v.object({
+    findings: v.record(v.string(), documentaryScopedFindingValidator),
+    objections: v.array(
+        v.object({
+            targets: v.array(
+                v.object({
+                    contributionId: v.string(),
+                    needId: v.union(v.string(), v.null()),
+                }),
+            ),
+            maximumUse: documentaryRestrictionValidator,
+            diagnostic: v.string(),
+        }),
+    ),
+});
+export type DocumentaryControlV2 = Infer<typeof documentaryControlV2Validator>;
+export type DocumentaryUse = Infer<
+    typeof documentaryFindingValidator.fields.permittedUse
+>;
+export const documentaryExaminationValidator = v.union(
+    v.object({
+        state: v.literal("examined"),
+        contractVersion: v.literal(2),
+        control: documentaryControlV2Validator,
+    }),
+    v.object({
+        state: v.literal("not_examined"),
+        originalReference: v.id("agentExecutionEvents"),
+        recordedUses: v.array(
+            v.object({
+                contributionId: v.string(),
+                version: v.number(),
+                permittedUse: documentaryFindingValidator.fields.permittedUse,
+            }),
+        ),
+    }),
+);
+export type DocumentaryExaminationState = Infer<
+    typeof documentaryExaminationValidator
+>;
 export const documentaryUseStatusValidator = v.union(
     v.literal("support_with_restrictions"),
     v.literal("inspection_only"),
@@ -107,13 +156,23 @@ export const documentaryQualificationOutput = v.object({
     contributions: v.array(documentaryContributionValidator),
     controlTaskId: v.id("aiTaskResults"),
 });
-export const documentaryControlOutput = v.object({
+const documentaryControlIdentity = {
     kind: v.literal("documentary_control"),
     preparationId: v.id("sourceSelectionProposalRebuilds"),
     evidence: v.array(documentaryQuoteValidator),
     inputHash: v.string(),
-    control: documentaryControlValidator,
+};
+export const documentaryControlOutput = v.object({
+    ...documentaryControlIdentity,
+    examination: documentaryExaminationValidator,
 });
+export function retainedDocumentaryControl(
+    output: Infer<typeof documentaryControlOutput>,
+) {
+    return output.examination.state === "examined"
+        ? output.examination.control
+        : null;
+}
 export const needOutcomeValidator = v.object({
     needId: v.string(),
     gap: v.optional(v.string()),
@@ -198,6 +257,7 @@ export const restrictedContributionValidator = v.object({
     contributionId: v.string(),
     version: v.number(),
     controlTaskId: v.id("aiTaskResults"),
+    needId: v.optional(v.string()),
     permittedUse: v.optional(documentaryFindingValidator.fields.permittedUse),
 });
 export const preparedMaterialInspectionValidator = v.object({
@@ -209,6 +269,12 @@ export const preparedMaterialInspectionValidator = v.object({
     ),
     restrictions: v.array(restrictedContributionValidator),
     nextCapability: v.literal("investigation_unavailable"),
+});
+export const documentaryObjectionPreviewValidator = v.object({
+    needIds: v.array(v.union(v.string(), v.null())),
+    maximumUse: documentaryRestrictionValidator,
+    diagnosticPreview: v.string(),
+    diagnosticComplete: v.boolean(),
 });
 export const controlledSourcesProjectionValidator = v.object({
     sourceId: v.optional(v.id("sources")),
@@ -224,8 +290,9 @@ export const controlledSourcesProjectionValidator = v.object({
     contentHash: v.string(),
     version: v.number(),
     controlTaskId: v.id("aiTaskResults"),
-    coherence: v.boolean(),
     limitations: v.array(v.string()),
+    examination: v.optional(documentaryExaminationValidator.members[1]),
+    objectionCount: v.optional(v.number()),
     contributionCount: v.number(),
     contributions: v.array(
         v.object({
@@ -237,6 +304,12 @@ export const controlledSourcesProjectionValidator = v.object({
                 }),
             ),
             permittedUse: documentaryFindingValidator.fields.permittedUse,
+            needs: v.optional(
+                v.record(
+                    v.string(),
+                    documentaryFindingValidator.fields.permittedUse,
+                ),
+            ),
             useStatus: v.optional(documentaryUseStatusValidator),
             finding: v.union(
                 documentaryFindingValidator,
@@ -249,10 +322,87 @@ export const controlledSourcesProjectionValidator = v.object({
                 }),
                 v.null(),
             ),
+            objections: v.optional(
+                v.array(documentaryObjectionPreviewValidator),
+            ),
             restrictions: v.array(restrictedContributionValidator),
         }),
     ),
 });
+const unexaminedCapture = v.object({
+    state: v.literal("not_examined"),
+    originalReference: v.optional(v.id("agentExecutionEvents")),
+});
+const captureQualificationIdentity = {
+    taskId: v.id("aiTaskResults"),
+    version: v.number(),
+    captureId: v.id("sourceCaptures"),
+    controlTaskId: v.id("aiTaskResults"),
+    objectionCount: v.number(),
+};
+const captureContributionIdentity = {
+    id: v.string(),
+    version: v.number(),
+    permittedUse: documentaryFindingValidator.fields.permittedUse,
+};
+export const documentaryUseOrder = [
+    "documentary",
+    "attributed_argument_only",
+    "context_only",
+    "blocked",
+] as const;
+export const captureExaminationValidator = v.union(
+    unexaminedCapture,
+    v.object({
+        state: v.literal("examined"),
+        qualification: v.object({
+            ...captureQualificationIdentity,
+            needOrder: v.array(v.string()),
+            useOrder: v.array(documentaryFindingValidator.fields.permittedUse),
+            reference: v.optional(v.id("agentExecutionEvents")),
+            contributions: v.array(
+                v.object({
+                    ...captureContributionIdentity,
+                    usesByNeed: v.array(v.union(v.number(), v.null())),
+                    objections: v.array(
+                        documentaryObjectionPreviewValidator
+                            .omit("needIds")
+                            .extend({
+                                needIndexes: v.array(
+                                    v.union(v.number(), v.null()),
+                                ),
+                            }),
+                    ),
+                }),
+            ),
+        }),
+    }),
+);
+const originalCaptureExamination = v.object({
+    state: v.literal("examined"),
+    qualification: v.object({
+        ...captureQualificationIdentity,
+        contributions: v.array(
+            v.object({
+                ...captureContributionIdentity,
+                needs: v.record(
+                    v.string(),
+                    documentaryFindingValidator.fields.permittedUse,
+                ),
+                objections: v.array(documentaryObjectionPreviewValidator),
+            }),
+        ),
+    }),
+});
+const originalCaptureExaminationValidator = v.union(
+    unexaminedCapture,
+    originalCaptureExamination,
+);
+/** Previously issued readings remain valid evidence references. */
+export const retainedCaptureExaminationValidator = v.union(
+    ...captureExaminationValidator.members,
+    originalCaptureExamination,
+);
 export const preparedNeedInspectionValidator = v.object({
     preparationId: preparedMaterialInspectionValidator.fields.preparationId,
     needsRevision: v.number(),
@@ -267,7 +417,7 @@ export const preparedNeedInspectionValidator = v.object({
     nextCapability: preparedMaterialInspectionValidator.fields.nextCapability,
 });
 /** Reading exposes bounded status and exact references; full snapshots stay with their owners. */
-export const documentaryStatusValidator = v.object({
+export const retainedDocumentaryStatusValidator = v.object({
     capture: v.object({
         _id: sourceMaterialReferenceValidator.fields.captureId,
         contentHash: v.string(),
@@ -311,6 +461,10 @@ export const documentaryStatusValidator = v.object({
             ),
         }),
     ),
+});
+export const documentaryStatusValidator = v.object({
+    ...retainedDocumentaryStatusValidator.fields,
+    examination: v.optional(originalCaptureExaminationValidator),
 });
 export const sourcesPreparationValidator = v.object({
     restrictedContributions: v.array(restrictedContributionValidator),
@@ -426,6 +580,7 @@ const materializedDocumentaryCheckInput = v.object({
                 qualificationTaskId: v.id("aiTaskResults"),
                 contributionId: v.string(),
                 version: v.number(),
+                needId: v.optional(v.string()),
             }),
         ),
     ),
@@ -542,17 +697,23 @@ export const discoveryResult = operationResultValidator(
 );
 export const documentarySubmissionValue = v.object({
     taskId: v.id("aiTaskResults"),
-    control: documentaryControlValidator,
-    effectiveContributions: v.optional(
-        v.array(
-            v.object({
-                id: v.string(),
-                version: v.number(),
-                permittedUse: documentaryFindingValidator.fields.permittedUse,
-                useStatus: documentaryUseStatusValidator,
-                diagnostic: v.string(),
-            }),
-        ),
+    controlVersion: v.literal(2),
+    reference: v.id("agentExecutionEvents"),
+    objectionCount: v.number(),
+    needOrder: v.array(v.string()),
+    effectiveContributions: v.array(
+        v.object({
+            id: v.string(),
+            version: v.number(),
+            permittedUse: documentaryFindingValidator.fields.permittedUse,
+            // Each entry follows needOrder; null means the contribution did not address that need.
+            usesByNeed: v.array(
+                v.union(
+                    v.null(),
+                    documentaryFindingValidator.fields.permittedUse,
+                ),
+            ),
+        }),
     ),
 });
 export const documentarySubmissionResult = operationResultValidator(

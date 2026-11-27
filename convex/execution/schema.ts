@@ -1,6 +1,9 @@
 import { framingCitationPolicy } from "@convex/domain/framingContracts";
 import { savedMaterialMissionFields } from "@convex/domain/savedMaterialOperations";
-import { preparationModelLimitsValidator } from "@convex/domain/sourcePreparationAuthority";
+import {
+    preparationModelLimitsValidator,
+    structuredOutputPolicyValidator,
+} from "@convex/domain/sourcePreparationAuthority";
 import {
     sourcesCompletionAdmission,
     sourcesOperationAdmission,
@@ -144,6 +147,41 @@ const missionFields = {
     createdAt: v.number(),
     updatedAt: v.number(),
 };
+
+const scheduledEpoch = {
+    epoch: v.number(),
+    dispatchGeneration: v.number(),
+};
+const scheduledExecutionValidator = v.union(
+    v.object({
+        ...scheduledEpoch,
+        phase: v.literal("queued"),
+        jobId: v.id("_scheduled_functions"),
+        firstInvocationId: v.optional(v.id("agentInvocations")),
+    }),
+    v.object({
+        ...scheduledEpoch,
+        phase: v.literal("running"),
+        jobId: v.id("_scheduled_functions"),
+        startedAt: v.number(),
+        firstInvocationId: v.optional(v.id("agentInvocations")),
+        platformDeadlineAt: v.number(),
+        wakeId: v.optional(v.id("_scheduled_functions")),
+    }),
+    v.object({
+        ...scheduledEpoch,
+        phase: v.literal("waiting_provider"),
+        lastIssuedEpoch: v.optional(v.number()),
+        wakeId: v.optional(v.id("_scheduled_functions")),
+        callId: v.id("providerCalls"),
+        firstInvocationId: v.id("agentInvocations"),
+    }),
+    v.object({
+        ...scheduledEpoch,
+        phase: v.literal("finished"),
+        startedAt: v.optional(v.number()),
+    }),
+);
 
 export const executionTables = {
     piPublication: defineTable({
@@ -405,6 +443,7 @@ export const executionTables = {
         workbenchCompletionAdmission: v.optional(workbenchCompletionAdmission),
         inputContentHash: v.optional(v.string()),
         preparationInputHash: v.optional(v.string()),
+        structuredOutputPolicy: v.optional(structuredOutputPolicyValidator),
         nativePreparation: v.optional(
             v.object({
                 observationSequence: v.optional(v.number()),
@@ -470,8 +509,8 @@ export const executionTables = {
         adoptionGeneration: v.optional(v.number()),
         waitNotified: v.optional(v.boolean()),
         expiryJobId: v.optional(v.id("_scheduled_functions")),
-        scheduledJobId: v.optional(v.id("_scheduled_functions")),
-        scheduledStartedAt: v.optional(v.number()),
+        scheduledExecution: v.optional(scheduledExecutionValidator),
+        structuredResumeGeneration: v.optional(v.number()),
         invocationId: v.optional(v.id("agentInvocations")),
         actor: v.union(v.literal("system"), v.literal("agent")),
         cause: v.string(),

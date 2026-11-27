@@ -99,15 +99,19 @@ export async function dispatchSourcesOperation(
     const result = await t.action(internal.execution.operations.dispatch, args);
     if (result.kind !== "waiting") return result;
     const request = await t.run((ctx) => ctx.db.get(args.requestId));
-    if (!request?.scheduledJobId)
+    if (request?.scheduledExecution?.phase === "waiting_provider")
+        return result;
+    if (request?.scheduledExecution?.phase !== "queued")
         throw new Error("Expected a scheduled Sources operation");
     const action =
         request.input.kind === "acquire_document"
             ? internal.sourceCaptureActions.acquireDocument
             : internal.sourcesMissionActions.execute;
     return (
-        (await t.action(action, args)) ??
-        t.action(internal.execution.operations.dispatch, args)
+        (await t.action(action, {
+            ...args,
+            epoch: request.scheduledExecution.epoch,
+        })) ?? t.action(internal.execution.operations.dispatch, args)
     );
 }
 
@@ -123,7 +127,7 @@ export async function startSourcesOperation(
     if (claimed.kind === "outcome" && claimed.outcome.kind === "waiting")
         await t.mutation(
             internal.execution.operations.beginScheduledExecution,
-            args,
+            { ...args, epoch: 1 },
         );
     return claimed;
 }

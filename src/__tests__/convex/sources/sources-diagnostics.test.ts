@@ -212,10 +212,10 @@ test("Sources normalization refusal preserves qualification_observation_unavaila
                 preparationId: f.preparationId,
                 evidence: [],
                 inputHash: "fixture-control",
-                control: {
-                    findings: [],
-                    coherence: true,
-                    limitations: [],
+                examination: {
+                    state: "examined",
+                    contractVersion: 2,
+                    control: { findings: {}, objections: [] },
                 },
             },
             executionMode: "showcase",

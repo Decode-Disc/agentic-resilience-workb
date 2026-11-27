@@ -30,6 +30,8 @@ export async function examineContributions(
         inputHash,
         sourceId,
         needContext,
+        scheduledRecovery,
+        originalExaminationJson,
     }: Reservation,
     simulation: boolean,
     executionDeadlineAt: number,
@@ -41,6 +43,7 @@ export async function examineContributions(
     });
     if (
         cached?.output.kind === "documentary_control" &&
+        cached.output.examination.state === "examined" &&
         cached.providerCallId
     ) {
         const result = await ctx.runMutation(
@@ -49,7 +52,7 @@ export async function examineContributions(
                 ...args,
                 inputHash,
                 contributions,
-                control: cached.output.control,
+                control: cached.output.examination.control,
                 providerCallId: cached.providerCallId,
             },
         );
@@ -139,6 +142,12 @@ export async function examineContributions(
         }
     }
     const examination = { contributions, evidence, needs: needContext };
+    const examinationJson = JSON.stringify(examination);
+    if (
+        originalExaminationJson !== undefined &&
+        originalExaminationJson !== examinationJson
+    )
+        return { kind: "refused", code: "version_conflict" };
     const outcome = simulation
         ? {
               result: {
@@ -151,10 +160,12 @@ export async function examineContributions(
               preparation,
               executionDeadlineAt,
               operationRequestId: args.requestId,
+              operationEpoch: args.epoch,
+              scheduledRecovery,
               sourceId,
               operation: "source_documentary_control",
               inputHash,
-              invocationInputJson: JSON.stringify(examination),
+              invocationInputJson: originalExaminationJson ?? examinationJson,
               validate: async () => {
                   await ctx.runQuery(
                       internal.sourcesMission.assertActive,
@@ -168,6 +179,8 @@ export async function examineContributions(
                       dependencies,
                   ),
           });
+    if ("reasonCode" in outcome && outcome.pendingProviderCallId)
+        return { kind: "waiting", reference: `operation:${args.requestId}` };
     if ("reasonCode" in outcome)
         return {
             kind: "unavailable",

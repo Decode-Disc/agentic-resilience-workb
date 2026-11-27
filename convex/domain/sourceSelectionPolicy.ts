@@ -2,6 +2,11 @@ import type { CoveragePreset } from "@convex/domain/researchPlan";
 import { type Infer, v } from "convex/values";
 import type { SourceComparisonDisposition } from "./sourceComparison";
 import type { SourceQualification } from "./sourceQualification";
+import type {
+    DocumentaryContribution,
+    DocumentaryControlV2,
+    DocumentaryUse,
+} from "./sourcesContracts";
 import type { sourceDecisionValidator } from "./validators";
 
 export const SOURCE_SELECTION_POLICY_VERSION = "source-selection-v14";
@@ -2510,48 +2515,173 @@ export function documentaryPermittedUses(
           ] as const);
 }
 
-/** Interprets a controlled contribution for its declared use, independently of corpus membership. */
-export function controlledDocumentaryUse(
-    contribution: import("./sourcesContracts").DocumentaryContribution,
-    control:
-        | import("convex/values").Infer<
-              typeof import("./sourcesContracts").documentaryControlValidator
-          >
-        | null,
-    restrictions: readonly {
-        contributionId: string;
-        version: number;
-        permittedUse?:
-            | "documentary"
-            | "attributed_argument_only"
-            | "context_only"
-            | "blocked";
-    }[] = [],
-): "documentary" | "attributed_argument_only" | "context_only" | "blocked" {
-    const finding = control?.findings.find(
-        (item) => item.contributionId === contribution.id,
-    );
-    if (finding?.conclusion !== "supported") return "blocked";
+function intersectDocumentaryUse(
+    left: DocumentaryUse,
+    right: DocumentaryUse,
+): DocumentaryUse {
+    if (left === "documentary") return right;
+    if (right === "documentary" || left === right) return left;
+    return "blocked";
+}
+
+/** Checks the complete examination against the immutable contribution and need identities. */
+export function documentaryControlIssue(
+    contributions: readonly DocumentaryContribution[],
+    control: DocumentaryControlV2,
+): string | undefined {
+    const byId = new Map(contributions.map((item) => [item.id, item]));
+    const findingIds = Object.keys(control.findings);
     if (
+        byId.size !== contributions.length ||
+        findingIds.length !== byId.size ||
+        findingIds.some((id) => !byId.has(id))
+    )
+        return "documentary_control_identity_invalid";
+
+    const explained = new Map<string, Set<string>>();
+    const groups = new Set<string>();
+    for (const objection of control.objections) {
+        if (!objection.targets.length || !objection.diagnostic.trim())
+            return "documentary_control_objection_invalid";
+        const contributionsInGroup = new Set<string>();
+        const targetsInGroup = new Set<string>();
+        for (const target of objection.targets) {
+            const contribution = byId.get(target.contributionId);
+            const key = JSON.stringify([target.contributionId, target.needId]);
+            if (
+                !contribution ||
+                (target.needId !== null &&
+                    !contribution.needIds.includes(target.needId)) ||
+                targetsInGroup.has(key)
+            )
+                return "documentary_control_target_invalid";
+            targetsInGroup.add(key);
+            contributionsInGroup.add(target.contributionId);
+            if (target.needId !== null) {
+                const needs =
+                    explained.get(target.contributionId) ?? new Set<string>();
+                needs.add(target.needId);
+                explained.set(target.contributionId, needs);
+            }
+        }
+        for (const id of contributionsInGroup) {
+            const group = JSON.stringify([id, objection.maximumUse]);
+            if (groups.has(group))
+                return "documentary_control_objection_invalid";
+            groups.add(group);
+        }
+    }
+
+    for (const contribution of contributions) {
+        const finding = control.findings[contribution.id];
+        if (!finding) return "documentary_control_identity_invalid";
+        const allowed = documentaryPermittedUses(contribution.kind);
+        if (!allowed.some((use) => use === finding.permittedUse))
+            return "documentary_control_permission_invalid";
+        const needs = new Set(contribution.needIds);
+        const needFindings = Object.entries(finding.needs);
+        if (needFindings.length !== needs.size)
+            return "documentary_control_need_invalid";
+        for (const [needId, use] of needFindings) {
+            if (!needs.has(needId)) return "documentary_control_need_invalid";
+            if (!allowed.some((permission) => permission === use))
+                return "documentary_control_permission_invalid";
+            if (
+                intersectDocumentaryUse(finding.permittedUse, use) !==
+                    finding.permittedUse &&
+                !explained.get(contribution.id)?.has(needId)
+            )
+                return "documentary_control_objection_required";
+        }
+    }
+}
+
+export function documentaryFindingFor(
+    control: DocumentaryControlV2 | null,
+    contributionId: string,
+) {
+    return control?.findings[contributionId];
+}
+
+type DocumentaryUseRestriction = {
+    contributionId: string;
+    version: number;
+    needId?: string;
+    permittedUse?: DocumentaryUse;
+};
+
+/** Applies the documentary ceilings once per contribution, then projects its declared needs. */
+export function controlledDocumentaryUses(
+    contribution: DocumentaryContribution,
+    control: DocumentaryControlV2 | null,
+    restrictions: readonly DocumentaryUseRestriction[] = [],
+): { permittedUse: DocumentaryUse; needs: Record<string, DocumentaryUse> } {
+    const finding = documentaryFindingFor(control, contribution.id);
+    if (
+        !control ||
+        finding?.conclusion !== "supported" ||
         !documentaryPermittedUses(contribution.kind).some(
             (use) => use === finding.permittedUse,
         )
     )
-        return "blocked";
+        return {
+            permittedUse: "blocked",
+            needs: Object.fromEntries(
+                contribution.needIds.map((need) => [need, "blocked"]),
+            ),
+        };
+
     let permittedUse = finding.permittedUse;
-    for (const restriction of restrictions) {
+    const ceilings = new Map<string, DocumentaryUse>();
+    const restrict = (use: DocumentaryUse, needId: string | undefined) => {
+        if (needId === undefined)
+            permittedUse = intersectDocumentaryUse(permittedUse, use);
+        else
+            ceilings.set(
+                needId,
+                intersectDocumentaryUse(
+                    ceilings.get(needId) ?? "documentary",
+                    use,
+                ),
+            );
+    };
+    for (const objection of control.objections)
+        for (const target of objection.targets)
+            if (target.contributionId === contribution.id)
+                restrict(objection.maximumUse, target.needId ?? undefined);
+    for (const restriction of restrictions)
         if (
-            restriction.contributionId !== contribution.id ||
-            restriction.version !== contribution.version
+            restriction.contributionId === contribution.id &&
+            restriction.version === contribution.version
         )
-            continue;
-        const narrower = restriction.permittedUse ?? "blocked";
-        if (permittedUse === "blocked" || narrower === "blocked")
-            return "blocked";
-        if (narrower === "documentary") continue;
-        if (permittedUse === "documentary" || permittedUse === narrower)
-            permittedUse = narrower;
-        else return "blocked";
-    }
-    return permittedUse;
+            restrict(restriction.permittedUse ?? "blocked", restriction.needId);
+
+    return {
+        permittedUse,
+        needs: Object.fromEntries(
+            contribution.needIds.map((need) => [
+                need,
+                intersectDocumentaryUse(
+                    intersectDocumentaryUse(
+                        permittedUse,
+                        finding.needs[need] ?? "blocked",
+                    ),
+                    ceilings.get(need) ?? "documentary",
+                ),
+            ]),
+        ),
+    };
+}
+
+export function controlledDocumentaryUse(
+    contribution: DocumentaryContribution,
+    control: DocumentaryControlV2 | null,
+    restrictions: readonly DocumentaryUseRestriction[] = [],
+    needId?: string,
+): DocumentaryUse {
+    const uses = controlledDocumentaryUses(contribution, control, restrictions);
+    if (needId === undefined) return uses.permittedUse;
+    return contribution.needIds.includes(needId)
+        ? (uses.needs[needId] ?? "blocked")
+        : "blocked";
 }

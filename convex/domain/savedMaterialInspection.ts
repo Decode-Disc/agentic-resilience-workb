@@ -18,16 +18,17 @@ import { readResearchContext } from "./researchContext";
 import { documentaryInventory } from "./savedMaterial";
 import { savedMaterialOperations } from "./savedMaterialAgentOperations";
 import {
-    NATIVE_COMPLETION_INSPECTION_VERSION,
     REFERENCED_INSPECTION_VERSION,
     SAVED_MATERIAL_DEFINITION_ID,
     SAVED_MATERIAL_DEFINITION_VERSION,
+    SCOPED_DOCUMENTARY_INSPECTION_VERSION,
     savedMaterialBinding,
     savedMaterialCompletionValidator,
     savedMaterialResultValidator,
     savedMaterialScopeValidator,
     savedMaterialStateValidator,
     savedMaterialWireContract,
+    supportsScopedDocumentaryExamination,
 } from "./savedMaterialOperations";
 import { savedMaterialSimulation } from "./savedMaterialSimulation";
 import { readPreparationSourceDecision } from "./sourcePreparationAuthority";
@@ -63,6 +64,7 @@ export const savedMaterialInspectionDefinition: AgentDefinition & {
         const wire = savedMaterialWireContract(
             name,
             savedMaterialBinding(this.id, this.version),
+            supportsScopedDocumentaryExamination(this.id, this.version),
         );
         return wire
             ? { description: operation.description, ...wire }
@@ -255,11 +257,11 @@ export const documentaryInspectionDefinition: AgentDefinition & {
     version: REFERENCED_INSPECTION_VERSION,
 };
 
-export const documentaryInspectionV4Definition: AgentDefinition & {
+export const documentaryInspectionV5Definition: AgentDefinition & {
     id: "saved_material_inspection_v1";
 } = {
     ...documentaryInspectionDefinition,
-    version: NATIVE_COMPLETION_INSPECTION_VERSION,
+    version: SCOPED_DOCUMENTARY_INSPECTION_VERSION,
     completionTransport: "native_tool",
     instructions: [
         "Inspect only source captures already approved for this mission's frozen corpus revision.",

@@ -90,17 +90,42 @@ async function qualifyWithConflict(
             latencyMs: 1,
             dispatchOutcome: "response_received",
             output: {
-                coherence: false,
-                limitations: [
-                    "The filing and the call define scope differently.",
-                ],
-                findings: input.contributions.map(
-                    (c: { id: string }, index: number) => ({
-                        contributionId: c.id,
-                        conclusion: conclusions[index],
-                        permittedUse,
-                        diagnostic: "Another filing states a different scope.",
-                    }),
+                objections: input.contributions.flatMap(
+                    (c: { id: string }, index: number) =>
+                        conclusions[index] === "documentary_conflict"
+                            ? [
+                                  {
+                                      targets: [
+                                          {
+                                              contributionId: c.id,
+                                              needId: null,
+                                          },
+                                      ],
+                                      maximumUse: "blocked",
+                                      diagnostic:
+                                          "The filing and the call define scope differently.",
+                                  },
+                              ]
+                            : [],
+                ),
+                findings: Object.fromEntries(
+                    input.contributions.map(
+                        (
+                            c: { id: string; needIds: string[] },
+                            index: number,
+                        ) => [
+                            c.id,
+                            {
+                                conclusion: conclusions[index],
+                                permittedUse,
+                                needs: Object.fromEntries(
+                                    c.needIds.map((id) => [id, permittedUse]),
+                                ),
+                                diagnostic:
+                                    "Another filing states a different scope.",
+                            },
+                        ],
+                    ),
                 ),
             },
         };
@@ -269,7 +294,6 @@ test("the Sources workspace keeps reading, contribution, control and membership 
                 blocked: 1,
             },
         },
-        limitations: ["The filing and the call define scope differently."],
     });
 
     const reading = await owner.query(api.sourcesWorkspace.getSource, {
@@ -292,7 +316,15 @@ test("the Sources workspace keeps reading, contribution, control and membership 
             passageOrders: [f.passage.order],
         }),
     ]);
-    expect(reading.coherence).toBe(false);
+    expect(reading.contributions[0]?.objections).toEqual([
+        {
+            needIds: [null],
+            maximumUse: "blocked",
+            diagnosticPreview:
+                "The filing and the call define scope differently.",
+            diagnosticComplete: true,
+        },
+    ]);
 });
 
 function retainedNeedSources(
@@ -349,6 +381,7 @@ test("coverage handoff freezes unfinished searches for Sources and Workbench", a
         expectedGeneration,
     });
     const reserved = await f.t.mutation(internal.sourcesMission.reserve, {
+        epoch: 1,
         requestId,
         expectedGeneration,
     });

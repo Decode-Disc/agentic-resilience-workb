@@ -27,7 +27,7 @@ test("confirmation and the first turn use the named current Workbench binding", 
     );
     expect(conversation).toMatchObject({
         definitionId: "workbench_v1",
-        definitionVersion: 12,
+        definitionVersion: 13,
     });
     await client.mutation(api.execution.conversations.submit, {
         runId,
@@ -50,7 +50,7 @@ test("confirmation and the first turn use the named current Workbench binding", 
     });
     expect(await t.run((ctx) => ctx.db.get(missionId))).toMatchObject({
         definitionId: "workbench_v1",
-        definitionVersion: 12,
+        definitionVersion: 13,
         objectiveKey: `workbench:${turnId}`,
     });
 });

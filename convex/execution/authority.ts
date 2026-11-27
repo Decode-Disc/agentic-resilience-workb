@@ -15,6 +15,13 @@ import { missionScope, missionState } from "./missionData";
 
 export { executionError, executionFailureCode } from "./errors";
 
+export function publicationControl(ctx: QueryCtx) {
+    return ctx.db
+        .query("piPublication")
+        .withIndex("by_key", (q) => q.eq("key", "workers"))
+        .unique();
+}
+
 /** Logical results may serve several callers; each retained cause must still belong to that request. */
 export async function readOperationCause(
     ctx: QueryCtx,

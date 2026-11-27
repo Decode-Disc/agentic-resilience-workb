@@ -29,7 +29,10 @@ import {
     executionError as executionFailure,
     executionFailureCode,
 } from "@convex/execution/errors";
-import { operationOutcomeValidator } from "@convex/execution/executionProtocol";
+import {
+    operationOutcomeValidator,
+    scheduledOperationArgs,
+} from "@convex/execution/executionProtocol";
 import { operationSuccess } from "@convex/execution/operationResults";
 import { executeScheduledOperation } from "@convex/execution/operations";
 import { verifyRetainedText } from "@convex/execution/retainedText";
@@ -652,19 +655,18 @@ export const importRetainedDocument = internalAction({
 });
 
 export const acquireDocument = internalAction({
-    args: {
-        requestId: v.id("agentOperationRequests"),
-        expectedGeneration: v.number(),
-    },
+    args: scheduledOperationArgs,
     returns: v.union(operationOutcomeValidator, v.null()),
     async handler(
         ctx,
-        args,
+        scheduledArgs,
     ): Promise<Infer<typeof operationOutcomeValidator> | null> {
-        return executeScheduledOperation(ctx, args, async () => {
+        const { requestId, expectedGeneration } = scheduledArgs;
+        const args = { requestId, expectedGeneration };
+        return executeScheduledOperation(ctx, scheduledArgs, async () => {
             const scheduled = await ctx.runQuery(
                 internal.execution.operations.readScheduledInput,
-                args,
+                scheduledArgs,
             );
             if (
                 scheduled.pin.kind === "documentary_v1" &&
@@ -672,7 +674,7 @@ export const acquireDocument = internalAction({
             ) {
                 const reserved = await ctx.runMutation(
                     internal.sourcesMission.reserve,
-                    args,
+                    scheduledArgs,
                 );
                 if (
                     reserved.input.kind !== "acquire_document" ||
@@ -690,7 +692,7 @@ export const acquireDocument = internalAction({
                         code: result.reasonCode ?? "capture_unavailable",
                     };
                 await ctx.runMutation(internal.sourcesMission.retainCapture, {
-                    ...args,
+                    ...scheduledArgs,
                     captureId: result.sourceCaptureId,
                 });
                 const { capture, indexed } = await ctx.runQuery(

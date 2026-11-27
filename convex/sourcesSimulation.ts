@@ -1,5 +1,9 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { internalQuery, type QueryCtx } from "@convex/_generated/server";
+import type {
+    DocumentaryContribution,
+    DocumentaryControlV2,
+} from "@convex/domain/sourcesContracts";
 import { requireCampaignLot } from "@convex/qualificationCampaigns";
 import {
     localBrowserFixturesEnabled,
@@ -54,20 +58,24 @@ export { simulatedSourceText } from "./qualificationInitialFixtures";
 
 /** Fixed advisory response; never evidence of model quality or a real company's facts. */
 export function simulatedDocumentaryControl(
-    contributions: readonly { id: string }[],
-) {
+    contributions: readonly Pick<DocumentaryContribution, "id" | "needIds">[],
+): DocumentaryControlV2 {
     return {
-        findings: contributions.map((c) => ({
-            contributionId: c.id,
-            conclusion: "supported" as const,
-            permittedUse: "context_only" as const,
-            diagnostic:
-                "Simulation: fixed documentary-control response; no real model judgment.",
-        })),
-        coherence: true,
-        limitations: [
-            "Simulation only; no company facts or economic conclusions established.",
-        ],
+        findings: Object.fromEntries(
+            contributions.map((c) => [
+                c.id,
+                {
+                    conclusion: "supported",
+                    permittedUse: "context_only",
+                    needs: Object.fromEntries(
+                        c.needIds.map((id) => [id, "context_only"] as const),
+                    ),
+                    diagnostic:
+                        "Simulation only. No real model judgment or company facts.",
+                },
+            ]),
+        ),
+        objections: [],
     };
 }
 

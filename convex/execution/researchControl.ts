@@ -150,15 +150,29 @@ export async function pauseResearchAtBoundary(
             const owner = request.missionId
                 ? await ctx.db.get(request.missionId)
                 : null;
-            const scope = owner
+            const definition = owner
                 ? getAgentDefinition(
                       owner.definitionId,
                       owner.definitionVersion,
-                  ).executionScope
-                : request.input.kind === "invalid"
-                  ? undefined
-                  : getNativeOperation(request.input.kind)?.nativeAuthority;
-            if (scope === "research") return true;
+                  )
+                : null;
+            const operation =
+                request.input.kind === "invalid"
+                    ? null
+                    : (definition?.operations[request.input.kind] ??
+                      getNativeOperation(request.input.kind));
+            const scope =
+                definition?.executionScope ?? operation?.nativeAuthority;
+            if (
+                scope === "research" &&
+                !(
+                    request.scheduledExecution?.phase === "waiting_provider" &&
+                    operation?.effectKind === "durable_effect" &&
+                    operation.scheduledAction &&
+                    operation.scheduledRecovery === "structured_model_v1"
+                )
+            )
+                return true;
         }
     }
     if (
@@ -502,7 +516,9 @@ export const checkpoint = internalMutation({
             return { waiting: true, generation: run.executionGeneration };
         if (run.executionStatus !== "running")
             throw executionError("human_prerequisite_required");
-        const settledRun = await applyRequestedResearchPause(ctx, run);
+        if (run.researchPauseRequested)
+            await pauseResearchAtBoundary(ctx, run._id);
+        const settledRun = (await ctx.db.get(run._id)) ?? run;
         if (settledRun.executionStatus === "paused")
             return {
                 waiting: true,
@@ -687,6 +703,24 @@ export async function pauseResearch(
             updatedAt: Date.now(),
         });
         await recordControl(ctx, run, "research_pause_requested");
+        const waiting = await ctx.db
+            .query("agentOperationRequests")
+            .withIndex("by_run_and_status", (q) =>
+                q.eq("runId", run._id).eq("status", "waiting"),
+            )
+            .take(9);
+        if (
+            waiting.some(
+                (request) =>
+                    request.scheduledExecution?.phase === "waiting_provider",
+            )
+        ) {
+            await pauseResearchAtBoundary(ctx, run._id);
+            return (
+                (await ctx.db.get(run._id))?.executionGeneration ??
+                run.executionGeneration
+            );
+        }
         return run.executionGeneration;
     }
     await ctx.db.patch(run._id, {
@@ -770,6 +804,11 @@ export async function resumeResearch(
             : {}),
         updatedAt: Date.now(),
     });
+    if (run.pauseReason === "analyst")
+        await ctx.runMutation(
+            internal.execution.operations.authorizeStructuredResume,
+            { runId: run._id, generation },
+        );
     if (run.startMode === "framed" && run.sourcePreparationId)
         await ctx.runMutation(internal.execution.researchControl.checkpoint, {
             runId: run._id,

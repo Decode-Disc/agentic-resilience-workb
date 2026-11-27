@@ -2358,14 +2358,23 @@ test("native Workbench consultation preserves captured and retained sets through
         await ctx.db.patch(control._id, {
             output: {
                 ...control.output,
-                control: {
-                    ...control.output.control,
-                    findings: contributions.map((entry) => ({
-                        contributionId: entry.id,
-                        conclusion: entry.conclusion,
-                        permittedUse: entry.use,
-                        diagnostic: `Recorded ${entry.id} limit`,
-                    })),
+                examination: {
+                    state: "examined",
+                    contractVersion: 2,
+                    control: {
+                        findings: Object.fromEntries(
+                            contributions.map((entry) => [
+                                entry.id,
+                                {
+                                    conclusion: entry.conclusion,
+                                    permittedUse: entry.use,
+                                    diagnostic: `Recorded ${entry.id} limit`,
+                                    needs: { "common-context": entry.use },
+                                },
+                            ]),
+                        ),
+                        objections: [],
+                    },
                 },
             },
         });

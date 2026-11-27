@@ -31,17 +31,20 @@ test("required Workbench state preserves a rejected statement with its effective
                 preparationId: f.preparationId,
                 evidence: [],
                 inputHash: "fixture",
-                control: {
-                    findings: [
-                        {
-                            contributionId: "retained",
-                            conclusion: "supported",
-                            permittedUse: "documentary",
-                            diagnostic: "Supported.",
+                examination: {
+                    state: "examined",
+                    contractVersion: 2,
+                    control: {
+                        findings: {
+                            retained: {
+                                conclusion: "supported",
+                                permittedUse: "documentary",
+                                diagnostic: "Supported.",
+                                needs: { "common-context": "documentary" },
+                            },
                         },
-                    ],
-                    coherence: true,
-                    limitations: [],
+                        objections: [],
+                    },
                 },
             },
         });
@@ -249,17 +252,31 @@ test("required state preserves complete controlled statements and adverse findin
                 preparationId: f.preparationId,
                 evidence: [],
                 inputHash: "fixture",
-                control: {
-                    findings: [
-                        {
-                            contributionId: "qualified",
-                            conclusion: "not_established",
-                            permittedUse: "blocked",
-                            diagnostic: "The period is not established.",
+                examination: {
+                    state: "examined",
+                    contractVersion: 2,
+                    control: {
+                        findings: {
+                            qualified: {
+                                conclusion: "not_established",
+                                permittedUse: "blocked",
+                                diagnostic: "The period is not established.",
+                                needs: { "common-context": "blocked" },
+                            },
                         },
-                    ],
-                    coherence: false,
-                    limitations: ["Do not infer an annual result."],
+                        objections: [
+                            {
+                                targets: [
+                                    {
+                                        contributionId: "qualified",
+                                        needId: "common-context",
+                                    },
+                                ],
+                                maximumUse: "blocked",
+                                diagnostic: "Do not infer an annual result.",
+                            },
+                        ],
+                    },
                 },
             },
         });
@@ -316,8 +333,13 @@ test("required state preserves complete controlled statements and adverse findin
         permittedUse: "blocked",
         finding: { diagnostic: "The period is not established." },
     });
-    expect(observations[0].limitations).toEqual([
-        "Do not infer an annual result.",
+    expect(observations[0].contributions[0].objections).toEqual([
+        {
+            needIds: ["common-context"],
+            maximumUse: "blocked",
+            diagnosticPreview: "Do not infer an annual result.",
+            diagnosticComplete: true,
+        },
     ]);
     expect(JSON.stringify(observations)).not.toContain(
         "Exact quote remains on demand",
@@ -392,15 +414,30 @@ test("large admitted native state stays immutable and readable without exceeding
                     preparationId: f.preparationId,
                     evidence: [],
                     inputHash: `large-${index}`,
-                    control: {
-                        findings: contributions.map((contribution) => ({
-                            contributionId: contribution.id,
-                            conclusion: "supported" as const,
-                            permittedUse: "context_only" as const,
-                            diagnostic: "Context only.",
-                        })),
-                        coherence: true,
-                        limitations: [],
+                    examination: {
+                        state: "examined",
+                        contractVersion: 2,
+                        control: {
+                            findings: Object.fromEntries(
+                                contributions.map((contribution) => [
+                                    contribution.id,
+                                    {
+                                        conclusion: "supported" as const,
+                                        permittedUse: "context_only" as const,
+                                        diagnostic: "Context only.",
+                                        needs: Object.fromEntries(
+                                            contribution.needIds.map(
+                                                (needId) => [
+                                                    needId,
+                                                    "context_only" as const,
+                                                ],
+                                            ),
+                                        ),
+                                    },
+                                ]),
+                            ),
+                            objections: [],
+                        },
                     },
                 },
             });

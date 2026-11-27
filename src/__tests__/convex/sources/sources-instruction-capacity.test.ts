@@ -1,11 +1,14 @@
 import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { documentaryReference } from "@convex/domain/savedMaterialOperations";
 import { completeSources } from "@convex/domain/sources";
 import type { SourcesOperation } from "@convex/domain/sourcesContracts";
 import { executionFailureCode } from "@convex/execution/errors";
 import { extractObservedDestinations } from "@convex/integrations/evidenceNormalization";
+import { MAX_OPERATION_RESULT_BYTES } from "@convex/resourcePolicy";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
+import { scopedFixtureControl } from "@/__tests__/setup/model-stream";
 import {
     dispatchSourcesOperation,
     prepareSourcesResult,
@@ -202,16 +205,15 @@ test.each([
             model: route.model,
             latencyMs: 1,
             dispatchOutcome: "response_received",
-            output: {
-                coherence: true,
-                limitations: [],
-                findings: input.contributions.map((c: { id: string }) => ({
+            output: scopedFixtureControl(
+                input.contributions,
+                input.contributions.map((c: { id: string }) => ({
                     contributionId: c.id,
                     conclusion: "supported",
                     permittedUse: "context_only",
                     diagnostic: "Controlled context.",
                 })),
-            },
+            ),
         };
     });
     const requestIds: Id<"agentOperationRequests">[] = [];
@@ -268,8 +270,50 @@ test.each([
             });
             break;
         }
-        expect(outcome).toMatchObject({ kind: "success" });
+        expect(outcome).toEqual(expect.objectContaining({ kind: "success" }));
         requestIds.push(requestId);
+    }
+    if (needCount === 80) {
+        await f.t.run((ctx) =>
+            ctx.db.patch(f.missionId, { definitionVersion: 9 }),
+        );
+        const requestId = await f.t.mutation(
+            internal.execution.operations.enqueue,
+            {
+                missionId: f.missionId,
+                expectedGeneration: 4,
+                cause: "read-high-cardinality-examination",
+                input: {
+                    kind: "read_in_context",
+                    reference: documentaryReference({
+                        issuer: "capture",
+                        captureId: f.captureId,
+                    }),
+                },
+            },
+        );
+        const outcome = await f.t.action(
+            internal.execution.operations.dispatch,
+            {
+                requestId,
+                expectedGeneration: 4,
+            },
+        );
+        expect(outcome).toMatchObject({ kind: "success" });
+        assert(outcome.kind === "success");
+        const value = JSON.parse(outcome.valueJson);
+        expect(value.text).toContain(f.passage.quotation);
+        expect(new TextEncoder().encode(outcome.valueJson).length).toBeLessThan(
+            MAX_OPERATION_RESULT_BYTES,
+        );
+        const qualification = value.examination.qualification;
+        expect(qualification.needOrder).toEqual([...originalNeeds].sort());
+        expect(qualification.contributions).toHaveLength(15);
+        expect(
+            qualification.contributions[0].usesByNeed.map(
+                (index: number) => qualification.useOrder[index],
+            ),
+        ).toEqual(Array(80).fill("context_only"));
     }
     const before = await f.t.run(async (ctx) => {
         const preparation = await ctx.db.get(f.preparationId);
@@ -472,6 +516,7 @@ test("unavailable controls and later requests retain explicit outcomes within co
         });
         try {
             await f.t.mutation(internal.sourcesMission.reserve, {
+                epoch: 1,
                 requestId,
                 expectedGeneration: 4,
             });
@@ -479,6 +524,7 @@ test("unavailable controls and later requests retain explicit outcomes within co
             const code = executionFailureCode(error);
             expect(code).toBe("sources_result_capacity");
             await f.t.mutation(internal.execution.operations.recordResult, {
+                epoch: 1,
                 requestId,
                 expectedGeneration: 4,
                 outcome: {
@@ -489,6 +535,7 @@ test("unavailable controls and later requests retain explicit outcomes within co
             break;
         }
         await f.t.mutation(internal.execution.operations.recordResult, {
+            epoch: 1,
             requestId,
             expectedGeneration: 4,
             outcome: { kind: "unavailable", code: "missing_configuration" },
@@ -611,6 +658,7 @@ test.each([
         expectedGeneration: 4,
     });
     await f.t.mutation(internal.sourcesMission.reserve, {
+        epoch: 1,
         requestId,
         expectedGeneration: 4,
     });
@@ -625,6 +673,7 @@ test.each([
             ?.needsRevision,
     ).toBe(1);
     await f.t.mutation(internal.execution.operations.recordResult, {
+        epoch: 1,
         requestId,
         expectedGeneration: 4,
         outcome: { kind: "unavailable", code: "missing_configuration" },

@@ -465,14 +465,21 @@ test("a result ID from another table cannot become an adopted documentary contro
             expectedGeneration: 4,
         }),
     ).toMatchObject({ kind: "outcome", outcome: { kind: "waiting" } });
+    const request = await f.t.run((ctx) => ctx.db.get(id));
+    assert(request?.admissionEventId);
     const valueJson = JSON.stringify({
         taskId: f.sourceId,
-        control: { findings: [], coherence: true, limitations: [] },
+        controlVersion: 2,
+        reference: request.admissionEventId,
+        objectionCount: 0,
+        needOrder: [],
+        effectiveContributions: [],
     });
     expect(
         await f.t.mutation(internal.execution.operations.recordResult, {
             requestId: id,
             expectedGeneration: 4,
+            epoch: 1,
             outcome: { kind: "success", valueJson },
         }),
     ).toMatchObject({ kind: "refused", code: "operation_adoption_failed" });

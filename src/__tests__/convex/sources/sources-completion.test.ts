@@ -212,6 +212,7 @@ test.each([
             ?.result,
     ).toBeUndefined();
     await f.t.mutation(internal.sourcesMission.reserve, {
+        epoch: 1,
         requestId,
         expectedGeneration: 4,
     });
@@ -261,6 +262,7 @@ test.each([
         expectedGeneration: 4,
     });
     await f.t.mutation(internal.sourcesMission.reserve, {
+        epoch: 1,
         requestId,
         expectedGeneration: 4,
     });
@@ -281,6 +283,7 @@ test.each([
     };
     if (count === 21)
         await f.t.mutation(internal.execution.operations.recordResult, {
+            epoch: 1,
             requestId,
             expectedGeneration: 4,
             outcome: { kind: "unavailable", code: "missing_configuration" },
@@ -318,6 +321,7 @@ test.each([
     }
     if (count === 1)
         await f.t.mutation(internal.execution.operations.recordResult, {
+            epoch: 1,
             requestId,
             expectedGeneration: 4,
             outcome: { kind: "unavailable", code: "missing_configuration" },
@@ -462,14 +466,22 @@ test("analyst settlement waits for native qualification and receives its existin
             latencyMs: 1,
             dispatchOutcome: "response_received",
             output: {
-                coherence: true,
-                limitations: [],
-                findings: input.contributions.map((c: { id: string }) => ({
-                    contributionId: c.id,
-                    conclusion: "supported",
-                    permittedUse: "context_only",
-                    diagnostic: "Controlled context.",
-                })),
+                objections: [],
+                findings: Object.fromEntries(
+                    input.contributions.map(
+                        (c: { id: string; needIds: string[] }) => [
+                            c.id,
+                            {
+                                conclusion: "supported",
+                                permittedUse: "context_only",
+                                needs: Object.fromEntries(
+                                    c.needIds.map((id) => [id, "context_only"]),
+                                ),
+                                diagnostic: "Controlled context.",
+                            },
+                        ],
+                    ),
+                ),
             },
         };
     });
@@ -654,6 +666,7 @@ test.each([
     }
     if (!processing)
         await f.t.mutation(internal.execution.operations.recordResult, {
+            epoch: 1,
             ...args,
             outcome: { kind: "unavailable", code: "missing_configuration" },
         });
@@ -768,11 +781,13 @@ test("reservation admission and completion allow a response beyond 64 KiB within
             expectedGeneration: 4,
         });
         await f.t.mutation(internal.sourcesMission.reserve, {
+            epoch: 1,
             requestId,
             expectedGeneration: 4,
         });
         admitted++;
         await f.t.mutation(internal.execution.operations.recordResult, {
+            epoch: 1,
             requestId,
             expectedGeneration: 4,
             outcome: { kind: "unavailable", code: "missing_configuration" },
@@ -865,12 +880,14 @@ test("unqualified work retains storage headroom for unfinished explanations thro
         });
         try {
             await f.t.mutation(internal.sourcesMission.reserve, {
+                epoch: 1,
                 requestId,
                 expectedGeneration: 4,
             });
         } catch (error) {
             expect(executionFailureCode(error)).toBe("sources_result_capacity");
             await f.t.mutation(internal.execution.operations.recordResult, {
+                epoch: 1,
                 requestId,
                 expectedGeneration: 4,
                 outcome: {
@@ -883,6 +900,7 @@ test("unqualified work retains storage headroom for unfinished explanations thro
             break;
         }
         await f.t.mutation(internal.execution.operations.recordResult, {
+            epoch: 1,
             requestId,
             expectedGeneration: 4,
             outcome: { kind: "unavailable", code: "missing_configuration" },
@@ -1017,14 +1035,26 @@ test("current Sources preserves restricted material, complete history and accoun
         latencyMs: 1,
         dispatchOutcome: "response_received",
         output: {
-            coherence: true,
-            limitations: ["Management attribution only."],
-            findings: input.contributions.map((c: { id: string }) => ({
-                contributionId: c.id,
-                conclusion: "supported",
-                permittedUse: "attributed_argument_only",
-                diagnostic: "Retain only as an attributed management argument.",
-            })),
+            objections: [],
+            findings: Object.fromEntries(
+                input.contributions.map(
+                    (c: { id: string; needIds: string[] }) => [
+                        c.id,
+                        {
+                            conclusion: "supported",
+                            permittedUse: "attributed_argument_only",
+                            needs: Object.fromEntries(
+                                c.needIds.map((id) => [
+                                    id,
+                                    "attributed_argument_only",
+                                ]),
+                            ),
+                            diagnostic:
+                                "Retain only as an attributed management argument.",
+                        },
+                    ],
+                ),
+            ),
         },
     }));
     const qualReqId = await f.t.mutation(

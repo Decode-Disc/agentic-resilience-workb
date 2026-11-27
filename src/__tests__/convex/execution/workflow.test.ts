@@ -98,7 +98,7 @@ test.each([
         ctx.db.patch(args.runId, {
             executionGeneration: expectedGeneration,
             sourcePreparationBudget: {
-                version: 1,
+                version: 2,
                 work: 7,
                 incidents: 1,
                 reserved: 2,

@@ -3,6 +3,7 @@ import { completeSources } from "@convex/domain/sources";
 import type { SourcesOperation } from "@convex/domain/sourcesContracts";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
+import { scopedFixtureControl } from "@/__tests__/setup/model-stream";
 import {
     dispatchSourcesOperation,
     recordDocumentaryRead,
@@ -87,11 +88,13 @@ test.each([
             expectedGeneration: 4,
         });
     await f.t.mutation(internal.sourcesMission.reserve, {
+        epoch: 1,
         requestId: firstId,
         expectedGeneration: 4,
     });
     await expect(
         f.t.mutation(internal.sourcesMission.reserve, {
+            epoch: 1,
             requestId: secondId,
             expectedGeneration: 4,
         }),
@@ -107,6 +110,7 @@ test.each([
         }),
     );
     await f.t.mutation(internal.sourcesMission.reserve, {
+        epoch: 1,
         requestId: secondId,
         expectedGeneration: 4,
     });
@@ -206,16 +210,15 @@ test("overlapping native qualifications cannot admit material that exceeds final
             model: route.model,
             latencyMs: 1,
             dispatchOutcome: "response_received",
-            output: {
-                coherence: true,
-                limitations: [],
-                findings: input.contributions.map((c: { id: string }) => ({
+            output: scopedFixtureControl(
+                input.contributions,
+                input.contributions.map((c: { id: string }) => ({
                     contributionId: c.id,
                     conclusion: "supported",
                     permittedUse: "context_only",
                     diagnostic: "Controlled context.",
                 })),
-            },
+            ),
         };
     });
     const requestIds = [];

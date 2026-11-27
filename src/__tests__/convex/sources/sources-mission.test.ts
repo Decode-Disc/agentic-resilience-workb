@@ -7,13 +7,13 @@ import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 
 test("Sources is a research binding using canonical shared reading operations", () => {
     const sources = getAgentDefinition("sources_v1");
-    expect(sources.version).toBe(8);
-    expect(getAgentDefinition("workbench_v1").version).toBe(12);
+    expect(sources.version).toBe(9);
+    expect(getAgentDefinition("workbench_v1").version).toBe(13);
     expect(sources).toBeDefined();
     expect(sources?.executionScope).toBe("research");
     expect(sources?.nativeConversation).toBeUndefined();
     const inspection = getAgentDefinition("saved_material_inspection_v1");
-    expect(inspection.version).toBe(4);
+    expect(inspection.version).toBe(5);
     expect(sources?.operations.read_in_context).toBe(
         inspection?.operations.read_in_context,
     );
@@ -172,16 +172,23 @@ test("a coherence objection restricts affected contributions without erasing ind
     };
     expect(
         controlledDocumentaryUse(contribution, {
-            coherence: false,
-            limitations: ["A different contribution contradicts itself"],
-            findings: [
+            objections: [
                 {
-                    contributionId: "context",
-                    conclusion: "supported",
-                    permittedUse: "context_only",
-                    diagnostic: "Independent context remains supported",
+                    targets: [
+                        { contributionId: "other-contribution", needId: null },
+                    ],
+                    maximumUse: "blocked",
+                    diagnostic: "A different contribution contradicts itself",
                 },
             ],
+            findings: {
+                context: {
+                    conclusion: "supported",
+                    permittedUse: "context_only",
+                    needs: {},
+                    diagnostic: "Independent context remains supported",
+                },
+            },
         }),
     ).toBe("context_only");
 });
@@ -278,16 +285,15 @@ test("a later adverse check restricts an exact contribution version while indepe
         evidence: [],
     };
     const control = {
-        coherence: true,
-        limitations: [],
-        findings: [
-            {
-                contributionId: "claim",
+        objections: [],
+        findings: {
+            claim: {
                 conclusion: "supported" as const,
                 permittedUse: "documentary" as const,
+                needs: {},
                 diagnostic: "Supported in scope",
             },
-        ],
+        },
     };
     expect(
         controlledDocumentaryUse(c, control, [
@@ -335,11 +341,12 @@ test("distinct need-bound queries retain distinct provider identities within the
         ).toMatchObject({ kind: "outcome", outcome: { kind: "waiting" } });
         await f.t.mutation(
             internal.execution.operations.beginScheduledExecution,
-            { requestId, expectedGeneration: 3 },
+            { epoch: 1, requestId, expectedGeneration: 3 },
         );
         hashes.push(
             (
                 await f.t.mutation(internal.sourcesMission.reserve, {
+                    epoch: 1,
                     requestId,
                     expectedGeneration: 3,
                 })
@@ -399,11 +406,11 @@ test("the coverage preset orients the reserved query without adding searches", a
         });
         await f.t.mutation(
             internal.execution.operations.beginScheduledExecution,
-            { requestId, expectedGeneration: 3 },
+            { epoch: 1, requestId, expectedGeneration: 3 },
         );
         const reservation = await f.t.mutation(
             internal.sourcesMission.reserve,
-            { requestId, expectedGeneration: 3 },
+            { epoch: 1, requestId, expectedGeneration: 3 },
         );
         const preparation = await f.t.run((ctx) => ctx.db.get(preparationId));
         expect(preparation?.sourcesMission?.searches).toBe(1);

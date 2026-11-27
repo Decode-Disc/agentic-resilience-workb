@@ -313,13 +313,17 @@ export const retain = internalMutation({
         const controlTaskId = await ctx.db.insert("aiTaskResults", {
             ...base,
             taskType: "documentary_control",
-            schemaVersion: "documentary-control-v1",
+            schemaVersion: "documentary-control-v2",
             output: {
                 kind: "documentary_control",
                 preparationId: preparation._id,
                 evidence,
                 inputHash: fixture.hash,
-                control: simulatedDocumentaryControl(contributions),
+                examination: {
+                    state: "examined",
+                    contractVersion: 2,
+                    control: simulatedDocumentaryControl(contributions),
+                },
             },
         });
         const taskId = await ctx.db.insert("aiTaskResults", {

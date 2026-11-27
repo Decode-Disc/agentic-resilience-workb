@@ -43,6 +43,7 @@ export const persistCandidates = internalMutation({
         preparationId: v.optional(v.id("sourceSelectionProposalRebuilds")),
         executionGeneration: v.number(),
         operationKey: v.string(),
+        operationEpoch: v.optional(v.number()),
         candidates: v.array(candidateValidator),
         providerCompletion: v.optional(
             v.object({
@@ -165,6 +166,7 @@ export const persistCandidates = internalMutation({
                 throw sourcePreparationError("discovery_result_invalid");
             await ctx.runQuery(internal.sourcesMission.assertActive, {
                 requestId: work.requestId,
+                epoch: args.operationEpoch,
                 expectedGeneration: args.executionGeneration,
             });
         } else if (preparationState?.preparation.sourcesMission) {

@@ -1,4 +1,3 @@
-import { hasReceivedResponse } from "./journal";
 import { internal } from "@convex/_generated/api";
 import { internalMutation } from "@convex/_generated/server";
 import { stableStringify } from "@convex/domain/sourcePassages";
@@ -34,6 +33,7 @@ import {
     DEFAULT_AGENT_BACKEND,
     requireSupportedMissionBackend,
 } from "./executionProtocol";
+import { hasReceivedResponse } from "./journal";
 import {
     isRecoverableInterruption,
     missionObjectiveKey,
