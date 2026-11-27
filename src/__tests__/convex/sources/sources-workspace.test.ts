@@ -113,18 +113,25 @@ async function qualifyWithConflict(
                         (
                             c: { id: string; needIds: string[] },
                             index: number,
-                        ) => [
-                            c.id,
-                            {
-                                conclusion: conclusions[index],
-                                permittedUse,
-                                needs: Object.fromEntries(
-                                    c.needIds.map((id) => [id, permittedUse]),
-                                ),
-                                diagnostic:
-                                    "Another filing states a different scope.",
-                            },
-                        ],
+                        ) => {
+                            const conclusion = conclusions[index];
+                            const use =
+                                conclusion === "supported"
+                                    ? permittedUse
+                                    : "blocked";
+                            return [
+                                c.id,
+                                {
+                                    conclusion,
+                                    permittedUse: use,
+                                    needs: Object.fromEntries(
+                                        c.needIds.map((id) => [id, use]),
+                                    ),
+                                    diagnostic:
+                                        "Another filing states a different scope.",
+                                },
+                            ];
+                        },
                     ),
                 ),
             },
@@ -312,7 +319,7 @@ test("the Sources workspace keeps reading, contribution, control and membership 
             kind: "attributed_argument",
             conclusion: "documentary_conflict",
             permittedUse: "blocked",
-            reportedUse: "attributed_argument_only",
+            reportedUse: "blocked",
             passageOrders: [f.passage.order],
         }),
     ]);
@@ -323,6 +330,60 @@ test("the Sources workspace keeps reading, contribution, control and membership 
             diagnosticPreview:
                 "The filing and the call define scope differently.",
             diagnosticComplete: true,
+        },
+    ]);
+});
+
+test("a stored contradictory finding keeps its reported permission inspectable and its effective use blocked", async () => {
+    const f = await seedCapturedSources();
+    await qualifyWithConflict(f);
+    await f.t.run(async (ctx) => {
+        const preparation = await ctx.db.get(f.preparationId);
+        const qualificationId = preparation?.sourcesMission?.qualifications[0];
+        assert(qualificationId);
+        const qualification = await ctx.db.get(qualificationId);
+        assert(qualification?.output.kind === "documentary_qualification");
+        const task = await ctx.db.get(qualification.output.controlTaskId);
+        assert(task?.output.kind === "documentary_control");
+        const examination = task.output.examination;
+        assert(examination.state === "examined");
+        const id = qualification.output.contributions[0].id;
+        const finding = examination.control.findings[id];
+        // Restore the recorded shape from before the admission rule changed.
+        await ctx.db.patch(task._id, {
+            output: {
+                ...task.output,
+                examination: {
+                    ...examination,
+                    control: {
+                        ...examination.control,
+                        findings: {
+                            [id]: {
+                                ...finding,
+                                permittedUse: "attributed_argument_only",
+                                needs: {
+                                    "common-context":
+                                        "attributed_argument_only",
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        });
+    });
+    const reading = await f.t
+        .withIdentity({ subject: f.userId })
+        .query(api.sourcesWorkspace.getSource, {
+            runId: f.runId,
+            sourceId: f.sourceId,
+        });
+    expect(reading?.contributions).toMatchObject([
+        {
+            conclusion: "documentary_conflict",
+            reportedUse: "attributed_argument_only",
+            permittedUse: "blocked",
+            passageOrders: [f.passage.order],
         },
     ]);
 });
