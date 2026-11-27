@@ -2663,7 +2663,9 @@ test("a corrected examination of the same launch passage preserves the launch bu
 });
 
 test("a scoped objection leaves useful material in the handoff and outcomes research unfinished", async () => {
-    const f = await documentaryControlFixture("attributed_argument");
+    const quotation =
+        "The issuer expects its new workflow software to speed up claim review.";
+    const f = await documentaryControlFixture("attributed_argument", quotation);
     const outcomes = "customer-outcomes";
     await f.t.run(async (ctx) => {
         const preparation = await ctx.db.get(f.preparationId);
@@ -2698,6 +2700,9 @@ test("a scoped objection leaves useful material in the handoff and outcomes rese
                     {
                         contribution: {
                             ...change.contribution,
+                            statement: quotation,
+                            attribution: "Issuer",
+                            modality: "expectation",
                             needIds: ["common-context", outcomes],
                         },
                     },
@@ -2788,8 +2793,14 @@ test("a scoped objection leaves useful material in the handoff and outcomes rese
         assert(event?.contextObservation);
         return {
             textId: event.contextObservation.textId,
+            contribution: task.output.contributions[0],
             control: control.output.examination.control,
         };
+    });
+    expect(retained.contribution).toMatchObject({
+        statement: quotation,
+        attribution: "Issuer",
+        evidence: [{ captureId: f.captureId, quotation }],
     });
     const journal = await readRetainedBody(f.t, retained.textId);
     expect(JSON.parse(journal)).toMatchObject({
@@ -2883,6 +2894,7 @@ test("a scoped objection leaves useful material in the handoff and outcomes rese
                 contributions: [
                     expect.objectContaining({
                         qualificationTaskId: value.taskId,
+                        contributionId: retained.contribution?.id,
                     }),
                 ],
             }),
