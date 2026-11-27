@@ -1676,6 +1676,23 @@ test("a paused Sources scenario terminates on the exhausted case or lot ledger o
         assert(m?.lastInvocationId);
         await ctx.db.patch(m.lastInvocationId, {
             blockCode: "qualification_budget_exhausted",
+            receivedOutputJson: stableStringify({
+                kind: "complete",
+                needs: [],
+            }),
+        });
+    });
+    expect(await observe()).toBe(false);
+    await f.t.run(async (ctx) => {
+        const m = await ctx.db.get(state.mission._id);
+        assert(m?.lastInvocationId);
+        const response = stableStringify({
+            kind: "blocked",
+            code: "qualification_budget_exhausted",
+        });
+        await ctx.db.patch(m.lastInvocationId, {
+            receivedOutputJson: response,
+            outputJson: response,
         });
     });
     expect(await observe()).toBe(true);

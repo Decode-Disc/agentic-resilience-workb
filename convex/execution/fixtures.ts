@@ -2172,7 +2172,7 @@ export const qualificationSnapshot = internalQuery({
         };
     },
 });
-/** Assess shared lot state only at a case boundary, never on every polling snapshot. */
+/** A retained response can outlive its writer and still need adoption. */
 async function sourcesCanStillSettle(
     ctx: QueryCtx,
     sources: Doc<"agentMissions">,
@@ -2189,11 +2189,21 @@ async function sourcesCanStillSettle(
         sources.lastInvocationId !== sources.lastSettledInvocationId
     ) {
         const last = await ctx.db.get(sources.lastInvocationId);
+        if (!last || last.status === "started") return true;
+        const exhausted = stableStringify({
+            kind: "blocked",
+            code: "qualification_budget_exhausted",
+        });
         if (
-            !last ||
-            last.status === "started" ||
-            (last.status === "returned" &&
-                last.blockCode !== "qualification_budget_exhausted")
+            hasReceivedResponse(last) &&
+            (last.receivedOutputTextId || last.receivedOutputJson !== exhausted)
+        )
+            return true;
+        if (
+            last.status === "returned" &&
+            (last.blockCode !== "qualification_budget_exhausted" ||
+                last.outputTextId ||
+                last.outputJson !== exhausted)
         )
             return true;
     }
