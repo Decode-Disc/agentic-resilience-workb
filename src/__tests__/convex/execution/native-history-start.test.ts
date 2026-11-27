@@ -1,6 +1,8 @@
+import { internal } from "@convex/_generated/api";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 import { readConversationPageWithBodies } from "@/__tests__/setup/retained-messages";
+import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 
 afterEach(() => {
@@ -63,4 +65,71 @@ test.each([
     expect(page.page.find((m) => m.role === "assistant")?.text).toBe(
         "The retained conversation is available.",
     );
+});
+
+test.each([
+    "consult_mission_state",
+    "consult_conversation",
+] as const)("Sources admits first-page arguments and refuses the literal null cursor for %s", async (name) => {
+    vi.useFakeTimers();
+    const f = await seedCapturedSources();
+    await f.t.run((ctx) =>
+        ctx.db.insert("agentConversations", {
+            runId: f.runId,
+            queuedCount: 0,
+            createdAt: Date.now(),
+        }),
+    );
+    for (const [i, input] of [
+        {},
+        { cursor: "" },
+        { cursor: "null" },
+    ].entries()) {
+        const begun = await f.t.mutation(internal.execution.invocations.begin, {
+            missionId: f.missionId,
+            expectedGeneration: 4,
+            taskKey: `history-${i}`,
+            provenance: "simulation",
+        });
+        assert(begun.kind === "ready");
+        const finished = await f.t.mutation(
+            internal.execution.invocations.finish,
+            {
+                invocationId: begun.invocationId,
+                expectedGeneration: 4,
+                response: {
+                    kind: "operations",
+                    requests: [
+                        {
+                            callId: `history-${i}`,
+                            name,
+                            inputJson: JSON.stringify(input),
+                        },
+                    ],
+                },
+            },
+        );
+        assert(finished.kind === "waiting");
+        const [requestId] = finished.requestIds;
+        assert(requestId);
+        const outcome = await f.t.action(
+            internal.execution.operations.dispatch,
+            { requestId, expectedGeneration: 4 },
+        );
+        if (input.cursor === "null")
+            expect(outcome).toMatchObject({
+                kind: "refused",
+                code: "history_cursor_invalid",
+            });
+        else {
+            expect(
+                (await f.t.run((ctx) => ctx.db.get(requestId)))?.input,
+            ).toEqual({ kind: name });
+            expect(outcome.kind).toBe("success");
+        }
+        await f.t.mutation(internal.execution.invocations.settle, {
+            invocationId: begun.invocationId,
+            expectedGeneration: 4,
+        });
+    }
 });

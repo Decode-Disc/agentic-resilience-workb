@@ -760,7 +760,7 @@ test("mission history sizing fits exact 64 KiB envelope, handles 1-char overflow
             expect(bytes).toBe(MAX_OPERATION_RESULT_BYTES);
             expect(parsed.history.continueCursor).toBeNull();
         } else {
-            expect(parsed.history.continueCursor).toMatch(/^history:/);
+            expect(parsed.history.continueCursor).toMatch(/^history:mission:/);
             const second = await dispatchHistory(f, {
                 kind: "consult_mission_state",
                 cursor: parsed.history.continueCursor,
@@ -857,6 +857,16 @@ test("continuation rejects a predecessor pin whose frontier disagrees with its r
     assert(first.outcome.kind === "success");
     const cursor = JSON.parse(first.outcome.valueJson).history.continueCursor;
     assert(cursor);
+    for (const token of [cursor, cursor.replace("mission:", "conversation:")]) {
+        expect(
+            (
+                await dispatchHistory(f, {
+                    kind: "consult_conversation",
+                    cursor: token,
+                })
+            ).outcome,
+        ).toMatchObject({ kind: "refused", code: "history_cursor_invalid" });
+    }
     await f.t.run(async (ctx) => {
         const request = await ctx.db.get(first.requestId);
         assert(

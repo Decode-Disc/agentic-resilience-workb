@@ -392,7 +392,7 @@ export function modelOperationOutcome(
                                       ? "The operation outcome is unconfirmed. Do not repeat it or claim success or non-execution. Inspect retained state and wait for authorized recovery."
                                       : outcome.code ===
                                           "history_cursor_invalid"
-                                        ? "No history page was read. Omit cursor to start at the first page; for later pages copy only continueCursor returned by the same history operation. Use consult_conversation for prior analyst exchanges; consult_mission_state reads only the current mission."
+                                        ? "No history page was read. Omit cursor to start at the first page; for later pages copy only continueCursor returned by the same history operation. A null result cursor ends pagination. Use consult_conversation for prior analyst exchanges; consult_mission_state reads only the current mission."
                                         : outcome.code ===
                                             "completion_must_be_sole_call"
                                           ? "Completion cannot be combined with other tool calls or submitted more than once in the same turn. Review the executed operation results and current required state, then call submit_completion alone when work is finished."

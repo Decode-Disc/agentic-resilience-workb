@@ -2636,9 +2636,7 @@ export const finish = internalMutation({
             } catch {
                 decoded = null;
             }
-            let canonical = definition.nativeConversation
-                ? normalizeNativeHistoryInput(request.name, decoded)
-                : decoded;
+            let canonical = normalizeNativeHistoryInput(request.name, decoded);
             let normalizationRefusal: string | undefined =
                 "refusalCode" in request ? request.refusalCode : undefined;
             let normalizationValidation:
