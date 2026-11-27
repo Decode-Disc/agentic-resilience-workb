@@ -218,6 +218,7 @@ async function liveFixture(
     shared = false,
     costAccountingPolicy?: "known_final_v1" | "conservative_v1",
     researchDurationMs?: number,
+    grantCostUsd = 3,
 ) {
     const f = await seedWorkbench(
         true,
@@ -373,7 +374,7 @@ async function liveFixture(
         runId: first.runId,
         fixtureKey: first.fixtureKey,
         maximumRequests: 60,
-        maximumCostUsd: 3,
+        maximumCostUsd: grantCostUsd,
         sourcesLot: bindings,
         ...(shared
             ? {
@@ -1915,5 +1916,147 @@ test("qualificationContinuation treats a quiet local generation block as safe wh
         scenarioQuiet: false,
         executionStatus: "running",
         conversation: { kind: "quiet_blocked", code: "repetition_stop" },
+    });
+});
+
+test("fresh native reservations gate a lot and case before campaign authorization, and recheck its binding at open", async () => {
+    const f = await seedWorkbench(true);
+    const raw = configurableCampaign();
+    const profile = raw.configurations[0];
+    const initial = raw.scenarios[0];
+    assert(profile && initial);
+    profile.models.workbench.model = "z-ai/glm-5.3-flash";
+    const installed = await installModel(
+        f.t,
+        { model: profile.models.workbench.model },
+        "workbench",
+        { contextWindow: 1048576, maxTokens: 943717 },
+    );
+    await installModel(f.t, { model: profile.models.sources.model }, "sources");
+    const authorize = (
+        key: string,
+        costUsd: number,
+        limits?: { model?: number; costUsd?: number },
+    ) =>
+        f.t.mutation(internal.qualificationCampaigns.authorize, {
+            manifest: campaignManifestSchema.parse({
+                ...raw,
+                key,
+                configurations: [profile],
+                scenarios: [{ ...initial, limits }, ...raw.scenarios.slice(1)],
+                perLot: { ...raw.perLot, costUsd },
+                batteryHash: "a".repeat(64),
+            }),
+        });
+    const required = 0.7235166;
+    for (const [key, lot, limits, scope, resource, need, available] of [
+        ["frozen", 0.65, undefined, "lot", "costUsd", required, 0.65],
+        [
+            "next-below",
+            0.7235165,
+            undefined,
+            "lot",
+            "costUsd",
+            required,
+            0.7235165,
+        ],
+        [
+            "case-ceiling",
+            1,
+            { costUsd: 0.65 },
+            "case",
+            "costUsd",
+            required,
+            0.65,
+        ],
+        ["case-count", 1, { model: 0 }, "case", "model", 1, 0],
+    ] as const)
+        await expect(authorize(key, lot, limits)).rejects.toMatchObject({
+            data: expect.objectContaining({
+                code: "qualification_prerequisite_unfunded",
+                resource,
+                required: need,
+                available,
+                scope,
+            }),
+        });
+    expect(
+        await f.t.run(async (ctx) => ({
+            campaigns: await ctx.db.query("qualificationCampaigns").collect(),
+            lots: await ctx.db.query("qualificationLots").collect(),
+            calls: await ctx.db.query("providerCalls").collect(),
+            review: await ctx.db
+                .query("qualificationAnalysisAttempts")
+                .collect(),
+        })),
+    ).toEqual({ campaigns: [], lots: [], calls: [], review: [] });
+
+    const campaignId = await authorize("exact", required);
+    const open = {
+        campaignId,
+        key: "lot-1",
+        candidateHash: "b".repeat(64),
+        changedPaths: [],
+    };
+    const revision = await f.t.run(async (ctx) => {
+        const catalog = await ctx.db.get(installed.catalogId);
+        assert(catalog?.currentRevisionId);
+        const record = await ctx.db.get(catalog.currentRevisionId);
+        assert(record);
+        await ctx.db.patch(record._id, {
+            descriptor: {
+                ...record.descriptor,
+                maxTokens: record.descriptor.maxTokens + 1,
+            },
+        });
+        return record;
+    });
+    await expect(f.t.mutation(admit, open)).rejects.toThrow(
+        "Campaign route or price drift",
+    );
+    expect(
+        await f.t.run((ctx) => ctx.db.query("qualificationLots").collect()),
+    ).toEqual([]);
+    await f.t.run((ctx) =>
+        ctx.db.patch(revision._id, { descriptor: revision.descriptor }),
+    );
+    const [first, second] = await Promise.all([
+        f.t.mutation(admit, open),
+        f.t.mutation(admit, open),
+    ]);
+    expect(first).toBe(second);
+    expect(
+        await f.t.run((ctx) => ctx.db.query("qualificationLots").collect()),
+    ).toHaveLength(1);
+
+    await f.t.run(async (ctx) => {
+        for (const row of await ctx.db.query("nativeInputProfiles").collect())
+            await ctx.db.patch(row._id, {
+                effectiveMaxOutputTokens: undefined,
+            });
+    });
+    // Older, byte-only profiles can establish a minimum input reservation only.
+    await expect(authorize("unknown-output", 0.65)).resolves.toBeDefined();
+    await expect(authorize("known-minimum", 0.15)).rejects.toMatchObject({
+        data: expect.objectContaining({
+            basis: "minimum",
+            required: 0.157287,
+            resource: "costUsd",
+            available: 0.15,
+        }),
+    });
+});
+
+test("a tighter run grant refuses the lot's native prerequisite before opening paid work", async () => {
+    await expect(
+        liveFixture(23, false, "known_final_v1", undefined, 0.001),
+    ).rejects.toMatchObject({
+        data: expect.objectContaining({
+            code: "qualification_prerequisite_unfunded",
+            scope: "grant",
+            resource: "costUsd",
+            required: 0.024576,
+            available: 0.001,
+        }),
     });
 });

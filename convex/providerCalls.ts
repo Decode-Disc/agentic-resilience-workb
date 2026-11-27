@@ -14,12 +14,9 @@ import {
     assertQualificationAllowance,
     patchQualificationReceipt,
     qualificationCategory,
+    qualificationModelReservationUsd,
     updateQualificationUsage,
 } from "@convex/qualificationUsage";
-import {
-    MODEL_MAX_INPUT_PRICE_PER_MILLION,
-    MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
-} from "@convex/resourcePolicy";
 import {
     framingProviderInputHash,
     framingSecReadInput,
@@ -1714,11 +1711,7 @@ export const recordAttempt = internalMutation({
                     if (!capacity)
                         throw sourcePreparationError("missing_configuration");
                     modelReservationUsd =
-                        (capacity.contextWindow *
-                            MODEL_MAX_INPUT_PRICE_PER_MILLION +
-                            capacity.maxTokens *
-                                MODEL_MAX_OUTPUT_PRICE_PER_MILLION) /
-                        1_000_000;
+                        qualificationModelReservationUsd(capacity);
                 }
                 qualificationReservationUsd =
                     args.service === "model"

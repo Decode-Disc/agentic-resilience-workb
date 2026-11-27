@@ -49,6 +49,7 @@ export async function installModel(
             | "reasoningMandatory"
             | "reasoningDefault"
             | "contextWindow"
+            | "maxTokens"
         >
     > = {},
 ) {

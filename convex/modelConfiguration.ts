@@ -344,16 +344,33 @@ async function retainNativeProfiles(
             !profile.key ||
             !Number.isSafeInteger(profile.bytes) ||
             profile.bytes < 1 ||
-            profile.bytes > 1000000
+            profile.bytes > 1000000 ||
+            (profile.effectiveMaxOutputTokens !== undefined &&
+                (!Number.isSafeInteger(profile.effectiveMaxOutputTokens) ||
+                    profile.effectiveMaxOutputTokens < 1))
         )
             throw executionError("model_not_compatible");
         const old = await ctx.db
             .query("nativeInputProfiles")
             .withIndex("by_key", (q) => q.eq("key", profile.key))
             .unique();
-        if (old && old.bytes !== profile.bytes)
-            throw executionError("model_profile_conflict");
-        if (!old) await ctx.db.insert("nativeInputProfiles", profile);
+        if (old) {
+            if (
+                old.bytes !== profile.bytes ||
+                (old.effectiveMaxOutputTokens !== undefined &&
+                    profile.effectiveMaxOutputTokens !== undefined &&
+                    old.effectiveMaxOutputTokens !==
+                        profile.effectiveMaxOutputTokens)
+            )
+                throw executionError("model_profile_conflict");
+            if (
+                old.effectiveMaxOutputTokens === undefined &&
+                profile.effectiveMaxOutputTokens !== undefined
+            )
+                await ctx.db.patch(old._id, {
+                    effectiveMaxOutputTokens: profile.effectiveMaxOutputTokens,
+                });
+        } else await ctx.db.insert("nativeInputProfiles", profile);
     }
 }
 
@@ -469,7 +486,16 @@ export const profiles = internalQuery({
             ),
         );
         return rows.flatMap((row) =>
-            row ? [{ key: row.key, bytes: row.bytes }] : [],
+            row
+                ? [
+                      {
+                          key: row.key,
+                          bytes: row.bytes,
+                          effectiveMaxOutputTokens:
+                              row.effectiveMaxOutputTokens,
+                      },
+                  ]
+                : [],
         );
     },
 });

@@ -15,6 +15,16 @@ export function retainedMethodVersion(
 }
 const nativeMethodVersions = { workbench_v1: 7, sources_v1: 5 } as const;
 
+export function selectedTaskMethodVersion(
+    methods: ReturnType<typeof campaignConfiguration>["taskMethods"],
+    definitionId: keyof typeof nativeMethodVersions,
+) {
+    if (!methods) return undefined;
+    return methods === "retained_control"
+        ? retainedMethodVersion(definitionId)
+        : nativeMethodVersions[definitionId];
+}
+
 /** A comparison binding is selected only by the immutable lot owning this local fixture. */
 export async function taskMethodDefinitionVersion(
     ctx: QueryCtx,
@@ -48,9 +58,7 @@ export async function taskMethodDefinitionVersion(
     )
         throw executionError("task_method_comparison_not_authorized");
     await requireBrowserTestRunOwner(ctx, run);
-    return methods === "retained_control"
-        ? retainedMethodVersion(definitionId)
-        : nativeMethodVersions[definitionId];
+    return selectedTaskMethodVersion(methods, definitionId);
 }
 
 /** Retained-method controls cannot be used by ordinary dossiers or another campaign arm. */

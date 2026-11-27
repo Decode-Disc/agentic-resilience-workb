@@ -636,7 +636,11 @@ test("preparing every advertised effort retains all calibrated versioned profile
     );
     expect(
         retained
-            .map(({ key, bytes }) => ({ key, bytes }))
+            .map(({ key, bytes, effectiveMaxOutputTokens }) => ({
+                key,
+                bytes,
+                effectiveMaxOutputTokens,
+            }))
             .sort((a, b) => a.key.localeCompare(b.key)),
     ).toEqual([...profiles].sort((a, b) => a.key.localeCompare(b.key)));
     expect(network).not.toHaveBeenCalled();

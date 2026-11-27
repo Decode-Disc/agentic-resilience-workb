@@ -12,6 +12,52 @@ import {
     emptyCampaignLimits,
 } from "@convex/qualificationCampaignPolicy";
 
+import {
+    MODEL_MAX_INPUT_PRICE_PER_MILLION,
+    MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
+} from "@convex/resourcePolicy";
+
+/** Charges maximum approved prices against the applicable full-context reservation. */
+export function qualificationModelReservationUsd(capacity: {
+    contextWindow: number;
+    maxTokens: number;
+}) {
+    return (
+        (capacity.contextWindow * MODEL_MAX_INPUT_PRICE_PER_MILLION +
+            capacity.maxTokens * MODEL_MAX_OUTPUT_PRICE_PER_MILLION) /
+        1_000_000
+    );
+}
+
+export function qualificationModelScopes(
+    lot: Pick<CampaignLimits, "model" | "costUsd">,
+    grant: Pick<CampaignLimits, "model" | "costUsd">,
+) {
+    return {
+        model: Math.min(lot.model, grant.model),
+        costUsd: Math.min(lot.costUsd, grant.costUsd),
+    };
+}
+
+/** Remaining headroom is tested the same way during planning and atomic dispatch. */
+export function exceededQualificationAllowance(
+    limits: Partial<CampaignLimits>,
+    usage: CampaignLimits,
+    kind: keyof Omit<CampaignLimits, "costUsd"> | "technical",
+    reservationUsd: number,
+) {
+    if (kind !== "technical" && usage[kind] + 1 > (limits[kind] ?? Infinity))
+        return {
+            resource: kind,
+            required: usage[kind] + 1,
+            available: limits[kind] ?? Infinity,
+        };
+    const required = usage.costUsd + reservationUsd;
+    const available = limits.costUsd ?? Infinity;
+    if (required > available)
+        return { resource: "costUsd" as const, required, available };
+}
+
 export const qualificationCategory = (
     call: Pick<Doc<"providerCalls">, "service" | "operation">,
 ) =>
@@ -162,14 +208,10 @@ export function qualificationAllowanceScopes(
             undefined,
             {
                 ...lot.allocation,
-                model: Math.min(
-                    lot.allocation.model,
-                    context.paidQualification.maximumRequests,
-                ),
-                costUsd: Math.min(
-                    lot.allocation.costUsd,
-                    context.paidQualification.maximumCostUsd,
-                ),
+                ...qualificationModelScopes(lot.allocation, {
+                    model: context.paidQualification.maximumRequests,
+                    costUsd: context.paidQualification.maximumCostUsd,
+                }),
             },
         ],
         [runId, scenario.limits ?? {}],
@@ -211,12 +253,14 @@ export async function assertQualificationAllowance(
         if (!row) throw new Error("Qualification usage unavailable");
         if (!qualificationUsageResolved(row))
             throw sourcePreparationError("qualification_outcome_unresolved");
-        const ceiling: Partial<CampaignLimits> = limits;
         if (
             row.overruns ||
-            (kind !== "technical" &&
-                row.usage[kind] + 1 > (ceiling[kind] ?? Infinity)) ||
-            row.usage.costUsd + reservationUsd > (ceiling.costUsd ?? Infinity)
+            exceededQualificationAllowance(
+                limits,
+                row.usage,
+                kind,
+                reservationUsd,
+            )
         )
             throw sourcePreparationError("qualification_budget_exhausted");
     }

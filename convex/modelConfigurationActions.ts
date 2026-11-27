@@ -335,7 +335,9 @@ async function refreshRevision(
         AbortSignal.timeout(NATIVE_PROFILE_PREPARATION_TIMEOUT_MS),
         async (keys) => {
             const existing = await readProfileBatches(ctx, keys);
-            for (const profile of existing) retainedKeys.add(profile.key);
+            for (const profile of existing)
+                if (profile.effectiveMaxOutputTokens !== undefined)
+                    retainedKeys.add(profile.key);
             return existing;
         },
     );

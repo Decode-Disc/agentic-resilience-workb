@@ -44,6 +44,7 @@ import {
     campaignConfiguration,
     campaignManifestSchema,
     campaignPreparationSchema,
+    qualificationPrerequisiteFailureSchema,
 } from "../../../convex/qualificationCampaignPolicy.ts";
 import { initialFixtureContent } from "../../../convex/qualificationInitialFixtures.ts";
 import {
@@ -1490,6 +1491,10 @@ async function executeCampaign(
             manifest,
             fingerprints: fingerprints(),
             boundary: "prepared_without_authorization",
+            prerequisiteReservation:
+                manifest.mode === "live"
+                    ? "requires_bound_startup_profile"
+                    : "not_applicable",
         });
         return;
     }
@@ -2228,6 +2233,18 @@ async function executeCampaign(
     const adminCode = material.invitations.find(
         (i) => i.slotKey === "admin",
     )?.code;
+    const prepareBoundModels = async (
+        selection: Parameters<typeof prepareCampaignModels>[2],
+    ) => {
+        assert(adminCode);
+        const prepared = await withQualificationAdministrator(
+            browser ?? null,
+            { web, convex: runtime.origins.convex },
+            adminCode,
+            (admin) => prepareCampaignModels(admin, manifest, selection),
+        );
+        save(root, "model-readiness", { preparedAt: Date.now(), prepared });
+    };
     process.on("SIGINT", onSignal);
     process.on("SIGTERM", onSignal);
     try {
@@ -2288,6 +2305,12 @@ async function executeCampaign(
         }
         if (action === "authorize") {
             verifyBattery();
+            if (
+                manifest.mode === "live" &&
+                manifest.version !== 1 &&
+                !existingCampaign
+            )
+                await prepareBoundModels({ nativeOnly: true });
             state.campaignId = await client.mutation(
                 ref(internal.qualificationCampaigns.authorize),
                 { manifest },
@@ -2321,21 +2344,10 @@ async function executeCampaign(
         }
         if (action === "close") return;
         verifyBattery();
-        if (manifest.mode === "live") {
-            assert(adminCode);
-            const prepared = await withQualificationAdministrator(
-                browser ?? null,
-                { web, convex: runtime.origins.convex },
-                adminCode,
-                (admin) =>
-                    prepareCampaignModels(
-                        admin,
-                        manifest,
-                        options.configuration,
-                    ),
-            );
-            save(root, "model-readiness", { preparedAt: Date.now(), prepared });
-        }
+        if (manifest.mode === "live")
+            await prepareBoundModels({
+                configurationId: options.configuration,
+            });
         const current = fingerprints();
         const previous = snapshot.lots.at(-1);
         const baseline = previous
@@ -2529,6 +2541,20 @@ async function executeCampaign(
             "Candidate changed during qualification",
         );
     } catch (error) {
+        const prerequisite = qualificationPrerequisiteFailureSchema.safeParse(
+            error && typeof error === "object" && "data" in error
+                ? error.data
+                : undefined,
+        );
+        if (prerequisite.success) {
+            save(root, "prerequisite-reservation", prerequisite.data);
+            console.error(
+                JSON.stringify({
+                    status: "prerequisite_unfunded",
+                    ...prerequisite.data,
+                }),
+            );
+        }
         completed = false;
         failure = error;
     } finally {
@@ -2763,13 +2789,13 @@ async function executeCampaign(
                     result.reconciled,
                     template.evidenceHash,
                 );
-            } else if (!result.reconciled) {
-                reviewOutcome = { status: "awaiting_reconciliation" };
             }
+            if (!result.reconciled)
+                reviewOutcome = { status: "awaiting_reconciliation" };
         }
         if (!cleanupCompleted || failure) process.exitCode = 1;
     }
-    reportLot(lotRoot, reviewOutcome);
+    if (lotRoot) reportLot(lotRoot, reviewOutcome);
     if (failure) {
         process.exitCode = 1;
         throw new Error(

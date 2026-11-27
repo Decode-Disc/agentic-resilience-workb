@@ -44,7 +44,11 @@ import {
     taskMethodDefinitionVersion,
 } from "@convex/qualificationAgentMethods";
 import { campaignConfiguration } from "@convex/qualificationCampaignPolicy";
-import { requireCampaignLot } from "@convex/qualificationCampaigns";
+import {
+    campaignConfigurationHash,
+    checkPrerequisiteReservations,
+    requireCampaignLot,
+} from "@convex/qualificationCampaigns";
 import {
     initializeQualificationUsage,
     qualificationAllowanceScopes,
@@ -1320,27 +1324,17 @@ export const authorizeWorkbenchQualification = internalMutation({
                     profile.controllerModel !== policy.model)
             )
                 throw new Error("Campaign controller configuration mismatch");
-            const configurationHash = sha256Hex(
-                stableStringify({
-                    configurations: configurations.map(
-                        ({ role, configuration: c }) => ({
-                            role,
-                            model: c.model,
-                            provider: c.provider,
-                            descriptor: c.descriptor,
-                            effort: c.reasoningEffort,
-                        }),
-                    ),
-                    controller: policy.enabled
-                        ? {
-                              enabled: true,
-                              model: policy.model,
-                              contradictionThreshold:
-                                  policy.contradictionThreshold,
-                              supportThreshold: policy.supportThreshold,
-                          }
-                        : { enabled: false },
-                }),
+            const binding = configurations.map(({ role, configuration }) => ({
+                role,
+                model: configuration.model,
+                provider: configuration.provider,
+                descriptor: configuration.descriptor,
+                effort: configuration.reasoningEffort,
+            }));
+            const configurationHash = campaignConfigurationHash(
+                binding,
+                policy.enabled ? policy.model : undefined,
+                policy,
             );
             const expectedHash =
                 m.version !== 1
@@ -1353,6 +1347,11 @@ export const authorizeWorkbenchQualification = internalMutation({
                 (expectedHash && expectedHash !== configurationHash)
             )
                 throw new Error("Campaign route or price drift");
+            if (m.version !== 1 && !context.paidQualification)
+                await checkPrerequisiteReservations(ctx, m, profile, binding, {
+                    model: maximumRequests,
+                    costUsd: maximumCostUsd,
+                });
             if (m.version === 1)
                 await ctx.db.patch(campaign._id, { configurationHash });
             await ctx.db.patch(lot._id, { configurationHash });
