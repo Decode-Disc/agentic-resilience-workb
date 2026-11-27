@@ -19,6 +19,11 @@ export const campaignLimitsSchema = z
         costUsd: z.number().finite().nonnegative(),
     })
     .strict();
+export const configurableCampaignLimitsSchema = campaignLimitsSchema
+    .extend({
+        model: campaignLimitsSchema.shape.model.optional(),
+    })
+    .strict();
 const role = z
     .object({
         model: z.string().min(1).max(200),
@@ -113,6 +118,9 @@ export const legacyCampaignManifestSchema = z
     });
 
 export type CampaignLimits = z.infer<typeof campaignLimitsSchema>;
+export type ConfigurableCampaignLimits = z.infer<
+    typeof configurableCampaignLimitsSchema
+>;
 
 export const qualificationPrerequisiteFailureSchema = z.object({
     code: z.literal("qualification_prerequisite_unfunded"),
@@ -385,6 +393,8 @@ const v2 = z
     .object({
         ...legacyCampaignManifestSchema.shape,
         version: z.literal(2),
+        perLot: configurableCampaignLimitsSchema,
+        total: configurableCampaignLimitsSchema,
         costAccountingPolicy: z
             .enum(["conservative_v1", "known_final_v1"])
             .optional(),
@@ -452,13 +462,31 @@ export const configurableCampaignManifestSchema = v2.superRefine((m, ctx) => {
                 "Frozen Sources replay requires a Sources campaign and genuine Start, not an initial fixture",
             );
     }
-    for (const key of ["model", "search", "acquisition", "costUsd"] as const)
+    for (const key of ["search", "acquisition", "costUsd"] as const)
         if (m.perLot[key] > m.total[key])
             issue("Per-lot allowance exceeds campaign total");
     if (
+        m.mode === "live" &&
+        (m.perLot.model === undefined) !== (m.total.model === undefined)
+    )
+        issue(
+            "Per-lot and total model caps must both be set or both be omitted",
+        );
+    if (
+        m.perLot.model !== undefined &&
+        m.total.model !== undefined &&
+        m.perLot.model > m.total.model
+    )
+        issue("Per-lot allowance exceeds campaign total");
+    if (
         m.mode === "deterministic"
-            ? Object.values(m.total).some((v) => v !== 0)
-            : m.perLot.model < 1 || m.perLot.costUsd <= 0
+            ? (m.perLot.model ?? 0) !== 0 ||
+              (m.total.model ?? 0) !== 0 ||
+              m.total.search !== 0 ||
+              m.total.acquisition !== 0 ||
+              m.total.costUsd !== 0
+            : m.perLot.costUsd <= 0 ||
+              (m.perLot.model !== undefined && m.perLot.model < 1)
     )
         issue("Explicit live allowance or zero simulated allowance required");
     if (
@@ -564,7 +592,7 @@ export const configurableCampaignManifestSchema = v2.superRefine((m, ctx) => {
             "acquisition",
             "costUsd",
         ] as const)
-            if ((s.limits?.[key] ?? 0) > m.perLot[key])
+            if ((s.limits?.[key] ?? 0) > (m.perLot[key] ?? Infinity))
                 issue("Scenario limit exceeds lot allowance");
     }
     for (const c of m.configurations) {

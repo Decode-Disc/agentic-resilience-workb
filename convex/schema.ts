@@ -97,6 +97,7 @@ import {
     analysisReceiptSchema,
     campaignLimitsSchema,
     campaignManifestSchema,
+    configurableCampaignLimitsSchema,
 } from "./qualificationCampaignPolicy";
 import { SOURCE_EMBEDDING_DIMENSIONS } from "./resourcePolicy";
 import { preparationStudyEnvelopeValidator } from "./sourcePreparationStudyPolicy";
@@ -267,7 +268,7 @@ export default defineSchema({
             v.literal("review"),
             v.literal("finished"),
         ),
-        allocation: zodToConvex(campaignLimitsSchema),
+        allocation: zodToConvex(configurableCampaignLimitsSchema),
         analysisAllocated: v.optional(
             v.object({ requests: v.number(), costMicros: v.number() }),
         ),
@@ -307,7 +308,7 @@ export default defineSchema({
                         v.literal("known_final_v1"),
                     ),
                 ),
-                maximumRequests: v.number(),
+                maximumRequests: v.optional(v.number()),
                 maximumCostUsd: v.number(),
                 authorizedAt: v.number(),
                 sourcesLot: v.optional(v.array(v.id("researchRuns"))),

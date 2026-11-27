@@ -1776,7 +1776,10 @@ export const recordAttempt = internalMutation({
                         technical: 64,
                     }[kind];
                     const lotLimit = {
-                        model: Math.min(40, qualification.maximumRequests),
+                        model: Math.min(
+                            40,
+                            qualification.maximumRequests ?? 40,
+                        ),
                         search: qualification.maximumSearchAttempts ?? 4,
                         acquisition: qualification.maximumAcquisitions ?? 12,
                         technical: 128,
@@ -1800,7 +1803,8 @@ export const recordAttempt = internalMutation({
                                       (call.status === "started" &&
                                           (call.leaseExpiresAt ?? 0) <= now),
                               )
-                            : calls.length >= qualification.maximumRequests) ||
+                            : calls.length >=
+                              (qualification.maximumRequests ?? Infinity)) ||
                         reserved + qualificationReservationUsd >
                             qualification.maximumCostUsd ||
                         calls.some(

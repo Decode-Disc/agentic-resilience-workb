@@ -30,11 +30,15 @@ export function qualificationModelReservationUsd(capacity: {
 }
 
 export function qualificationModelScopes(
-    lot: Pick<CampaignLimits, "model" | "costUsd">,
-    grant: Pick<CampaignLimits, "model" | "costUsd">,
+    lot: { model?: number; costUsd: number },
+    grant: { model?: number; costUsd: number },
 ) {
+    const model =
+        lot.model === undefined && grant.model === undefined
+            ? undefined
+            : Math.min(lot.model ?? Infinity, grant.model ?? Infinity);
     return {
-        model: Math.min(lot.model, grant.model),
+        model,
         costUsd: Math.min(lot.costUsd, grant.costUsd),
     };
 }

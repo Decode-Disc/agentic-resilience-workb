@@ -1247,8 +1247,9 @@ export async function runCampaignScenarios(
                         manifest.expiresAt > Date.now() &&
                         (manifest.mode !== "live" ||
                             (accounting.usage &&
-                                accounting.usage.model <
-                                    manifest.perLot.model &&
+                                (manifest.perLot.model === undefined ||
+                                    accounting.usage.model <
+                                        manifest.perLot.model) &&
                                 accounting.usage.costUsd <
                                     manifest.perLot.costUsd)) &&
                         !publication.held &&

@@ -32,7 +32,6 @@ import {
     analysisProviderSchema,
     analysisReceiptSchema,
     analysisUsageChargeMicros,
-    type CampaignLimits,
     type CampaignManifest,
     campaignConfiguration,
     campaignConfigurations,
@@ -151,7 +150,7 @@ export async function checkPrerequisiteReservations(
     manifest: ConfigurableCampaign,
     profile: CampaignProfile,
     configurations: CampaignModel[],
-    grant: Pick<CampaignLimits, "model" | "costUsd">,
+    grant: { model?: number; costUsd: number },
 ) {
     const global = qualificationModelScopes(manifest.perLot, grant);
     const capacities = new Map<string, number | undefined>();
@@ -225,9 +224,16 @@ export async function checkPrerequisiteReservations(
             maxTokens: output ?? 1,
         });
         const caseLimits = scenario.limits;
+        const effectiveModelLimit =
+            global.model === undefined && caseLimits?.model === undefined
+                ? undefined
+                : Math.min(
+                      global.model ?? Infinity,
+                      caseLimits?.model ?? Infinity,
+                  );
         const violation = exceededQualificationAllowance(
             {
-                model: Math.min(global.model, caseLimits?.model ?? Infinity),
+                model: effectiveModelLimit,
                 costUsd: Math.min(
                     global.costUsd,
                     caseLimits?.costUsd ?? Infinity,
@@ -248,9 +254,11 @@ export async function checkPrerequisiteReservations(
                     scenario: scenario.id,
                     role,
                     scope:
-                        (caseLimits?.[resource] ?? Infinity) < global[resource]
+                        (caseLimits?.[resource] ?? Infinity) <
+                        (global[resource] ?? Infinity)
                             ? "case"
-                            : grant[resource] < manifest.perLot[resource]
+                            : (grant[resource] ?? Infinity) <
+                                (manifest.perLot[resource] ?? Infinity)
                               ? "grant"
                               : "lot",
                     resource,
@@ -461,8 +469,13 @@ export const admit = internalMutation({
             throw new Error("Correction outside campaign scope");
         const allocated = { ...campaign.allocated };
         for (const key of keys) {
-            allocated[key] += m.perLot[key];
-            if (allocated[key] > m.total[key] + (key === "costUsd" ? 1e-10 : 0))
+            const lotLimit = m.perLot[key];
+            const totalLimit = m.total[key];
+            if (lotLimit !== undefined) allocated[key] += lotLimit;
+            if (
+                totalLimit !== undefined &&
+                allocated[key] > totalLimit + (key === "costUsd" ? 1e-10 : 0)
+            )
                 throw new Error("Campaign budget exhausted");
         }
         if (campaign.lots >= m.maximumLots)
@@ -813,12 +826,16 @@ export const reconcile = internalMutation({
     handler: async (ctx, args) => {
         const lot = await ctx.db.get(args.lotId);
         if (!lot) throw new Error("Campaign lot unavailable");
+        const lotUsageSnapshot = {
+            ...lot.allocation,
+            model: lot.allocation.model ?? 0,
+        };
         const campaign = await owned(ctx, lot.campaignId);
         if (lot.status !== "running" && lot.status !== "closing")
-            return { reconciled: true, usage: lot.allocation };
+            return { reconciled: true, usage: lotUsageSnapshot };
         const context = lot.contextId ? await ctx.db.get(lot.contextId) : null;
         if (!args.cleanupCompleted || (context && context.status !== "closed"))
-            return { reconciled: false, usage: lot.allocation };
+            return { reconciled: false, usage: lotUsageSnapshot };
         const usage = emptyCampaignLimits();
         if (
             campaign.manifest.version !== 1 &&
@@ -831,7 +848,7 @@ export const reconcile = internalMutation({
                 retained.unknown ||
                 retained.overruns
             )
-                return { reconciled: false, usage: lot.allocation };
+                return { reconciled: false, usage: lotUsageSnapshot };
             Object.assign(usage, retained.usage);
         } else {
             const runIds =
@@ -853,7 +870,7 @@ export const reconcile = internalMutation({
                         (call.reportedCost ?? 0) >
                             (call.qualificationReservationUsd ?? 0)
                     )
-                        return { reconciled: false, usage: lot.allocation };
+                        return { reconciled: false, usage: lotUsageSnapshot };
                     const category = qualificationCategory(call);
                     if (category !== "technical") usage[category]++;
                     usage.costUsd += Math.max(
@@ -865,9 +882,10 @@ export const reconcile = internalMutation({
         }
         const allocated = { ...campaign.allocated };
         for (const key of keys) {
-            if (usage[key] > lot.allocation[key] + 1e-10)
+            const reserved = lot.allocation[key];
+            if (reserved !== undefined && usage[key] > reserved + 1e-10)
                 throw new Error("Campaign usage exceeds reservation");
-            allocated[key] += usage[key] - lot.allocation[key];
+            allocated[key] += usage[key] - (reserved ?? 0);
         }
         await ctx.db.patch(lot._id, { status: "review", allocation: usage });
         await ctx.db.patch(campaign._id, { allocated });

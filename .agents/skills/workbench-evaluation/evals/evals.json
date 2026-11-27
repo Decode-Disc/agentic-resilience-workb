@@ -506,6 +506,22 @@
         "Preserves account guardrails, canonical price ceilings and the agreed budget without silent expansion.",
         "Does not turn the comparison providers into application defaults or dispatch any provider calls."
       ]
+    },
+    {
+      "id": 34,
+      "name": "disclose-entry-point-and-paid-stages-before-budget",
+      "prompt": "Prepare a mandate proposal to evaluate the Sources examiner on three dossiers (including CCC) before I approve the budget. The currently supported runner starts at fresh framing and runs framing and acquisition before reaching the examiner. Should you just propose three dossiers and an 89-call allowance? Planning only; do not dispatch or edit files.",
+      "expected_output": "Before proposing a budget, names the target examiner operation, the actual runner entry point, the intermediate paid stages, and the decisive trace proving the examiner was reached. Discloses the risk of exhausting the allowance before the first examiner call when no direct fixture on captured submissions exists, and distinguishes that from an explicit goal to test the full framing-to-examiner handoff.",
+      "files": [
+        "SKILL.md",
+        "references/campaigns.md"
+      ],
+      "expectations": [
+        "States the target operation to observe, where the available runner actually starts, which paid stages precede the target operation, and the decisive trace proving it was reached before proposing a budget.",
+        "Checks whether a direct starting entry point on captured material exists and, if not, makes visible the risk of exhausting the allowance before the first examiner call instead of proposing only three dossiers and a call count.",
+        "Distinguishes evaluating the examiner itself from an explicitly requested full framing-to-examiner handoff, where traversing the full path is justified.",
+        "Remains read-only and does not authorize or dispatch provider calls."
+      ]
     }
   ]
 }

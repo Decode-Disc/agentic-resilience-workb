@@ -1098,18 +1098,23 @@ export const authorizeWorkbenchQualification = internalMutation({
                 : null;
         if (configurable && !scenarioScope)
             throw new Error("Declared campaign scenarios required");
-        const requestCeiling =
-            configurable?.perLot.model ??
-            (args.sourcesLot ? 40 : BROWSER_QUALIFICATION_MAX_REQUESTS);
+        const requestCeiling = configurable
+            ? configurable.perLot.model
+            : args.sourcesLot
+              ? 40
+              : BROWSER_QUALIFICATION_MAX_REQUESTS;
         const costCeiling =
             configurable?.perLot.costUsd ??
             (args.sourcesLot ? 2 : BROWSER_QUALIFICATION_MAX_COST_USD);
         const maximumRequests = args.maximumRequests ?? requestCeiling;
         const maximumCostUsd = args.maximumCostUsd ?? costCeiling;
         if (
-            !Number.isSafeInteger(maximumRequests) ||
-            maximumRequests < 1 ||
-            maximumRequests > requestCeiling ||
+            (maximumRequests !== undefined &&
+                (!Number.isSafeInteger(maximumRequests) ||
+                    maximumRequests < 1 ||
+                    (requestCeiling !== undefined &&
+                        maximumRequests > requestCeiling))) ||
+            (!configurable && maximumRequests === undefined) ||
             !Number.isFinite(maximumCostUsd) ||
             maximumCostUsd <= 0 ||
             maximumCostUsd > costCeiling
@@ -1288,7 +1293,9 @@ export const authorizeWorkbenchQualification = internalMutation({
                 lot.contextId !== context._id ||
                 m.mode !== "live" ||
                 (m.capability === "sources") !== !!sourcesLot ||
-                maximumRequests > lot.allocation.model ||
+                (lot.allocation.model !== undefined &&
+                    (maximumRequests === undefined ||
+                        maximumRequests > lot.allocation.model)) ||
                 maximumCostUsd > lot.allocation.costUsd
             )
                 throw new Error("Campaign grant exceeds its reservation");
@@ -2345,7 +2352,7 @@ export const qualificationContinuation = internalQuery({
                 const [[, lotLimits], [, caseLimits]] = scopes;
                 if (
                     local &&
-                    (accounting.usage.model >= lotLimits.model ||
+                    (accounting.usage.model >= (lotLimits.model ?? Infinity) ||
                         local.usage.model >= (caseLimits.model ?? Infinity))
                 ) {
                     terminalModelBudgetStop = !(await sourcesCanStillSettle(

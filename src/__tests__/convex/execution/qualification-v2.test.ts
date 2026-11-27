@@ -5,9 +5,15 @@ import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { retainInvocationPayload } from "@convex/execution/journal";
 import {
     campaignManifestSchema,
+    campaignPreparationSchema,
     emptyCampaignLimits,
     resolveFramingReplay,
 } from "@convex/qualificationCampaignPolicy";
+import {
+    assertQualificationAllowance,
+    readQualificationUsage,
+    updateQualificationUsage,
+} from "@convex/qualificationUsage";
 import { compactFramingReplayDocuments } from "@evaluations/workbench-browser/protocol";
 import { makeFunctionReference } from "convex/server";
 import { afterEach, assert, expect, test, vi } from "vitest";
@@ -202,7 +208,7 @@ const grant = makeFunctionReference<
     {
         runId: Id<"researchRuns">;
         fixtureKey: string;
-        maximumRequests: number;
+        maximumRequests?: number;
         maximumCostUsd: number;
         reasoningSelection?: { workbench: "low"; sources: "high" };
         sourcesLot: {
@@ -1565,7 +1571,9 @@ test("a paused Sources scenario terminates on the exhausted case or lot ledger o
                 total &&
                 local &&
                 lot &&
-                context?.paidQualification,
+                lot.allocation.model !== undefined &&
+                context?.paidQualification &&
+                context.paidQualification.maximumRequests !== undefined,
         );
         const limit = Math.min(
             lot.allocation.model,
@@ -2059,4 +2067,245 @@ test("a tighter run grant refuses the lot's native prerequisite before opening p
             available: 0.001,
         }),
     });
+});
+
+test("cost-bounded configurable qualifications allow omitting the numeric model cap while enforcing explicit caps and counting every call", async () => {
+    const base = configurableCampaign();
+    base.configurations = base.configurations.slice(0, 1);
+    const basePerLot = {
+        search: base.perLot.search,
+        acquisition: base.perLot.acquisition,
+        costUsd: 2,
+    };
+    const baseTotal = {
+        search: base.total.search,
+        acquisition: base.total.acquisition,
+        costUsd: 4,
+    };
+    const scenariosWithoutCap = base.scenarios.map((scenario) => ({
+        ...scenario,
+    }));
+
+    const uncappedManifest = campaignPreparationSchema.parse({
+        ...base,
+        batteryHash: "a".repeat(64),
+        key: "uncapped-cost-bounded",
+        scenarios: scenariosWithoutCap,
+        perLot: basePerLot,
+        total: baseTotal,
+    });
+    expect(uncappedManifest.perLot.model).toBeUndefined();
+    expect(uncappedManifest.total.model).toBeUndefined();
+
+    expect(() =>
+        campaignManifestSchema.parse({
+            ...base,
+            batteryHash: "a".repeat(64),
+            key: "mismatched-lot-only",
+            scenarios: scenariosWithoutCap,
+            perLot: { ...basePerLot, model: 5 },
+            total: baseTotal,
+        }),
+    ).toThrow();
+    expect(() =>
+        campaignManifestSchema.parse({
+            ...base,
+            batteryHash: "a".repeat(64),
+            key: "mismatched-total-only",
+            scenarios: scenariosWithoutCap,
+            perLot: basePerLot,
+            total: { ...baseTotal, model: 5 },
+        }),
+    ).toThrow();
+
+    const setupCampaign = async (
+        key: string,
+        modelCap: number | undefined,
+        costUsd: number,
+    ) => {
+        const f = await seedWorkbench(true);
+        const profile = base.configurations[0];
+        assert(profile);
+        await installModel(f.t, { model: profile.models.workbench.model });
+        await installModel(
+            f.t,
+            { model: profile.models.sources.model },
+            "sources",
+        );
+        const prepared = campaignPreparationSchema.parse({
+            ...base,
+            batteryHash: "a".repeat(64),
+            key,
+            scenarios: scenariosWithoutCap,
+            perLot: {
+                ...basePerLot,
+                costUsd,
+                ...(modelCap !== undefined ? { model: modelCap } : {}),
+            },
+            total: {
+                ...baseTotal,
+                costUsd: costUsd * 2,
+                ...(modelCap !== undefined ? { model: modelCap * 2 } : {}),
+            },
+        });
+        assert(prepared.version !== 1);
+        const campaignId = await f.t.mutation(
+            internal.qualificationCampaigns.authorize,
+            { manifest: prepared },
+        );
+        const lotId = await f.t.mutation(admit, {
+            campaignId,
+            key: "lot-1",
+            candidateHash: "b".repeat(64),
+            changedPaths: [],
+        });
+        const original = await f.t.run((ctx) => ctx.db.get(f.runId));
+        assert(original?.companySnapshot && original.browserTestContextId);
+        const contextId = original.browserTestContextId;
+        await f.t.mutation(internal.qualificationCampaigns.bind, {
+            lotId,
+            contextId,
+        });
+        const bindings = await f.t.run(async (ctx) => {
+            const entries: {
+                runId: Id<"researchRuns">;
+                fixtureKey: string;
+                scenarioId: string;
+            }[] = [];
+            const {
+                _id: _omitId,
+                _creationTime: _omitTime,
+                ...rest
+            } = original;
+            const companySnapshot = original.companySnapshot;
+            assert(companySnapshot);
+            for (const [index, scenario] of prepared.scenarios.entries()) {
+                const fixtureKey = `fixture-${key}-${index}`;
+                const values = {
+                    ...rest,
+                    reservationKey: `browser:${fixtureKey}`,
+                    coveragePreset: scenario.coveragePreset,
+                    companySnapshot: {
+                        ...companySnapshot,
+                        cik: scenario.company.cik,
+                        legalName: scenario.company.name,
+                        ticker: scenario.company.ticker,
+                        websiteUrl: scenario.company.websiteUrl,
+                    },
+                };
+                let runId: Id<"researchRuns">;
+                if (index === 0) {
+                    await ctx.db.patch(f.runId, values);
+                    runId = f.runId;
+                } else {
+                    runId = await ctx.db.insert("researchRuns", values);
+                }
+                entries.push({ runId, fixtureKey, scenarioId: scenario.id });
+            }
+            return entries;
+        });
+        const first = bindings[0];
+        assert(first);
+        await f.t.mutation(grant, {
+            runId: first.runId,
+            fixtureKey: first.fixtureKey,
+            ...(modelCap !== undefined ? { maximumRequests: modelCap } : {}),
+            maximumCostUsd: costUsd,
+            sourcesLot: bindings,
+        });
+        return { f, contextId, first };
+    };
+
+    const recordModelCall = async (
+        t: Awaited<ReturnType<typeof seedWorkbench>>["t"],
+        contextId: Id<"browserTestContexts">,
+        runId: Id<"researchRuns">,
+        index: number,
+        costUsd: number,
+    ) => {
+        await t.run(async (ctx) => {
+            await assertQualificationAllowance(
+                ctx,
+                contextId,
+                runId,
+                { service: "model", operation: "workbench_turn" },
+                costUsd,
+            );
+            const id = await ctx.db.insert("providerCalls", {
+                runId,
+                qualificationContextId: contextId,
+                service: "model",
+                operation: "workbench_turn",
+                operationKey: `call-${contextId}-${index}`,
+                attempt: 1,
+                status: "succeeded",
+                dispatchOutcome: "response_received",
+                qualificationReservationUsd: costUsd,
+                reportedCost: costUsd,
+                reportedCostFinal: true,
+                costAccountingPolicy: "known_final_v1",
+                createdAt: Date.now(),
+                completedAt: Date.now(),
+            });
+            const call = await ctx.db.get(id);
+            assert(call);
+            await updateQualificationUsage(ctx, null, call);
+        });
+    };
+
+    // Uncapped by call count: continues past 3 calls within costUsd, counts all calls, stops on costUsd.
+    const uncapped = await setupCampaign("uncapped-runtime", undefined, 0.25);
+    for (let i = 0; i < 4; i++) {
+        await recordModelCall(
+            uncapped.f.t,
+            uncapped.contextId,
+            uncapped.first.runId,
+            i,
+            0.05,
+        );
+    }
+    const uncappedUsage = await uncapped.f.t.run((ctx) =>
+        readQualificationUsage(ctx, uncapped.contextId),
+    );
+    expect(uncappedUsage?.usage.model).toBe(4);
+    expect(uncappedUsage?.usage.costUsd).toBeCloseTo(0.2, 6);
+    await expect(
+        recordModelCall(
+            uncapped.f.t,
+            uncapped.contextId,
+            uncapped.first.runId,
+            4,
+            0.06,
+        ),
+    ).rejects.toThrow("qualification_budget_exhausted");
+
+    // Explicit numeric cap: strictly refuses the first excess call even with ample costUsd headroom.
+    const capped = await setupCampaign("capped-runtime", 2, 2);
+    await recordModelCall(
+        capped.f.t,
+        capped.contextId,
+        capped.first.runId,
+        0,
+        0.05,
+    );
+    await recordModelCall(
+        capped.f.t,
+        capped.contextId,
+        capped.first.runId,
+        1,
+        0.05,
+    );
+    const cappedUsage = await capped.f.t.run((ctx) =>
+        readQualificationUsage(ctx, capped.contextId),
+    );
+    expect(cappedUsage?.usage.model).toBe(2);
+    await expect(
+        recordModelCall(
+            capped.f.t,
+            capped.contextId,
+            capped.first.runId,
+            2,
+            0.05,
+        ),
+    ).rejects.toThrow("qualification_budget_exhausted");
 });

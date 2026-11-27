@@ -136,8 +136,9 @@ export function createQualificationRelay(
     const maximumRequests = protocol.maximumRequests;
     const maximumCostUsd = protocol.maximumCostUsd;
     if (
-        !Number.isSafeInteger(maximumRequests) ||
-        maximumRequests < 1 ||
+        (maximumRequests !== undefined &&
+            (!Number.isSafeInteger(maximumRequests) || maximumRequests < 1)) ||
+        (maximumRequests === undefined && protocol.manifest?.version === 1) ||
         !Number.isFinite(maximumCostUsd) ||
         maximumCostUsd <= 0
     )
@@ -474,7 +475,7 @@ export function createQualificationRelay(
                 (contextWindow * inputPrice) / 1e6 +
                 ((p.max_tokens ?? p.max_completion_tokens) * outputPrice) / 1e6;
             if (
-                calls >= maximumRequests ||
+                (maximumRequests !== undefined && calls >= maximumRequests) ||
                 budgetedUsd + reserve > maximumCostUsd
             ) {
                 event({
