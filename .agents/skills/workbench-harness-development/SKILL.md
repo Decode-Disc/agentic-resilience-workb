@@ -56,7 +56,7 @@ Choose the correction boundary:
 
 Use TDD through the real public boundary. Reproduce the observed failure, then test the shared invariant and its important negative case. Exercise the consuming module rather than a copied helper. If a supposed shared correction requires patches in each agent, inspect the ownership leak before proceeding.
 
-Keep raw observations and meaningful failure states inspectable. Do not turn unknown effects into retries, rewrite failed evidence or silently replace an invalid continuation with a different read.
+Keep raw observations and meaningful failure states inspectable. Do not turn unknown effects into retries, rewrite failed evidence or silently replace an invalid continuation with a different read. Before dispatching a new provider call during recovery, check whether a retained response is already recorded for that invocation, and keep provider completion separate from cost settlement so a recoverable response can be adopted while settlement remains pending without dispatching a duplicate paid call. When changing how calls or reservations are classified or counted, verify already-stored usage projections as well: start a regression from a pre-change stored state and deliver a late settlement so missed reservations or double deductions fail immediately.
 
 A semantic failure does not by itself justify another phrase filter. Establish whether authoritative facts were missing, execution violated its contract, or the model misinterpreted valid input. Preserve the approved closed vocabulary; broader wording requires semantic assessment rather than an expanding list of model-specific exceptions. Locate the current hybrid response-control contract in [TECH](../../../context/TECH.md) before changing its behavior.
 
@@ -76,7 +76,7 @@ Exercise cancellation, uncertain dispatch and settlement-acknowledgement loss se
 
 Use the existing [registry-wide conformance suite](../../../src/__tests__/convex/execution/operation-conformance.test.ts) and [execution ownership checker](../../../scripts/check-execution-boundaries.ts). Ensure a new binding is discovered and its fixture supplies its real scope; do not copy the same checks into a per-agent suite or bypass them with an allowlist.
 
-Select checks for the changed contract: capabilities, authorization and generation fences; idempotency and retained effects; refusal recovery; history membership and progress; native continuation and published truth. Shared rules need representative coverage across affected definitions; domain rules need their authorized domain boundary.
+Select checks for the changed contract: capabilities, authorization and generation fences; idempotency and retained effects; refusal recovery; history membership and progress; native continuation and published truth. For a recovery fix, exercise the actual worker wake-up after interruption rather than an isolated helper and assert the terminal state: one adoption and no duplicate provider call for an already-available result. Shared rules need representative coverage across affected definitions; domain rules need their authorized domain boundary.
 
 Start with focused regressions. After behavior stabilizes, run the affected conformance, ownership and type checks. Use the installed owner to regenerate changed model-input profiles or bindings.
 
