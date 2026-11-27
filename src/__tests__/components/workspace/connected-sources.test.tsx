@@ -605,7 +605,9 @@ test.each([
     if (value.trim()) expect(document.body.textContent).not.toContain(value);
     expect(
         screen.getAllByText(
-            /Some contribution wording is unavailable\. Inspect the cited passage\./,
+            field === "diagnostic"
+                ? /Explanation unavailable\. Inspect the cited passage\./
+                : /Some contribution wording is unavailable\. Inspect the cited passage\./,
         ).length,
     ).toBeGreaterThan(0);
     expect(
@@ -613,6 +615,38 @@ test.each([
     ).toBeGreaterThan(0);
     expect(screen.getAllByText(/Inspection only/).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Conflict").length).toBeGreaterThan(0);
+});
+
+test.each([
+    ":g5566066:",
+    ":x42:",
+    "",
+    "   ",
+    "S&P describes this as a forecast.",
+])("shows the recorded finding or an actionable explanation for %j", (diagnostic) => {
+    const fallback = "Explanation unavailable. Inspect the cited passage.";
+    convexReactHarness.query(api.sourcesWorkspace.getSource).returns({
+        ...reading,
+        contributions: reading.contributions.map((c) => ({
+            ...c,
+            diagnostic,
+            conclusion: "supported",
+            permittedUse: "attributed_argument_only",
+        })),
+    });
+    renderSources({ search: { sourcesView: "reader", source: sourceId } });
+    fireEvent.click(
+        screen.getAllByRole("button", {
+            name: /^Show note for citation 1/,
+        })[0] as HTMLElement,
+    );
+    const note = document.body.textContent ?? "";
+    expect(note).toContain(
+        diagnostic.startsWith("S&P") ? diagnostic : fallback,
+    );
+    expect(note).not.toMatch(/:g5566066:|:x42:/);
+    expect(note).toMatch(/Attributed argument only/i);
+    expect(note).toContain("The platform connects insurers.");
 });
 
 test("the reader preserves long ordinary model prose and exact quoted technical text", () => {

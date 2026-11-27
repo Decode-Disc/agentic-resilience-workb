@@ -986,13 +986,17 @@ export function sourcesReaderDocument(
     const contributions: ReaderContribution[] = reading.contributions.map(
         (contribution) => {
             const statement = documentaryCommentary(contribution.statement);
-            const diagnostic = documentaryCommentary(contribution.diagnostic);
+            const commentary = documentaryCommentary(contribution.diagnostic);
+            const diagnostic =
+                contribution.conclusion &&
+                (!commentary || /^:[a-z0-9]*[0-9][a-z0-9]*:$/i.test(commentary))
+                    ? "Explanation unavailable. Inspect the cited passage."
+                    : commentary;
             const period = documentaryCommentary(contribution.period);
             const attribution = documentaryCommentary(contribution.attribution);
             const unavailableWording =
                 !statement ||
                 [
-                    [contribution.diagnostic, diagnostic],
                     [contribution.period, period],
                     [contribution.attribution, attribution],
                 ].some(([raw, displayed]) => raw?.trim() && !displayed);

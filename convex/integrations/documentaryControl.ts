@@ -69,7 +69,12 @@ export async function examineDocumentaryContributions(
                                 "not_established",
                             ]),
                             permittedUse,
-                            diagnostic: z.string().max(2000),
+                            diagnostic: z
+                                .string()
+                                .max(2000)
+                                .describe(
+                                    "Explain which detail of the cited passage justifies the permitted use or its limitation.",
+                                ),
                             needs: z.strictObject(
                                 Object.fromEntries(
                                     contribution.needIds.map((id) => [
