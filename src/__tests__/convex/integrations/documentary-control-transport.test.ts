@@ -666,3 +666,49 @@ test("retains valid split escapes, spaces inside JSON strings, and separated whi
         output: { findings: { [contribution.id]: { diagnostic } } },
     });
 });
+
+test("the examiner gets the documentary method and can retain a restriction without an explanation", async () => {
+    let system: unknown;
+    const result = await examineDocumentaryContributions(input, currentRoute, {
+        authority: modelAttemptAuthority(),
+        apiKey: "offline-only",
+        fetch: async (_url, init) => {
+            const wire = JSON.parse(String(init?.body));
+            system = wire.messages.find(
+                (message: { role: string }) => message.role === "system",
+            );
+            return providerReply({
+                findings: {
+                    [contribution.id]: {
+                        conclusion: "supported",
+                        permittedUse: "documentary",
+                        needs: { "common-context": "context_only" },
+                        diagnostic: "The passage identifies the software.",
+                    },
+                },
+                objections: [
+                    {
+                        targets: [
+                            {
+                                contributionId: contribution.id,
+                                needId: "common-context",
+                            },
+                        ],
+                        maximumUse: "context_only",
+                        diagnostic: null,
+                    },
+                ],
+            });
+        },
+    });
+    expect(result).toMatchObject({
+        status: "succeeded",
+        output: {
+            objections: [{ maximumUse: "context_only", diagnostic: null }],
+        },
+    });
+    expect(JSON.stringify(system)).toContain(
+        "A partial reading cannot establish absence",
+    );
+    expect(JSON.stringify(system)).toContain("A title alone");
+});

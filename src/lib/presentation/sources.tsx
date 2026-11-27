@@ -1,5 +1,6 @@
 import type { api } from "@convex/_generated/api";
 import { agentName } from "@convex/domain/agentIdentities";
+import { documentaryExplanation } from "@convex/domain/sourcesContracts";
 import type { FunctionReturnType } from "convex/server";
 import type { ConversationWorkItem } from "@/components/chat/conversation-activity";
 import { Badge } from "@/components/ui/badge";
@@ -912,7 +913,9 @@ const conclusionBadges = {
 };
 
 /** Model-authored commentary is not a source quotation: withhold internal diagnostics without rewriting retained evidence. */
-function documentaryCommentary(text: string | undefined): string | undefined {
+function documentaryCommentary(
+    text: string | null | undefined,
+): string | undefined {
     const normalized = text?.replace(/\s+/g, " ").trim();
     if (!normalized) return undefined;
     const internalDetails =
@@ -986,10 +989,11 @@ export function sourcesReaderDocument(
     const contributions: ReaderContribution[] = reading.contributions.map(
         (contribution) => {
             const statement = documentaryCommentary(contribution.statement);
-            const commentary = documentaryCommentary(contribution.diagnostic);
+            const commentary = documentaryCommentary(
+                documentaryExplanation(contribution.diagnostic),
+            );
             const diagnostic =
-                contribution.conclusion &&
-                (!commentary || /^:[a-z0-9]*[0-9][a-z0-9]*:$/i.test(commentary))
+                contribution.conclusion && !commentary
                     ? "Explanation unavailable. Inspect the cited passage."
                     : commentary;
             const period = documentaryCommentary(contribution.period);
@@ -1016,7 +1020,7 @@ export function sourcesReaderDocument(
                 objection: (typeof contribution.objections)[number],
             ) => {
                 const preview = documentaryCommentary(
-                    objection.diagnosticPreview,
+                    documentaryExplanation(objection.diagnosticPreview),
                 );
                 if (!preview) return "Objection details unavailable.";
                 return objection.diagnosticComplete ? preview : `${preview}…`;

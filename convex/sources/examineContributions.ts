@@ -6,6 +6,7 @@ import type { ActionCtx } from "@convex/_generated/server";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import { documentarySubmissionResult } from "@convex/domain/sourcesContracts";
 import { documentaryQuotationMatches } from "@convex/domain/sourceUsage";
+import { sourcesDocumentaryMethod } from "@convex/execution/agentSkillContracts";
 import type { operationOutcomeValidator } from "@convex/execution/executionProtocol";
 import { operationSuccess } from "@convex/execution/operationResults";
 import {
@@ -142,7 +143,23 @@ export async function examineContributions(
         }
     }
     const examination = { contributions, evidence, needs: needContext };
-    const examinationJson = JSON.stringify(examination);
+    // A successor must use the same method as the request it is recovering.
+    const retained: unknown =
+        originalExaminationJson === undefined
+            ? undefined
+            : JSON.parse(originalExaminationJson);
+    const method =
+        retained === undefined
+            ? sourcesDocumentaryMethod.packageId
+            : retained !== null &&
+                typeof retained === "object" &&
+                "method" in retained &&
+                typeof retained.method === "string"
+              ? retained.method
+              : null;
+    const examinationJson = JSON.stringify(
+        method ? { ...examination, method } : examination,
+    );
     if (
         originalExaminationJson !== undefined &&
         originalExaminationJson !== examinationJson
@@ -177,6 +194,7 @@ export async function examineContributions(
                       examination,
                       route,
                       dependencies,
+                      method,
                   ),
           });
     if ("reasonCode" in outcome && outcome.pendingProviderCallId)

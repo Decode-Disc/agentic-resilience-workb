@@ -1,6 +1,7 @@
 import { api, internal } from "@convex/_generated/api";
 import type { ActionCtx } from "@convex/_generated/server";
 import { documentaryReference } from "@convex/domain/savedMaterialOperations";
+import { readPreparedNeed } from "@convex/domain/sources";
 import type {
     DocumentaryContribution,
     DocumentaryControlV2,
@@ -2662,7 +2663,17 @@ test("a corrected examination of the same launch passage preserves the launch bu
     expect(attempt).toBe(2);
 });
 
-test("a scoped objection leaves useful material in the handoff and outcomes research unfinished", async () => {
+test.each([
+    {
+        reasons: [
+            "The quotation is a vendor expectation.",
+            "The quotation gives no measured customer outcome.",
+        ],
+    },
+    { reasons: [null] },
+])("scoped objections preserve independent reasons or explicit absence through handoff ($reasons)", async ({
+    reasons,
+}) => {
     const quotation =
         "The issuer expects its new workflow software to speed up claim review.";
     const f = await documentaryControlFixture("attributed_argument", quotation);
@@ -2736,19 +2747,16 @@ test("a scoped objection leaves useful material in the handoff and outcomes rese
                                     },
                                 },
                             },
-                            objections: [
-                                {
-                                    targets: [
-                                        {
-                                            contributionId: id,
-                                            needId: outcomes,
-                                        },
-                                    ],
-                                    maximumUse: "blocked",
-                                    diagnostic:
-                                        "No independent customer evidence.",
-                                },
-                            ],
+                            objections: reasons.map((diagnostic) => ({
+                                targets: [
+                                    {
+                                        contributionId: id,
+                                        needId: outcomes,
+                                    },
+                                ],
+                                maximumUse: "blocked",
+                                diagnostic,
+                            })),
                         }),
                     },
                     finish_reason: "stop",
@@ -2773,7 +2781,7 @@ test("a scoped objection leaves useful material in the handoff and outcomes rese
     expect(value).toMatchObject({
         controlVersion: 2,
         reference: expect.any(String),
-        objectionCount: 1,
+        objectionCount: reasons.length,
         needOrder: ["common-context", outcomes],
         effectiveContributions: [
             {
@@ -2806,9 +2814,32 @@ test("a scoped objection leaves useful material in the handoff and outcomes rese
     expect(JSON.parse(journal)).toMatchObject({
         event: "contributions_qualified",
         taskId: value.taskId,
-        control: retained.control,
+        control: {
+            ...retained.control,
+            objections: reasons.map((diagnostic) =>
+                expect.objectContaining({ diagnostic }),
+            ),
+        },
     });
     expect(value).not.toHaveProperty("control");
+    const workspaceReading = await f.t
+        .withIdentity({ subject: f.userId })
+        .query(api.sourcesWorkspace.getSource, {
+            runId: f.runId,
+            sourceId: f.sourceId,
+        });
+    expect(workspaceReading?.contributions).toEqual([
+        expect.objectContaining({
+            diagnostic: "Faithful to the publisher description.",
+            objections: reasons.map((diagnosticPreview) =>
+                expect.objectContaining({ diagnosticPreview }),
+            ),
+            needs: {
+                "common-context": "attributed_argument_only",
+                [outcomes]: "blocked",
+            },
+        }),
+    ]);
     await f.t.run((ctx) => ctx.db.patch(f.missionId, { definitionVersion: 9 }));
     const readingRequestId = await f.t.mutation(
         internal.execution.operations.enqueue,
@@ -2839,15 +2870,12 @@ test("a scoped objection leaves useful material in the handoff and outcomes rese
             needOrder: ["common-context", outcomes],
             contributions: [
                 {
-                    objections: [
-                        {
-                            needIndexes: [1],
-                            maximumUse: "blocked",
-                            diagnosticPreview:
-                                "No independent customer evidence.",
-                            diagnosticComplete: true,
-                        },
-                    ],
+                    objections: reasons.map((diagnosticPreview) => ({
+                        needIndexes: [1],
+                        maximumUse: "blocked",
+                        diagnosticPreview,
+                        diagnosticComplete: true,
+                    })),
                 },
             ],
         },
@@ -2883,6 +2911,46 @@ test("a scoped objection leaves useful material in the handoff and outcomes rese
         preparationId: f.preparationId,
         missionId: f.missionId,
         expectedGeneration: 4,
+    });
+    const [common, restricted] = await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        assert(run);
+        return Promise.all([
+            readPreparedNeed(ctx, run, "common-context"),
+            readPreparedNeed(ctx, run, outcomes),
+        ]);
+    });
+    expect(common).toMatchObject({
+        kind: "available",
+        value: {
+            controlledContributions: [
+                {
+                    contributions: [
+                        {
+                            permittedUse: "attributed_argument_only",
+                            objections: [],
+                        },
+                    ],
+                },
+            ],
+        },
+    });
+    expect(restricted).toMatchObject({
+        kind: "available",
+        value: {
+            controlledContributions: [
+                {
+                    contributions: [
+                        {
+                            permittedUse: "blocked",
+                            objections: reasons.map((diagnosticPreview) =>
+                                expect.objectContaining({ diagnosticPreview }),
+                            ),
+                        },
+                    ],
+                },
+            ],
+        },
     });
     const saved = await f.t.run((ctx) => ctx.db.get(f.preparationId));
     expect(saved?.sourcesMission?.result).toMatchObject({

@@ -202,7 +202,7 @@ const readerValidator = v.object({
             /** What the control reported; it never widens the effective use. */
             reportedUse: v.optional(permittedUse),
             conclusion: v.optional(conclusion),
-            diagnostic: v.optional(v.string()),
+            diagnostic: v.optional(v.union(v.string(), v.null())),
             restricted: v.boolean(),
         }),
     ),

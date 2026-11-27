@@ -73,6 +73,12 @@ export const documentaryContributionValidator = v.object({
     ),
     evidence: v.array(documentaryQuoteValidator),
 });
+/** Converts recorded blank or legacy label-only diagnostics to explicit explanation absence. */
+export function documentaryExplanation(diagnostic: string | null | undefined) {
+    const text = diagnostic?.trim();
+    return text && !/^:[a-z0-9]*[0-9][a-z0-9]*:$/i.test(text) ? text : null;
+}
+
 export const documentaryFindingValidator = v.object({
     contributionId: v.string(),
     conclusion: v.union(
@@ -96,7 +102,7 @@ export const documentaryRestrictionValidator = v.union(
 const documentaryScopedFindingValidator = v.object({
     conclusion: documentaryFindingValidator.fields.conclusion,
     permittedUse: documentaryFindingValidator.fields.permittedUse,
-    diagnostic: documentaryFindingValidator.fields.diagnostic,
+    diagnostic: v.union(v.string(), v.null()),
     needs: v.record(
         v.string(),
         documentaryFindingValidator.fields.permittedUse,
@@ -113,7 +119,7 @@ export const documentaryControlV2Validator = v.object({
                 }),
             ),
             maximumUse: documentaryRestrictionValidator,
-            diagnostic: v.string(),
+            diagnostic: v.union(v.string(), v.null()),
         }),
     ),
 });
@@ -273,7 +279,7 @@ export const preparedMaterialInspectionValidator = v.object({
 export const documentaryObjectionPreviewValidator = v.object({
     needIds: v.array(v.union(v.string(), v.null())),
     maximumUse: documentaryRestrictionValidator,
-    diagnosticPreview: v.string(),
+    diagnosticPreview: v.union(v.string(), v.null()),
     diagnosticComplete: v.boolean(),
 });
 export const controlledSourcesProjectionValidator = v.object({
@@ -316,7 +322,7 @@ export const controlledSourcesProjectionValidator = v.object({
                 v.object({
                     contributionId: v.string(),
                     conclusion: documentaryFindingValidator.fields.conclusion,
-                    diagnostic: v.string(),
+                    diagnostic: v.union(v.string(), v.null()),
                     reportedUse:
                         documentaryFindingValidator.fields.permittedUse,
                 }),

@@ -50,6 +50,7 @@ import {
     type DocumentaryContribution,
     type DocumentaryContributionTally,
     type documentaryAssessmentAuthorValidator,
+    documentaryExplanation,
     type materializedQualificationInput,
     type preparedMaterialValidator,
     retainedDocumentaryControl,
@@ -1047,19 +1048,22 @@ export async function controlledSourcesContributions(
                                             : [],
                                 );
                                 if (!needIds.length) return [];
-                                const diagnosticPreview = Array.from(
+                                const reason = documentaryExplanation(
                                     objection.diagnostic,
-                                )
-                                    .slice(0, 96)
-                                    .join("");
+                                );
+                                const diagnosticPreview =
+                                    reason === null
+                                        ? null
+                                        : Array.from(reason)
+                                              .slice(0, 96)
+                                              .join("");
                                 return [
                                     {
                                         needIds,
                                         maximumUse: objection.maximumUse,
                                         diagnosticPreview,
                                         diagnosticComplete:
-                                            diagnosticPreview ===
-                                            objection.diagnostic,
+                                            diagnosticPreview === reason,
                                     },
                                 ];
                             }) ?? [];
@@ -1082,7 +1086,9 @@ export async function controlledSourcesContributions(
                                 ? {
                                       contributionId: contribution.id,
                                       conclusion: finding.conclusion,
-                                      diagnostic: finding.diagnostic,
+                                      diagnostic: documentaryExplanation(
+                                          finding.diagnostic,
+                                      ),
                                       reportedUse: finding.permittedUse,
                                   }
                                 : null,

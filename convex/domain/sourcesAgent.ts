@@ -5,6 +5,7 @@ import {
     type AgentDefinition,
     domainSnapshot,
 } from "@convex/execution/agentDefinition";
+import { sourcesDocumentaryMethod } from "@convex/execution/agentSkillContracts";
 import { executionError, executionFailureCode } from "@convex/execution/errors";
 import type { AgentOperationDefinition } from "@convex/execution/executionProtocol";
 import {
@@ -824,10 +825,7 @@ export const sourcesV5Definition: AgentDefinition & { id: "sources_v1" } = {
 export const sourcesV7Definition: AgentDefinition & { id: "sources_v1" } = {
     ...sourcesV5Definition,
     version: REFERENCED_SOURCES_VERSION,
-    skills: {
-        packageId: "research-methods-v2",
-        skillName: "source-preparation",
-    },
+    skills: sourcesDocumentaryMethod,
     operations: {
         ...Object.fromEntries(
             Object.entries(sourcesV5Definition.operations).filter(

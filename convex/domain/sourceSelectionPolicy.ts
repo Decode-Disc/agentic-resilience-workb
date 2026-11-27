@@ -2541,7 +2541,7 @@ export function documentaryControlIssue(
     const explained = new Map<string, Set<string>>();
     const groups = new Set<string>();
     for (const objection of control.objections) {
-        if (!objection.targets.length || !objection.diagnostic.trim())
+        if (!objection.targets.length || objection.diagnostic?.trim() === "")
             return "documentary_control_objection_invalid";
         const contributionsInGroup = new Set<string>();
         const targetsInGroup = new Set<string>();
@@ -2565,7 +2565,11 @@ export function documentaryControlIssue(
             }
         }
         for (const id of contributionsInGroup) {
-            const group = JSON.stringify([id, objection.maximumUse]);
+            const group = JSON.stringify([
+                id,
+                objection.maximumUse,
+                objection.diagnostic?.trim() ?? null,
+            ]);
             if (groups.has(group))
                 return "documentary_control_objection_invalid";
             groups.add(group);
