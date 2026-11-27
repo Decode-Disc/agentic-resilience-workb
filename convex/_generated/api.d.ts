@@ -20,6 +20,7 @@ import type * as companyCoverImage from "../companyCoverImage.js";
 import type * as companyResolution from "../companyResolution.js";
 import type * as domain_agentIdentities from "../domain/agentIdentities.js";
 import type * as domain_approvalCopy from "../domain/approvalCopy.js";
+import type * as domain_browserFixtureAccess from "../domain/browserFixtureAccess.js";
 import type * as domain_claimCanonicalization from "../domain/claimCanonicalization.js";
 import type * as domain_claimValidation from "../domain/claimValidation.js";
 import type * as domain_claims from "../domain/claims.js";
@@ -247,6 +248,7 @@ declare const fullApi: ApiFromModules<{
   companyResolution: typeof companyResolution;
   "domain/agentIdentities": typeof domain_agentIdentities;
   "domain/approvalCopy": typeof domain_approvalCopy;
+  "domain/browserFixtureAccess": typeof domain_browserFixtureAccess;
   "domain/claimCanonicalization": typeof domain_claimCanonicalization;
   "domain/claimValidation": typeof domain_claimValidation;
   "domain/claims": typeof domain_claims;

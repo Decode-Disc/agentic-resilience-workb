@@ -334,20 +334,20 @@ test("all current bindings install one autonomous recovery method and one render
     }
 });
 
-test("Phase 4 defaults activate native_tool versions while retaining historical definitions and documentary bindings", async () => {
+test("current documentary definitions preserve native completion and referenced material", async () => {
     const { getAgentDefinition } = await import(
         "@convex/execution/agentCatalog"
     );
     const { SUBMIT_COMPLETION_TOOL, agentToolSchemas } = await import(
         "@convex/execution/agentDefinition"
     );
-    // Latest defaults use native_tool completion; Workbench remains textCompletion v12.
+    // Sources and inspection use native completion, while Workbench publishes text.
     expect(getAgentDefinition("sources_v1")).toMatchObject({
-        version: 8,
+        version: 9,
         completionTransport: "native_tool",
     });
     expect(getAgentDefinition("saved_material_inspection_v1")).toMatchObject({
-        version: 4,
+        version: 5,
         completionTransport: "native_tool",
     });
     expect(getAgentDefinition("conversation_validation_v1")).toMatchObject({
@@ -359,7 +359,7 @@ test("Phase 4 defaults activate native_tool versions while retaining historical 
         completionTransport: "native_tool",
     });
     const workbench = getAgentDefinition("workbench_v1");
-    expect(workbench.version).toBe(12);
+    expect(workbench.version).toBe(13);
     expect(workbench.completionTransport).toBeUndefined();
     expect(typeof workbench.textCompletion).toBe("function");
 

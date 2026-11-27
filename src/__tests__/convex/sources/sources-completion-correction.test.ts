@@ -293,7 +293,7 @@ test("Sources v8 native_tool completion allows >3 refused proposals within autho
     );
     const f = await seedCapturedSources();
     await installModel(f.t, nativePiFixtureRoute, "sources");
-    await f.t.run((ctx) => ctx.db.patch(f.missionId, { definitionVersion: 8 }));
+    await f.t.run((ctx) => ctx.db.patch(f.missionId, { definitionVersion: 9 }));
     const initialContext = await f.t.query(internal.execution.context.build, {
         missionId: f.missionId,
         expectedGeneration: 4,
@@ -494,7 +494,7 @@ test("native completion refuses feedback that only fits before its tool wrapper"
                 },
             },
         });
-        await ctx.db.patch(f.missionId, { definitionVersion: 8 });
+        await ctx.db.patch(f.missionId, { definitionVersion: 9 });
     });
     const needs = Array.from({ length: count }, () => ({
         needId: "",

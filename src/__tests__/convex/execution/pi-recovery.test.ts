@@ -624,7 +624,6 @@ test.each([
         requestKey: `crash-boundary-${boundary}`,
         expectedGeneration: 4,
     });
-    await f.t.run((ctx) => ctx.db.patch(missionId, { definitionVersion: 4 }));
     const initial = await f.t.query(internal.execution.context.build, {
         missionId,
         expectedGeneration: 4,
@@ -895,7 +894,7 @@ test("cancelled structured settlement fences inspection and cannot settle or sch
         },
     );
     await cancelledFixture.t.run((ctx) =>
-        ctx.db.patch(cancelledMissionId, { definitionVersion: 4 }),
+        ctx.db.patch(cancelledMissionId, { definitionVersion: 5 }),
     );
     const cancelledLease = await cancelledFixture.t.mutation(
         internal.execution.piStore.claim,
@@ -975,7 +974,6 @@ test("native recovery correlates mixed calls when original operation arguments e
         requestKey: "large-native-operations",
         expectedGeneration: 4,
     });
-    await t.run((ctx) => ctx.db.patch(missionId, { definitionVersion: 4 }));
     const scope = { missionId, expectedGeneration: 4 };
     const context = await t.query(internal.execution.context.build, scope);
     assert(context.kind === "ready");
@@ -1255,7 +1253,6 @@ test("settles a native completion whose original arguments exceed the read trans
         requestKey: "retained-completion-correlation",
         expectedGeneration: 4,
     });
-    await t.run((ctx) => ctx.db.patch(missionId, { definitionVersion: 4 }));
     const context = await t.query(internal.execution.context.build, {
         missionId,
         expectedGeneration: 4,
@@ -1414,7 +1411,6 @@ async function completedStructuredSettlement() {
         requestKey: "structured-settlement-retries",
         expectedGeneration: 4,
     });
-    await f.t.run((ctx) => ctx.db.patch(missionId, { definitionVersion: 4 }));
     const lease1 = await f.t.mutation(internal.execution.piStore.claim, {
         missionId,
         expectedGeneration: 4,
@@ -1881,7 +1877,7 @@ test("local simulation inspection finds an exact quotation in a request above th
     await t.run((ctx) =>
         ctx.db.patch(missionId, {
             requestKey: "local-simulation",
-            definitionVersion: 4,
+            definitionVersion: 5,
         }),
     );
     const scope = { missionId, expectedGeneration: 4 };

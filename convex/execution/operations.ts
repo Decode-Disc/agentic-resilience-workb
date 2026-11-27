@@ -11,6 +11,7 @@ import {
 import { readResearchState } from "@convex/domain/researchState";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import {
+    CONVEX_NODE_ACTION_TIMEOUT_MS,
     DOSSIER_PURGE_PARENT_SCAN_BYTES,
     EXECUTION_WINDOW_MS,
     MAX_OPERATION_RESULT_BYTES,
@@ -43,7 +44,10 @@ import {
     operationInputValidator,
     operationOutcomeValidator,
     type operationRefusalValidator,
+    ownsScheduledEpoch,
     requestInputValidator,
+    type ScheduledOperationArgs,
+    scheduledOperationArgs,
     validateOperationExecutionResult,
 } from "./executionProtocol";
 import {
@@ -110,10 +114,7 @@ export async function purgeDossierOperationBatch(
 /** Runs in the scheduled action itself; no parent action remains open to await another worker. */
 export async function executeScheduledOperation(
     ctx: ActionCtx,
-    args: {
-        requestId: Id<"agentOperationRequests">;
-        expectedGeneration: number;
-    },
+    args: ScheduledOperationArgs,
     execute: () => Promise<Outcome>,
 ): Promise<Outcome | null> {
     let phase: Parameters<typeof classifyDispatchFailure>[1] =
@@ -340,9 +341,15 @@ async function authority(
             mission,
             admittedRequest.instructionVersion,
         );
+    const retiredDocumentaryOperation =
+        request.operationVersion === 2 &&
+        operation.version === 3 &&
+        (request.input.kind === "submit_documentary_qualification" ||
+            request.input.kind === "request_documentary_check");
     if (
         request.status === "completed" &&
-        isCommonConsultation(request.input.kind) &&
+        (isCommonConsultation(request.input.kind) ||
+            (retiredDocumentaryOperation && request.outcome)) &&
         request.operationVersion !== operation.version
     )
         return { mission, runId };
@@ -353,7 +360,8 @@ async function authority(
         request.operationVersion !== operation.version
     )
         throw executionError(
-            isCommonConsultation(request.input.kind) &&
+            (isCommonConsultation(request.input.kind) ||
+                retiredDocumentaryOperation) &&
                 request.operationVersion !== operation.version
                 ? "operation_version_conflict"
                 : "stale_execution",
@@ -867,18 +875,24 @@ export const claim = internalMutation({
                       },
                   );
         const scheduledJobId = state.operation?.scheduledAction
-            ? await ctx.scheduler.runAfter(
-                  0,
-                  state.operation.scheduledAction,
-                  args,
-              )
+            ? await ctx.scheduler.runAfter(0, state.operation.scheduledAction, {
+                  ...args,
+                  epoch: 1,
+              })
             : undefined;
         const waitReference = scheduledJobId
             ? `operation:${request._id}`
             : undefined;
         await ctx.db.patch(request._id, {
             status: scheduledJobId ? "waiting" : "running",
-            scheduledJobId,
+            scheduledExecution: scheduledJobId
+                ? {
+                      phase: "queued",
+                      epoch: 1,
+                      dispatchGeneration: args.expectedGeneration,
+                      jobId: scheduledJobId,
+                  }
+                : undefined,
             waitReference,
             waitEventId,
             expiryJobId,
@@ -902,30 +916,324 @@ export const claim = internalMutation({
     },
 });
 
+async function ownedStructuredAttempt(
+    ctx: QueryCtx,
+    request: Doc<"agentOperationRequests">,
+) {
+    const execution = request.scheduledExecution;
+    if (!execution) return null;
+    const call =
+        execution.phase === "waiting_provider"
+            ? await ctx.db.get(execution.callId)
+            : await ctx.db
+                  .query("providerCalls")
+                  .withIndex("by_operation_request_and_attempt", (q) =>
+                      q.eq("operationRequestId", request._id),
+                  )
+                  .order("desc")
+                  .first();
+    return call?.operationRequestId === request._id &&
+        call.runId === request.runId &&
+        call.operationEpoch === execution.epoch &&
+        call.executionGeneration === execution.dispatchGeneration &&
+        call.service === "model"
+        ? call
+        : null;
+}
+
+async function deferStructuredExecution(
+    ctx: MutationCtx,
+    request: Doc<"agentOperationRequests">,
+    call: Doc<"providerCalls">,
+) {
+    const execution = request.scheduledExecution;
+    if (execution?.phase !== "running" || !call.invocationId)
+        throw executionError("operation_not_dispatched");
+    if (execution.wakeId) await ctx.scheduler.cancel(execution.wakeId);
+    const args = {
+        requestId: request._id,
+        expectedGeneration: execution.dispatchGeneration,
+        epoch: execution.epoch,
+    };
+    const wakeId = await ctx.scheduler.runAfter(
+        0,
+        internal.execution.operations.wakeStructuredExecution,
+        args,
+    );
+    const scheduledExecution = {
+        phase: "waiting_provider" as const,
+        epoch: execution.epoch,
+        dispatchGeneration: execution.dispatchGeneration,
+        wakeId,
+        callId: call._id,
+        firstInvocationId: execution.firstInvocationId ?? call.invocationId,
+    };
+    await ctx.db.patch(request._id, { scheduledExecution });
+    if (request.runId) await pauseResearchAtBoundary(ctx, request.runId);
+    return scheduledExecution;
+}
+
+/** Binds paused waiting work to a generation whose slot has been reclaimed. */
+export const authorizeStructuredResume = internalMutation({
+    args: { runId: v.id("researchRuns"), generation: v.number() },
+    returns: v.null(),
+    handler: async (ctx, { runId, generation }) => {
+        const run = await ctx.db.get(runId);
+        if (
+            run?.executionStatus !== "running" ||
+            run.executionGeneration !== generation
+        )
+            throw executionError("stale_execution");
+        const requests = await ctx.db
+            .query("agentOperationRequests")
+            .withIndex("by_run_and_status", (q) =>
+                q.eq("runId", runId).eq("status", "waiting"),
+            )
+            .take(9);
+        for (const request of requests)
+            if (request.scheduledExecution?.phase === "waiting_provider")
+                await ctx.db.patch(request._id, {
+                    structuredResumeGeneration: generation,
+                });
+        return null;
+    },
+});
+
+/** Closes a fenced worker's observation and schedules only a still-authorized successor. */
+export const wakeStructuredExecution = internalMutation({
+    args: scheduledOperationArgs,
+    returns: v.null(),
+    handler: async (ctx, args): Promise<null> => {
+        const request = await ctx.db.get(args.requestId);
+        if (
+            !request?.runId ||
+            request.status !== "waiting" ||
+            request.outcome ||
+            !ownsScheduledEpoch(request, args.expectedGeneration, args.epoch)
+        )
+            return null;
+        const mission = request.missionId
+            ? await ctx.db.get(request.missionId)
+            : null;
+        const operation = operationFor(request.input, mission ?? undefined);
+        if (
+            operation.effectKind !== "durable_effect" ||
+            !operation.scheduledAction ||
+            operation.scheduledRecovery !== "structured_model_v1"
+        )
+            return null;
+        const call = await ownedStructuredAttempt(ctx, request);
+        let execution = request.scheduledExecution;
+        if (
+            !call?.invocationId ||
+            !call.preparationId ||
+            !call.sourceId ||
+            !call.inputHash ||
+            !execution
+        )
+            return null;
+        if (execution.phase === "running") {
+            const job = await ctx.db.system.get(execution.jobId);
+            if (
+                Date.now() < execution.platformDeadlineAt &&
+                (job?.state.kind === "inProgress" ||
+                    job?.state.kind === "pending")
+            )
+                return null;
+            execution = await deferStructuredExecution(ctx, request, call);
+        }
+        if (execution.phase !== "waiting_provider") return null;
+        await pauseResearchAtBoundary(ctx, request.runId);
+        const run = await ctx.db.get(request.runId);
+        const preparation = await ctx.db.get(call.preparationId);
+        if (!preparation) return null;
+        const deadlineAt = Math.min(
+            request.deadlineAt ?? Infinity,
+            mission?.deadlineAt ?? Infinity,
+            preparation.deadlineAt ?? Infinity,
+        );
+        if (call.status === "started" && call.providerObservation?.termination)
+            await ctx.runMutation(
+                internal.execution.invocationLifecycle
+                    .closeAbandonedStructuredAttempt,
+                args,
+            );
+        if (
+            !run ||
+            run.withdrawnAt ||
+            run.executionStatus !== "running" ||
+            run.researchPauseRequested
+        )
+            return null;
+        if (
+            request.adoptionGeneration !== run.executionGeneration &&
+            request.expectedGeneration !== run.executionGeneration
+        )
+            return null;
+        const finish = async (outcome: Outcome) => {
+            await ctx.runMutation(internal.execution.operations.recordResult, {
+                ...args,
+                expectedGeneration: run.executionGeneration,
+                recovery: "owned_wake",
+                outcome,
+            });
+            return null;
+        };
+        if (deadlineAt <= Date.now())
+            return finish({ kind: "unavailable", code: "execution_deadline" });
+        if (
+            run.executionGeneration !== execution.dispatchGeneration &&
+            request.structuredResumeGeneration !== run.executionGeneration
+        )
+            return null;
+        try {
+            await authority(ctx, request, run.executionGeneration);
+        } catch (error) {
+            const code = executionFailureCode(error);
+            if (!code) throw error;
+            return finish({ kind: "refused", code });
+        }
+        if (call.status === "succeeded") {
+            const recovered = await operation.recoverScheduledResult?.(
+                ctx,
+                {
+                    ...request,
+                    scheduledExecution: execution,
+                },
+                run.executionGeneration,
+            );
+            return recovered ? finish(recovered) : null;
+        }
+        if (!call.providerObservation?.termination) return null;
+        const plan = await ctx.runQuery(
+            internal.providerCalls.nextPreparationAttemptForInput,
+            {
+                preparationId: call.preparationId,
+                sourceId: call.sourceId,
+                inputHash: call.inputHash,
+                operation: call.operation,
+                now: Date.now(),
+            },
+        );
+        if (
+            plan.errorCode === "recovery_cooldown" &&
+            plan.retryAt &&
+            plan.retryAt < deadlineAt
+        ) {
+            const wakeId = await ctx.scheduler.runAt(
+                plan.retryAt,
+                internal.execution.operations.wakeStructuredExecution,
+                args,
+            );
+            await ctx.db.patch(request._id, {
+                scheduledExecution: { ...execution, wakeId },
+            });
+            return null;
+        }
+        if (!plan.attempt)
+            return finish({
+                kind: "unavailable",
+                code: plan.errorCode ?? "documentary_control_unfinished",
+                ...(call.diagnostic?.reason
+                    ? {
+                          validation: {
+                              path: "documentaryControl",
+                              expected: `A complete documentary examination matching the submitted contribution identities (${call.diagnostic.reason}).`,
+                          },
+                      }
+                    : {}),
+            });
+        const dispatchGeneration = run.executionGeneration;
+        const epoch = (execution.lastIssuedEpoch ?? execution.epoch) + 1;
+        const jobId = await ctx.scheduler.runAfter(
+            0,
+            operation.scheduledAction,
+            {
+                requestId: request._id,
+                expectedGeneration: dispatchGeneration,
+                epoch,
+            },
+        );
+        await ctx.db.patch(request._id, {
+            scheduledExecution: {
+                phase: "queued",
+                epoch,
+                dispatchGeneration,
+                jobId,
+                firstInvocationId: execution.firstInvocationId,
+            },
+        });
+        return null;
+    },
+});
+
 /** Only the first delivery of an owned scheduled operation may enter its external work. */
 export const beginScheduledExecution = internalMutation({
-    args: {
-        requestId: v.id("agentOperationRequests"),
-        expectedGeneration: v.number(),
-    },
+    args: scheduledOperationArgs,
     returns: v.boolean(),
     handler: async (ctx, args) => {
         const request = await ctx.db.get(args.requestId);
+        const scheduled = request?.scheduledExecution;
         if (
             !request ||
-            request.expectedGeneration !== args.expectedGeneration ||
-            !(
-                (request.status === "waiting" && request.scheduledJobId) ||
-                (request.status === "running" && !request.scheduledJobId)
-            ) ||
-            request.scheduledStartedAt !== undefined ||
+            scheduled?.phase !== "queued" ||
+            !ownsScheduledEpoch(request, args.expectedGeneration, args.epoch) ||
+            request.status !== "waiting" ||
             request.outcome
         )
             return false;
+        if (
+            scheduled.firstInvocationId &&
+            request.runId &&
+            (await ctx.db.get(request.runId))?.researchPauseRequested
+        ) {
+            const prior = await ctx.db
+                .query("providerCalls")
+                .withIndex("by_operation_request_and_attempt", (q) =>
+                    q.eq("operationRequestId", request._id),
+                )
+                .order("desc")
+                .first();
+            if (
+                prior?.operationEpoch !== undefined &&
+                prior.operationEpoch < scheduled.epoch &&
+                prior.executionGeneration !== undefined
+            ) {
+                await ctx.db.patch(request._id, {
+                    scheduledExecution: {
+                        phase: "waiting_provider",
+                        epoch: prior.operationEpoch,
+                        lastIssuedEpoch: scheduled.epoch,
+                        dispatchGeneration: prior.executionGeneration,
+                        callId: prior._id,
+                        firstInvocationId: scheduled.firstInvocationId,
+                    },
+                });
+                await pauseResearchAtBoundary(ctx, request.runId);
+            }
+            return false;
+        }
         const state = await authority(ctx, request, args.expectedGeneration);
         if (!state.operation?.scheduledAction)
             throw executionError("operation_not_dispatched");
-        await ctx.db.patch(request._id, { scheduledStartedAt: Date.now() });
+        const startedAt = Date.now();
+        const platformDeadlineAt = startedAt + CONVEX_NODE_ACTION_TIMEOUT_MS;
+        const wakeId = state.operation.scheduledRecovery
+            ? await ctx.scheduler.runAt(
+                  platformDeadlineAt,
+                  internal.execution.operations.wakeStructuredExecution,
+                  args,
+              )
+            : undefined;
+        await ctx.db.patch(request._id, {
+            scheduledExecution: {
+                ...scheduled,
+                phase: "running",
+                startedAt,
+                platformDeadlineAt,
+                wakeId,
+            },
+        });
         await recordEvent(ctx, request, "operation_execution_started");
         return true;
     },
@@ -936,6 +1244,8 @@ export const recordResult = internalMutation({
         requestId: v.id("agentOperationRequests"),
         expectedGeneration: v.number(),
         outcome: operationOutcomeValidator,
+        epoch: v.optional(v.number()),
+        recovery: v.optional(v.literal("owned_wake")),
         historyRead: v.optional(historyReadReceiptValidator),
     },
     returns: operationOutcomeValidator,
@@ -948,6 +1258,24 @@ export const recordResult = internalMutation({
                 request.adoptionGeneration !== args.expectedGeneration)
         )
             throw executionError("request_unavailable");
+        if (
+            request.scheduledExecution &&
+            ((args.epoch !== undefined &&
+                !(args.recovery &&
+                request.scheduledExecution.phase === "waiting_provider"
+                    ? request.scheduledExecution.epoch === args.epoch
+                    : ownsScheduledEpoch(
+                          request,
+                          args.expectedGeneration,
+                          args.epoch,
+                      ))) ||
+                (args.epoch === undefined &&
+                    !request.outcome &&
+                    !request.effect) ||
+                (request.scheduledExecution.phase === "waiting_provider" &&
+                    !args.recovery))
+        )
+            return { kind: "refused", code: "stale_execution" };
         if (
             request.outcome &&
             stableStringify(request.outcome) !==
@@ -1048,6 +1376,15 @@ export const recordResult = internalMutation({
             if (!outcome.reference || outcome.reference.length > 160)
                 throw executionError("invalid_wait_reference");
             if (request.outcome) return request.outcome;
+            if (
+                operation.effectKind === "durable_effect" &&
+                operation.scheduledAction &&
+                operation.scheduledRecovery
+            ) {
+                const call = await ownedStructuredAttempt(ctx, request);
+                if (!call) throw executionError("operation_not_dispatched");
+                await deferStructuredExecution(ctx, request, call);
+            }
             await ctx.db.patch(request._id, {
                 status: "waiting",
                 waitReference: outcome.reference,
@@ -1062,12 +1399,29 @@ export const recordResult = internalMutation({
         )
             throw executionError("operation_not_dispatched");
         if (!request.outcome) {
+            const execution = request.scheduledExecution;
+            if (
+                (execution?.phase === "running" ||
+                    execution?.phase === "waiting_provider") &&
+                execution.wakeId
+            )
+                await ctx.scheduler.cancel(execution.wakeId);
             if (request.expiryJobId)
                 await ctx.scheduler.cancel(request.expiryJobId);
             await ctx.db.patch(request._id, {
                 outcome,
                 historyRead,
                 status: "observed",
+                ...(request.scheduledExecution
+                    ? {
+                          scheduledExecution: {
+                              phase: "finished" as const,
+                              epoch: request.scheduledExecution.epoch,
+                              dispatchGeneration:
+                                  request.scheduledExecution.dispatchGeneration,
+                          },
+                      }
+                    : {}),
                 completedAt: Date.now(),
             });
             await recordEvent(
@@ -1398,6 +1752,7 @@ export const settleDispatchFailure = internalMutation({
         requestId: v.id("agentOperationRequests"),
         expectedGeneration: v.number(),
         failure: dispatchFailureValidator,
+        epoch: v.optional(v.number()),
     },
     returns: operationOutcomeValidator,
     handler: async (ctx, args): Promise<Outcome> => {
@@ -1408,6 +1763,16 @@ export const settleDispatchFailure = internalMutation({
                 request.adoptionGeneration !== args.expectedGeneration)
         )
             throw executionError("request_unavailable");
+        if (
+            request.scheduledExecution &&
+            (args.epoch === undefined ||
+                !ownsScheduledEpoch(
+                    request,
+                    args.expectedGeneration,
+                    args.epoch,
+                ))
+        )
+            return { kind: "refused", code: "stale_execution" };
         const retained = request.outcome ?? request.effect?.outcome;
         if (
             args.failure.diagnostic &&
@@ -1426,13 +1791,70 @@ export const settleDispatchFailure = internalMutation({
             return ctx.runMutation(internal.execution.operations.recordResult, {
                 requestId: args.requestId,
                 expectedGeneration: args.expectedGeneration,
+                epoch: args.epoch,
                 outcome: retained,
             });
         if (request.status === "unknown")
             return { kind: "unavailable", code: "operation_outcome_unknown" };
+        if (
+            request.status === "waiting" &&
+            request.scheduledExecution?.phase === "waiting_provider" &&
+            request.waitReference
+        )
+            return {
+                kind: "waiting",
+                reference: request.waitReference,
+            };
         if (!["running", "waiting"].includes(request.status))
             throw executionError("operation_not_dispatched");
         if (args.failure.category === "uncertain_effect") {
+            const mission = request.missionId
+                ? await ctx.db.get(request.missionId)
+                : null;
+            const operation = operationFor(request.input, mission ?? undefined);
+            if (
+                operation.effectKind === "durable_effect" &&
+                operation.scheduledAction &&
+                operation.scheduledRecovery === "structured_model_v1"
+            ) {
+                const run = request.runId
+                    ? await ctx.db.get(request.runId)
+                    : null;
+                const recovered = run?.researchPauseRequested
+                    ? null
+                    : await operation.recoverScheduledResult?.(
+                          ctx,
+                          request,
+                          args.expectedGeneration,
+                      );
+                if (recovered)
+                    return ctx.runMutation(
+                        internal.execution.operations.recordResult,
+                        {
+                            requestId: args.requestId,
+                            expectedGeneration: args.expectedGeneration,
+                            epoch: args.epoch,
+                            outcome: recovered,
+                        },
+                    );
+                const call = await ownedStructuredAttempt(ctx, request);
+                if (
+                    call?.invocationId &&
+                    request.scheduledExecution?.phase === "running"
+                )
+                    return ctx.runMutation(
+                        internal.execution.operations.recordResult,
+                        {
+                            requestId: args.requestId,
+                            expectedGeneration: args.expectedGeneration,
+                            epoch: args.epoch,
+                            outcome: {
+                                kind: "waiting",
+                                reference: `operation:${request._id}`,
+                            },
+                        },
+                    );
+            }
             await markOperationUnknown(ctx, request);
             return { kind: "unavailable", code: "operation_outcome_unknown" };
         }
@@ -1446,6 +1868,7 @@ export const settleDispatchFailure = internalMutation({
         return ctx.runMutation(internal.execution.operations.recordResult, {
             requestId: args.requestId,
             expectedGeneration: args.expectedGeneration,
+            epoch: args.epoch,
             outcome:
                 args.failure.category === "authority"
                     ? { kind: "refused", code: args.failure.code }
@@ -1528,12 +1951,8 @@ export const stageObservationText = internalMutation({
     },
 });
 
-/** Reads an engaged scheduled operation under the same generation and instruction authority as settlement. */
 export const readScheduledInput = internalQuery({
-    args: {
-        requestId: v.id("agentOperationRequests"),
-        expectedGeneration: v.number(),
-    },
+    args: scheduledOperationArgs,
     returns: v.object({
         input: requestInputValidator,
         pin: operationPinValidator,
@@ -1546,6 +1965,7 @@ export const readScheduledInput = internalQuery({
         if (
             !request ||
             !operationHasStarted(request) ||
+            !ownsScheduledEpoch(request, args.expectedGeneration, args.epoch) ||
             request.status === "completed"
         )
             throw executionError("operation_not_dispatched");

@@ -8,6 +8,10 @@ export const agentSkillBindingSchema = z
     })
     .strict();
 export type AgentSkillBinding = z.infer<typeof agentSkillBindingSchema>;
+export const sourcesDocumentaryMethod = {
+    packageId: "research-methods-v2",
+    skillName: "source-preparation",
+} as const satisfies AgentSkillBinding;
 export const skillReadInput = v.object({
     path: v.string(),
     offset: v.optional(v.number()),

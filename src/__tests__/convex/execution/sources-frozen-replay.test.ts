@@ -138,6 +138,9 @@ async function fixture(
         if (mission) {
             const current = await f.t.run((ctx) => ctx.db.get(f.runId));
             assert(current?.sourcePreparationId);
+            await f.t.mutation(internal.execution.piControl.holdPublication, {
+                held: false,
+            });
             return {
                 ...f,
                 campaignId,

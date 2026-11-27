@@ -23,6 +23,7 @@ import {
     MAX_SUPPLEMENT_SEARCHES,
     RESOURCE_POLICY_VERSION,
     SOURCE_COMPARISON_MAX_OUTPUT_BYTES,
+    STRUCTURED_OUTPUT_POLICY,
 } from "@convex/resourcePolicy";
 import { readCampaignResearchDeadline } from "@convex/runWorkspace";
 import { type Infer, v } from "convex/values";
@@ -1130,6 +1131,7 @@ export const claimForDiscovery = internalMutation({
                 corpusRevisionId: revision._id,
                 kind: "preparation",
                 resourcePolicy: RESOURCE_POLICY_VERSION,
+                structuredOutputPolicy: STRUCTURED_OUTPUT_POLICY,
                 entryPoint: "initial_discovery",
                 workflowVersion: run.workflowVersion ?? 1,
                 executionGeneration: run.executionGeneration,

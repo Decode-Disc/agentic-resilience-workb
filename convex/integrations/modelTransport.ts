@@ -17,6 +17,8 @@ import {
     MODEL_NON_STREAMING_RESPONSE_MAX_BYTES,
     MODEL_SETTLEMENT_GRACE_MS,
     resolveGenerationAuthority,
+    type StructuredOutputPolicy,
+    supportsStructuredOutputPolicy,
     TEXT_FRAGMENT_CHARACTERS,
 } from "@convex/resourcePolicy";
 import { estimateTextTokens } from "@earendil-works/pi-ai/utils/estimate";
@@ -54,7 +56,9 @@ export type AttemptDependencies = {
         complete: boolean,
         terminalReason?: string,
     ) => Promise<void>;
-    authority?: Pick<Doc<"agentMissions">, "resourcePolicy" | "deadlineAt">;
+    authority?: Pick<Doc<"agentMissions">, "resourcePolicy" | "deadlineAt"> & {
+        structuredOutputPolicy?: StructuredOutputPolicy;
+    };
     apiKey: string;
     fetch?: typeof fetch;
     signal?: AbortSignal;
@@ -167,6 +171,7 @@ type AttemptFailure = AttemptReceipt & {
 type BoundedTransportState = {
     streamError?: unknown;
     visibleWriter?: ReturnType<typeof visibleOutputWriter>;
+    observeStructuredText?: (text: string) => void;
     structuredCapacity?: { contextWindow: number; maxTokens: number };
     requestBlockCode?: string;
     observableReplyJson?: string;
@@ -239,17 +244,10 @@ function visibleOutputWriter(
     };
     return {
         async write(text: string) {
-            for (let offset = 0; offset < text.length; ) {
-                if (failure) throw failure;
-                const part = text.slice(
-                    offset,
-                    offset + TEXT_FRAGMENT_CHARACTERS,
-                );
-                offset += part.length;
-                pending += part;
-                start();
-                if (pending.length >= TEXT_FRAGMENT_CHARACTERS) await flight;
-            }
+            if (failure) throw failure;
+            pending += text;
+            start();
+            if (pending.length >= TEXT_FRAGMENT_CHARACTERS) await flight;
         },
         async flush() {
             if (failure) throw failure;
@@ -488,10 +486,13 @@ function createRoutedModel(
                             async transform(part, controller) {
                                 if (part.type === "error")
                                     state.streamError ??= part.error;
-                                if (part.type === "text-delta")
-                                    await state.visibleWriter?.write(
+                                if (part.type === "text-delta") {
+                                    const capture = state.visibleWriter?.write(
                                         part.delta,
                                     );
+                                    state.observeStructuredText?.(part.delta);
+                                    await capture;
+                                }
                                 controller.enqueue(part);
                             },
                         }),
@@ -851,6 +852,39 @@ async function failedAttemptFromError(args: {
     throw error;
 }
 
+function structuredWhitespaceObserver(
+    maxConsecutiveWhitespace: number,
+    interrupt: () => void,
+) {
+    let inString = false;
+    let escaped = false;
+    let whitespace = 0;
+    return (text: string) => {
+        for (let i = 0; i < text.length; i++) {
+            const character = text.charCodeAt(i);
+            if (inString) {
+                if (escaped) escaped = false;
+                else if (character === 92) escaped = true;
+                else if (character === 34) inString = false;
+            } else if (
+                character === 32 ||
+                character === 9 ||
+                character === 10 ||
+                character === 13
+            ) {
+                whitespace++;
+                if (whitespace === maxConsecutiveWhitespace) {
+                    interrupt();
+                    return;
+                }
+            } else {
+                whitespace = 0;
+                inString = character === 34;
+            }
+        }
+    };
+}
+
 /** Performs one bounded structured-output attempt; orchestration owns fallback and persistence. */
 export async function invokeOneShot<T>(args: {
     route: SourceQualificationRoute;
@@ -867,6 +901,16 @@ export async function invokeOneShot<T>(args: {
     };
     const preflight = preflightFailure(route, dependencies);
     if (preflight) return preflight;
+    const policy = dependencies.authority?.structuredOutputPolicy;
+    if (!supportsStructuredOutputPolicy(policy))
+        return {
+            status: "failed",
+            model: route.model,
+            latencyMs: 0,
+            dispatchOutcome: "not_dispatched",
+            errorCode: "structured_output_policy_unsupported",
+            retryable: false,
+        };
     const startedAt = Date.now();
     const captureAbort = new AbortController();
     const generationSignal = AbortSignal.any([
@@ -895,13 +939,20 @@ export async function invokeOneShot<T>(args: {
     let captureSealed = false;
     const state: BoundedTransportState = {
         responseTooLarge: false,
+        observeStructuredText: structuredWhitespaceObserver(
+            policy.maxConsecutiveWhitespace,
+            () =>
+                captureAbort.abort(
+                    executionError("structured_output_whitespace"),
+                ),
+        ),
         visibleWriter: dependencies.onVisibleText
             ? visibleOutputWriter(
                   dependencies.onVisibleText,
                   (error) => {
                       if (!generationSignal.aborted) captureAbort.abort(error);
                   },
-                  generationSignal,
+                  settlementAbort.signal,
               )
             : undefined,
     };
@@ -971,6 +1022,7 @@ export async function invokeOneShot<T>(args: {
         const completion = Promise.all([
             stream.text,
             stream.finishReason,
+            stream.rawFinishReason,
             stream.usage,
             stream.response,
             stream.providerMetadata,
@@ -988,8 +1040,14 @@ export async function invokeOneShot<T>(args: {
         );
         if (streamError || state.streamError)
             throw streamError ?? state.streamError;
-        const [text, finishReason, usage, response, providerMetadata] =
-            await completion;
+        const [
+            text,
+            finishReason,
+            rawFinishReason,
+            usage,
+            response,
+            providerMetadata,
+        ] = await completion;
         const result = {
             text,
             finishReason,
@@ -1000,9 +1058,21 @@ export async function invokeOneShot<T>(args: {
         state.observableReplyJson = JSON.stringify({
             version: 1,
             content: [{ type: "text", text: result.text }],
-            finishReason: { unified: result.finishReason },
+            finishReason: { unified: finishReason, raw: rawFinishReason },
         });
-        terminalReceipt = createAttemptReceipt(route, state, startedAt, result);
+        terminalReceipt = {
+            ...createAttemptReceipt(route, state, startedAt, result),
+            ...(rawFinishReason && finishReason !== "other"
+                ? {
+                      termination: {
+                          kind: "finished",
+                          source: "stream",
+                          rawFinishReason,
+                          observedAt: Date.now(),
+                      },
+                  }
+                : {}),
+        };
         allowSettlement();
         await captureUntil(
             () => state.visibleWriter?.flush() ?? Promise.resolve(),
@@ -1022,7 +1092,7 @@ export async function invokeOneShot<T>(args: {
             throw error;
         }
         captureSealed = true;
-        const receipt = createAttemptReceipt(route, state, startedAt, result);
+        const receipt = terminalReceipt;
         const value = await output;
         if (result.finishReason !== "stop")
             return {

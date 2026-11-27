@@ -48,6 +48,7 @@ test("native acquisition shares the persisted preparation concurrency limit and 
     }
     for (const requestId of requests.slice(0, 2))
         await f.t.mutation(internal.sourcesMission.reserve, {
+            epoch: 1,
             requestId,
             expectedGeneration: 4,
         });
@@ -55,6 +56,7 @@ test("native acquisition shares the persisted preparation concurrency limit and 
     if (!third) throw new Error("Missing third acquisition");
     await expect(
         f.t.mutation(internal.sourcesMission.reserve, {
+            epoch: 1,
             requestId: third,
             expectedGeneration: 4,
         }),
@@ -72,6 +74,7 @@ test("native acquisition shares the persisted preparation concurrency limit and 
         }),
     );
     await f.t.mutation(internal.sourcesMission.reserve, {
+        epoch: 1,
         requestId: third,
         expectedGeneration: 4,
     });
@@ -168,6 +171,7 @@ test("a framed research pause is applied before admitting Sources' next operatio
         }),
     ).toMatchObject({ kind: "outcome", outcome: { kind: "waiting" } });
     const reserved = await f.t.mutation(internal.sourcesMission.reserve, {
+        epoch: 1,
         requestId,
         expectedGeneration: generation,
     });
@@ -292,6 +296,7 @@ test("a requested pause refuses new native research dispatch while an engaged op
     await f.t.mutation(internal.execution.operations.recordResult, {
         requestId: engagedId,
         expectedGeneration: 4,
+        epoch: 1,
         outcome: { kind: "unavailable", code: "missing_configuration" },
     });
     expect(await f.t.run((ctx) => ctx.db.get(f.runId))).toMatchObject({

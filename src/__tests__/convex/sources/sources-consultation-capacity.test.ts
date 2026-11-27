@@ -122,15 +122,28 @@ test.each([
                     preparationId: f.preparationId,
                     evidence: contributions.flatMap((c) => c.evidence),
                     inputHash: `control-${index}`,
-                    control: {
-                        coherence: true,
-                        limitations: [],
-                        findings: contributions.map((c) => ({
-                            contributionId: c.id,
-                            conclusion: "supported" as const,
-                            permittedUse: "context_only" as const,
-                            diagnostic: "Controlled context.",
-                        })),
+                    examination: {
+                        state: "examined",
+                        contractVersion: 2,
+                        control: {
+                            findings: Object.fromEntries(
+                                contributions.map((c) => [
+                                    c.id,
+                                    {
+                                        conclusion: "supported" as const,
+                                        permittedUse: "context_only" as const,
+                                        diagnostic: "Controlled context.",
+                                        needs: Object.fromEntries(
+                                            c.needIds.map((needId) => [
+                                                needId,
+                                                "context_only" as const,
+                                            ]),
+                                        ),
+                                    },
+                                ]),
+                            ),
+                            objections: [],
+                        },
                     },
                 },
             });

@@ -99,7 +99,7 @@ test("confirmed discovery survives a committed settlement whose acknowledgement 
                         return result;
                     },
                 },
-                { requestId, expectedGeneration: 4 },
+                { requestId, expectedGeneration: 4, epoch: 1 },
             ),
         ),
     ).resolves.toMatchObject({
@@ -122,7 +122,11 @@ test("confirmed discovery survives a committed settlement whose acknowledgement 
     });
     expect(
         await f.t.action((ctx) =>
-            registered._handler(ctx, { requestId, expectedGeneration: 4 }),
+            registered._handler(ctx, {
+                requestId,
+                expectedGeneration: 4,
+                epoch: 1,
+            }),
         ),
     ).toBeNull();
     expect((await f.t.run((ctx) => ctx.db.get(requestId)))?.status).toBe(

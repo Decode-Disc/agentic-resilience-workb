@@ -161,15 +161,29 @@ test.each([
                     preparationId: f.preparationId,
                     evidence: contributions.flatMap((c) => c.evidence),
                     inputHash: `control-${i}`,
-                    control: {
-                        coherence: true,
-                        limitations: [],
-                        findings: contributions.map((c) => ({
-                            contributionId: c.id,
-                            conclusion: "supported" as const,
-                            permittedUse: "context_only" as const,
-                            diagnostic: "Controlled contextual contribution.",
-                        })),
+                    examination: {
+                        state: "examined",
+                        contractVersion: 2,
+                        control: {
+                            findings: Object.fromEntries(
+                                contributions.map((c) => [
+                                    c.id,
+                                    {
+                                        conclusion: "supported" as const,
+                                        permittedUse: "context_only" as const,
+                                        diagnostic:
+                                            "Controlled contextual contribution.",
+                                        needs: Object.fromEntries(
+                                            c.needIds.map((needId) => [
+                                                needId,
+                                                "context_only" as const,
+                                            ]),
+                                        ),
+                                    },
+                                ]),
+                            ),
+                            objections: [],
+                        },
                     },
                 },
             });
@@ -275,10 +289,11 @@ test.each([
             });
             await ctx.runMutation(
                 internal.execution.operations.beginScheduledExecution,
-                { requestId, expectedGeneration: 4 },
+                { epoch: 1, requestId, expectedGeneration: 4 },
             );
             await expect(
                 ctx.runMutation(internal.sourcesMission.reserve, {
+                    epoch: 1,
                     requestId,
                     expectedGeneration: 4,
                 }),

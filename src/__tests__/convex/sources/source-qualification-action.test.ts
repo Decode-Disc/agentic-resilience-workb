@@ -315,7 +315,7 @@ test("a fresh preparation cannot reset the dossier model-attempt allowance", asy
         ctx.db.patch(runId, {
             sourceQualificationAttemptCount: 120,
             sourcePreparationBudget: {
-                version: 1,
+                version: 2,
                 work: 120,
                 incidents: 0,
                 reserved: 0,

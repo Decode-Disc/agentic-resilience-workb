@@ -50,6 +50,25 @@ type HistoryPin = Extract<
     { kind: "history_read" }
 >;
 
+function historyCursor(
+    source: HistoryPin["source"],
+    requestId: Id<"agentOperationRequests">,
+) {
+    return `${CURSOR_PREFIX}${source}:${requestId}`;
+}
+
+/** Old pages retained the issuing request ID alone. Both formats still require its adopted receipt. */
+function cursorRequest(
+    source: HistoryPin["source"],
+    cursor: string | undefined | null,
+) {
+    if (!cursor?.startsWith(CURSOR_PREFIX) || cursor.length > 160) return null;
+    const suffix = cursor.slice(CURSOR_PREFIX.length);
+    if (!suffix.includes(":")) return suffix;
+    const prefix = `${source}:`;
+    return suffix.startsWith(prefix) ? suffix.slice(prefix.length) : null;
+}
+
 function validPosition(position: Position, source: HistoryPin["source"]) {
     return (
         position.source === source &&
@@ -221,15 +240,14 @@ async function resolveCursorChain(
     reference?: Id<"agentExecutionEvents">;
 } | null> {
     const { mission, source, cursor, generation, instructionVersion } = args;
-    if (!cursor.startsWith(CURSOR_PREFIX) || cursor.length > 160) return null;
-    const immediateId = ctx.db.normalizeId(
-        "agentOperationRequests",
-        cursor.slice(CURSOR_PREFIX.length),
-    );
+    const identity = cursorRequest(source, cursor);
+    const immediateId =
+        identity && ctx.db.normalizeId("agentOperationRequests", identity);
     if (!immediateId) return null;
 
     const visited = new Set<Id<"agentOperationRequests">>();
     if (args.currentRequestId) visited.add(args.currentRequestId);
+    let expectedCursor: string | undefined = cursor;
     let currentId: Id<"agentOperationRequests"> | null = immediateId;
     let expectedFrontier: Frontier | undefined;
     let immediateNext: Position | undefined;
@@ -271,13 +289,14 @@ async function resolveCursorChain(
             receipt.missionId !== prev.missionId
         )
             throw executionError("history_receipt_invalid");
-        verifyHistoryReadReceipt(
+        const issuedCursor = verifyHistoryReadReceipt(
             prev,
             receipt,
             receipt.generation,
             prev.outcome.valueJson,
         );
         if (
+            issuedCursor !== expectedCursor ||
             receipt.generation !== generation ||
             receipt.instructionVersion !== instructionVersion ||
             !receipt.next
@@ -310,19 +329,17 @@ async function resolveCursorChain(
         // Legacy intermediate pin omits frontier/reference; follow its predecessor cursor.
         const prevCursor: string | undefined =
             "cursor" in prev.input ? prev.input.cursor : undefined;
-        if (!prevCursor?.startsWith(CURSOR_PREFIX) || prevCursor.length > 160)
-            throw executionError("history_receipt_invalid");
-        const ancestorId: Id<"agentOperationRequests"> | null =
-            ctx.db.normalizeId(
-                "agentOperationRequests",
-                prevCursor.slice(CURSOR_PREFIX.length),
-            );
+        const ancestor = cursorRequest(source, prevCursor);
+        const ancestorId: Id<"agentOperationRequests"> | null = ancestor
+            ? ctx.db.normalizeId("agentOperationRequests", ancestor)
+            : null;
         if (!ancestorId) throw executionError("history_receipt_invalid");
         legacySteps.push({
             request: prev,
             receipt,
             valueJson: prev.outcome.valueJson,
         });
+        expectedCursor = prevCursor;
         currentId = ancestorId;
     }
 
@@ -695,7 +712,7 @@ function pageJson(
 ) {
     const page = {
         entries,
-        continueCursor: next ? `${CURSOR_PREFIX}${requestId}` : null,
+        continueCursor: next ? historyCursor(source, requestId) : null,
     };
     return JSON.stringify(
         source === "mission"
@@ -987,8 +1004,9 @@ export function verifyHistoryReadReceipt(
         page.entries.some(
             (entry) => (source === "mission") !== "sequence" in entry,
         ) ||
-        page.continueCursor !==
-            (receipt.next ? `${CURSOR_PREFIX}${request._id}` : null)
+        (receipt.next
+            ? cursorRequest(source, page.continueCursor) !== request._id
+            : page.continueCursor !== null)
     )
         throw executionError("history_receipt_invalid");
     for (const [index, entry] of page.entries.entries()) {
@@ -1053,6 +1071,7 @@ export function verifyHistoryReadReceipt(
             }
         }
     }
+    return page.continueCursor;
 }
 
 export const read = internalQuery({

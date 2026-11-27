@@ -16,7 +16,10 @@ import { parseEnv } from "node:util";
 import type { modelDescriptor } from "@convex/modelConfigurationSchema";
 import type { Infer } from "convex/values";
 import { createServer } from "vite";
-import { RESOURCE_POLICY_VERSION } from "../../../convex/resourcePolicy.ts";
+import {
+    RESOURCE_POLICY_VERSION,
+    STRUCTURED_OUTPUT_POLICY,
+} from "../../../convex/resourcePolicy.ts";
 import { evaluationTransport, validateAnswers } from "./decision-protocol.ts";
 import {
     EvaluationBudget,
@@ -341,6 +344,7 @@ export async function runStudyCli(
                     fetch: fetchCapture,
                     authority: {
                         resourcePolicy: RESOURCE_POLICY_VERSION,
+                        structuredOutputPolicy: STRUCTURED_OUTPUT_POLICY,
                         deadlineAt: Date.now() + manifest.timeoutSeconds * 1000,
                     },
                 };
@@ -1040,6 +1044,8 @@ export async function runStudyCli(
                                 const dependencies = {
                                     authority: {
                                         resourcePolicy: RESOURCE_POLICY_VERSION,
+                                        structuredOutputPolicy:
+                                            STRUCTURED_OUTPUT_POLICY,
                                         deadlineAt,
                                     },
                                     apiKey,

@@ -12,7 +12,10 @@ import {
     sourcesObservedDestination,
 } from "@convex/domain/documentaryAccess";
 import { requireDocumentaryMaterialRequest } from "@convex/domain/savedMaterial";
-import { acquireDocumentRequest } from "@convex/domain/savedMaterialOperations";
+import {
+    acquireDocumentRequest,
+    supportsScopedDocumentaryExamination,
+} from "@convex/domain/savedMaterialOperations";
 import { readSourceCandidateCapacity } from "@convex/domain/sourceCandidateCapacity";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import {
@@ -21,8 +24,8 @@ import {
 } from "@convex/domain/sourcePreparationAuthority";
 import { SourceReviewReads } from "@convex/domain/sourceReviewReads";
 import {
-    controlledDocumentaryUse,
-    documentaryPermittedUses,
+    controlledDocumentaryUses,
+    documentaryControlIssue,
 } from "@convex/domain/sourceSelectionPolicy";
 import {
     assertSourcesCompletionCapacity,
@@ -43,11 +46,15 @@ import {
 } from "@convex/domain/sources";
 import {
     authorizedDiscovery,
+    captureExaminationValidator,
     documentaryContributionValidator,
-    documentaryControlValidator,
+    type DocumentaryControlV2,
+    documentaryControlV2Validator,
     documentaryNeedValidator,
     documentaryStatusValidator,
+    documentarySubmissionResult,
     documentarySubmissionValue,
+    documentaryUseOrder,
     preparedMaterialInspectionValidator,
     preparedNeedInspectionValidator,
     type SourcesOperation,
@@ -67,7 +74,10 @@ import {
     hasWaitingWorkbenchInstructions,
     processWorkbenchInstructions,
 } from "@convex/domain/workbenchInstructions";
-import { getAgentDefinition } from "@convex/execution/agentCatalog";
+import {
+    getAgentDefinition,
+    getNativeOperation,
+} from "@convex/execution/agentCatalog";
 import type { AuditActor } from "@convex/execution/approvalContracts";
 import {
     requireDossierAuthority,
@@ -75,19 +85,31 @@ import {
     requireRunAuthority,
     requireSettlementAuthority,
 } from "@convex/execution/authority";
-import { executionError } from "@convex/execution/errors";
-import { operationHasStarted } from "@convex/execution/executionProtocol";
+import { executionError, executionFailureCode } from "@convex/execution/errors";
+import {
+    operationHasStarted,
+    operationOutcomeValidator,
+    ownsScheduledEpoch,
+} from "@convex/execution/executionProtocol";
 import { recordContextObservation } from "@convex/execution/journal";
 import { missionObjectiveKey } from "@convex/execution/missionData";
+import { operationSuccess } from "@convex/execution/operationResults";
 import { registerOperationWaitEvent } from "@convex/execution/operations";
 import {
     notifyResearchControlWaits,
     recordResearchObservation,
     suspendInterruptedResearch,
 } from "@convex/execution/researchControl";
+import {
+    completeRetainedText,
+    retainedTextRange,
+    verifyRetainedText,
+} from "@convex/execution/retainedText";
 import { requireQualificationResultDeadline } from "@convex/providerCalls";
 import { transitionResearchRun } from "@convex/researchRuns";
 import {
+    CONVEX_MAX_DOCUMENT_BYTES,
+    MAX_OPERATION_RESULT_BYTES,
     SOURCES_HANDOFF_READ_CAPACITY,
     SOURCES_MAX_EVIDENCE_REFERENCES,
 } from "@convex/resourcePolicy";
@@ -148,16 +170,33 @@ export const inspect = internalQuery({
 const workArgs = {
     requestId: v.id("agentOperationRequests"),
     expectedGeneration: v.number(),
+    epoch: v.optional(v.number()),
 };
 async function workContext(
     ctx: QueryCtx,
     args: {
         requestId: Id<"agentOperationRequests">;
         expectedGeneration: number;
+        epoch?: number;
+        recoveryAdoption?: true;
     },
     observation = false,
 ) {
     const request = await ctx.db.get(args.requestId);
+    const fencedAdoption =
+        args.recoveryAdoption &&
+        request?.scheduledExecution?.phase === "waiting_provider" &&
+        request.scheduledExecution.epoch === args.epoch &&
+        (request.adoptionGeneration ?? request.expectedGeneration) ===
+            args.expectedGeneration;
+    if (
+        request?.scheduledExecution &&
+        !fencedAdoption &&
+        (args.epoch === undefined ||
+            !ownsScheduledEpoch(request, args.expectedGeneration, args.epoch) ||
+            request.scheduledExecution.phase !== "running")
+    )
+        throw executionError("stale_execution");
     if (request?.input.kind === "acquire_document") {
         const target = await requireSourcesAcquisitionRequest(
             ctx,
@@ -173,8 +212,10 @@ async function workContext(
     }
     if (
         !request ||
-        !operationHasStarted(request) ||
-        request.expectedGeneration !== args.expectedGeneration ||
+        (!fencedAdoption &&
+            (!operationHasStarted(request) ||
+                (request.scheduledExecution?.dispatchGeneration ??
+                    request.expectedGeneration) !== args.expectedGeneration)) ||
         request.pin?.kind !== "sources_v1" ||
         !validate(sourcesOperationValidator, request.input)
     )
@@ -212,6 +253,8 @@ async function workContext(
 }
 
 const proposalReturn = v.object({
+    scheduledRecovery: v.optional(v.literal("structured_model_v1")),
+    originalExaminationJson: v.optional(v.string()),
     needContext: v.array(documentaryNeedValidator),
     preparation: schema.doc("sourceSelectionProposalRebuilds"),
     input: v.union(sourcesOperationValidator, acquireDocumentRequest),
@@ -221,6 +264,24 @@ const proposalReturn = v.object({
     discoveryLimit: v.optional(v.number()),
     discovery: v.optional(authorizedDiscovery),
 });
+type DocumentaryCheckSubject = Pick<
+    Extract<SourcesOperation, { kind: "request_documentary_check" }>,
+    "kind" | "sourceId" | "proposition" | "needId" | "targets"
+>;
+
+function checkedProposition(input: DocumentaryCheckSubject) {
+    return {
+        id: "target",
+        version: 1,
+        needIds: [input.needId],
+        statement: input.proposition,
+        period: "as referenced",
+        modality: "documentary check",
+        attribution: "as referenced",
+        kind: "context" as const,
+    };
+}
+
 export const reserve = internalMutation({
     args: workArgs,
     returns: proposalReturn,
@@ -255,13 +316,31 @@ export const reserve = internalMutation({
                   : [input.needId];
         if (needIds.some((id) => !data.needs.some((n) => n.id === id)))
             throw executionError("documentary_need_unknown");
-        if (data.work.some((w) => w.requestId === request._id))
+        const scheduled = request.scheduledExecution;
+        const firstInvocationId =
+            scheduled?.phase === "running"
+                ? scheduled.firstInvocationId
+                : undefined;
+        const priorWork = data.work.find((w) => w.requestId === request._id);
+        if (priorWork && !firstInvocationId)
             throw executionError("operation_outcome_unknown");
         if (
             input.kind === "submit_documentary_qualification" ||
             input.kind === "request_documentary_check"
         ) {
-            if (await hasEngagedSourcesControl(reads, data))
+            if (
+                await hasEngagedSourcesControl(
+                    reads,
+                    priorWork
+                        ? {
+                              ...data,
+                              work: data.work.filter(
+                                  (w) => w.requestId !== request._id,
+                              ),
+                          }
+                        : data,
+                )
+            )
                 throw executionError("documentary_control_in_progress");
         }
         const acquires =
@@ -294,7 +373,7 @@ export const reserve = internalMutation({
                   : "controls";
         const resources = sourcesResourceStatus(data);
         const block = resources[field].blockCode ?? resources.work.blockCode;
-        if (block) throw executionError(block);
+        if (block && !priorWork) throw executionError(block);
         const discovery =
             input.kind === "discover_sources_for_need"
                 ? authorizeDocumentaryDiscovery(
@@ -439,19 +518,7 @@ export const reserve = internalMutation({
                 data,
                 input.evidence,
             );
-            contributions = [
-                {
-                    id: "target",
-                    version: 1,
-                    needIds,
-                    statement: input.proposition,
-                    period: "as referenced",
-                    modality: "documentary check",
-                    attribution: "as referenced",
-                    kind: "context",
-                    evidence,
-                },
-            ];
+            contributions = [{ ...checkedProposition(input), evidence }];
             if (input.targets?.length) {
                 if (input.targets.length > 15)
                     throw executionError("documentary_check_invalid");
@@ -469,7 +536,10 @@ export const reserve = internalMutation({
                     if (
                         !contribution ||
                         task?.runId !== run._id ||
-                        contribution.statement !== input.proposition
+                        contribution.statement !== input.proposition ||
+                        (target.needId !== undefined &&
+                            (target.needId !== input.needId ||
+                                !contribution.needIds.includes(target.needId)))
                     )
                         throw executionError("documentary_target_invalid");
                     contributions.push({
@@ -521,20 +591,22 @@ export const reserve = internalMutation({
                       0,
                   )
                 : 0;
-        const nextData = {
-            ...data,
-            [field]: data[field] + 1,
-            work: [
-                ...data.work,
-                {
-                    requestId: request._id,
-                    kind: input.kind,
-                    needIds,
-                    ...(discovery ? { discovery } : {}),
-                    ...(sourceId ? { sourceId } : {}),
-                },
-            ],
-        };
+        const nextData = priorWork
+            ? data
+            : {
+                  ...data,
+                  [field]: data[field] + 1,
+                  work: [
+                      ...data.work,
+                      {
+                          requestId: request._id,
+                          kind: input.kind,
+                          needIds,
+                          ...(discovery ? { discovery } : {}),
+                          ...(sourceId ? { sourceId } : {}),
+                      },
+                  ],
+              };
         await assertSourcesCompletionCapacity(
             reads,
             preparation,
@@ -557,17 +629,55 @@ export const reserve = internalMutation({
                         ? { input }
                         : {}),
                     ...(discovery?.focus ? { discovery } : {}),
+                    ...(input.kind === "submit_documentary_qualification" ||
+                    input.kind === "request_documentary_check"
+                        ? {
+                              controlVersion: 2,
+                              restrictions:
+                                  input.kind === "request_documentary_check"
+                                      ? (input.targets ?? [])
+                                      : [],
+                          }
+                        : {}),
                     contributions,
                     needs: data.needs.filter((n) =>
                         contributions.some((c) => c.needIds.includes(n.id)),
                     ),
                 }),
             );
-        await ctx.db.patch(preparation._id, {
-            sourcesMission: nextData,
-        });
+        let originalExaminationJson: string | undefined;
+        if (firstInvocationId) {
+            const original = await ctx.db.get(firstInvocationId);
+            if (
+                original?.preparationInputHash !== inputHash ||
+                !priorWork ||
+                !original.inputJson ||
+                sha256Hex(original.inputJson) !== original.inputContentHash
+            )
+                throw executionError("version_conflict");
+            originalExaminationJson = original.inputJson;
+        } else
+            await ctx.db.patch(preparation._id, { sourcesMission: nextData });
+        const mission = request.missionId
+            ? await ctx.db.get(request.missionId)
+            : null;
+        const definition = mission
+            ? getAgentDefinition(
+                  mission.definitionId,
+                  mission.definitionVersion,
+              )
+            : null;
+        const operation =
+            definition?.operations[input.kind] ??
+            getNativeOperation(input.kind);
         return {
             preparation,
+            originalExaminationJson,
+            ...(operation?.effectKind === "durable_effect" &&
+            operation.scheduledAction &&
+            operation.scheduledRecovery
+                ? { scheduledRecovery: operation.scheduledRecovery }
+                : {}),
             input,
             contributions,
             inputHash,
@@ -602,12 +712,109 @@ export const assertActive = internalQuery({
     },
 });
 
+async function documentaryControlReceipt(
+    ctx: QueryCtx,
+    preparationId: Id<"sourceSelectionProposalRebuilds">,
+    input:
+        | { kind: "submit_documentary_qualification" }
+        | DocumentaryCheckSubject,
+    taskId: Id<"aiTaskResults">,
+    reference: Id<"agentExecutionEvents">,
+    control: DocumentaryControlV2,
+): Promise<import("convex/values").Infer<typeof documentarySubmissionValue>> {
+    const current = await ctx.db.get(preparationId);
+    if (!current?.sourcesMission)
+        throw executionError("sources_mission_unavailable");
+    let contributions: Array<
+        { id: string; version: number } & ReturnType<
+            typeof controlledDocumentaryUses
+        >
+    >;
+    if (input.kind === "request_documentary_check" && !input.targets?.length) {
+        const proposition = checkedProposition(input);
+        const decision = await readPreparationSourceDecision(ctx.db, {
+            runId: current.runId,
+            corpusRevisionId: current.corpusRevisionId,
+            sourceId: input.sourceId,
+        });
+        contributions = [
+            {
+                ...proposition,
+                ...controlledDocumentaryUses(
+                    proposition,
+                    decision === "rejected" ? null : control,
+                ),
+            },
+        ];
+    } else {
+        const qualifications =
+            input.kind === "submit_documentary_qualification"
+                ? [taskId]
+                : [
+                      ...new Set(
+                          input.targets?.map(
+                              (target) => target.qualificationTaskId,
+                          ),
+                      ),
+                  ];
+        const projected = await controlledSourcesContributions(ctx, {
+            ...current,
+            sourcesMission: { ...current.sourcesMission, qualifications },
+        });
+        contributions = projected.flatMap(
+            (qualification) => qualification.contributions,
+        );
+    }
+    const needOrder = [
+        ...new Set(contributions.flatMap(({ needs }) => Object.keys(needs))),
+    ].sort();
+    const receipt = {
+        taskId,
+        controlVersion: 2 as const,
+        reference,
+        objectionCount: control.objections.length,
+        needOrder,
+        effectiveContributions: contributions.map(
+            ({ id, version, permittedUse, needs }) => ({
+                id,
+                version,
+                permittedUse,
+                usesByNeed: needOrder.map((need) => needs[need] ?? null),
+            }),
+        ),
+    };
+    if (
+        new TextEncoder().encode(JSON.stringify(receipt)).length >
+        MAX_OPERATION_RESULT_BYTES
+    )
+        throw executionError("sources_result_capacity");
+    return receipt;
+}
+
+async function retainedControlTask(
+    ctx: QueryCtx,
+    runId: Id<"researchRuns">,
+    taskType: "documentary_control" | "documentary_qualification",
+    inputHash: string,
+) {
+    return ctx.db
+        .query("aiTaskResults")
+        .withIndex("by_run_and_task_type_and_input_hash", (q) =>
+            q
+                .eq("runId", runId)
+                .eq("taskType", taskType)
+                .eq("inputHash", inputHash),
+        )
+        .unique();
+}
+
 export const retainControl = internalMutation({
     args: {
         ...workArgs,
         inputHash: v.string(),
         contributions: v.array(documentaryContributionValidator),
-        control: documentaryControlValidator,
+        control: documentaryControlV2Validator,
+        recoveryAdoption: v.optional(v.literal(true)),
         providerCallId: v.optional(v.id("providerCalls")),
     },
     returns: documentarySubmissionValue,
@@ -640,41 +847,20 @@ export const retainControl = internalMutation({
             (!call ||
                 call.runId !== run._id ||
                 call.preparationId !== preparation._id ||
+                (request.scheduledExecution &&
+                    call.operationRequestId === request._id &&
+                    call.operationEpoch !== args.epoch) ||
                 call.inputHash !== args.inputHash ||
                 call.status !== "succeeded" ||
                 call.operation !== "source_documentary_control")
         )
             throw executionError("documentary_control_unavailable");
         if (call) await requireQualificationResultDeadline(ctx, call);
-        if (
-            args.control.findings.length !== args.contributions.length ||
-            new Set(args.control.findings.map((f) => f.contributionId)).size !==
-                args.contributions.length ||
-            args.contributions.some(
-                (c) =>
-                    !args.control.findings.some(
-                        (f) => f.contributionId === c.id,
-                    ),
-            )
-        )
-            throw executionError("documentary_control_invalid");
-        for (const contribution of args.contributions) {
-            const index = args.control.findings.findIndex(
-                (finding) => finding.contributionId === contribution.id,
-            );
-            const finding = args.control.findings[index];
-            const permitted = documentaryPermittedUses(contribution.kind);
-            if (
-                finding &&
-                !permitted.some((use) => use === finding.permittedUse)
-            )
-                throw executionError("documentary_control_invalid", [
-                    {
-                        path: `control.findings[${index}].permittedUse`,
-                        expected: `Contribution ${contribution.id} (${contribution.kind}) permits only ${permitted.join(", ")}. No qualification was adopted.`,
-                    },
-                ]);
-        }
+        const issue = documentaryControlIssue(args.contributions, args.control);
+        if (issue)
+            throw executionError("documentary_control_invalid", [
+                { path: "control", expected: issue },
+            ]);
         const sourceId = "sourceId" in input ? input.sourceId : undefined;
         if (!sourceId) throw executionError("documentary_control_invalid");
         const reads = new SourceReviewReads(
@@ -682,58 +868,29 @@ export const retainControl = internalMutation({
             run._id,
             SOURCES_HANDOFF_READ_CAPACITY,
         );
-        const result = async (taskId: Id<"aiTaskResults">) => {
-            const current = await ctx.db.get(preparation._id);
-            if (!current?.sourcesMission)
-                throw executionError("sources_mission_unavailable");
-            const qualifications =
-                input.kind === "submit_documentary_qualification"
-                    ? [taskId]
-                    : input.kind === "request_documentary_check"
-                      ? [
-                            ...new Set(
-                                input.targets?.map(
-                                    (target) => target.qualificationTaskId,
-                                ) ?? [],
-                            ),
-                        ]
-                      : [];
-            const projected = await controlledSourcesContributions(
+        if (
+            input.kind !== "submit_documentary_qualification" &&
+            input.kind !== "request_documentary_check"
+        )
+            throw executionError("documentary_control_invalid");
+        const existing = await retainedControlTask(
+            ctx,
+            run._id,
+            "documentary_control",
+            args.inputHash,
+        );
+        const result = (
+            taskId: Id<"aiTaskResults">,
+            reference: Id<"agentExecutionEvents">,
+        ) =>
+            documentaryControlReceipt(
                 ctx,
-                {
-                    ...current,
-                    sourcesMission: {
-                        ...current.sourcesMission,
-                        qualifications,
-                    },
-                },
-                reads,
-            );
-            return {
+                preparation._id,
+                input,
                 taskId,
-                control: args.control,
-                effectiveContributions: projected.flatMap((qualification) =>
-                    qualification.contributions.map((contribution) => ({
-                        id: contribution.id,
-                        version: contribution.version,
-                        permittedUse: contribution.permittedUse,
-                        useStatus: contribution.useStatus,
-                        diagnostic:
-                            contribution.finding?.diagnostic ??
-                            "No supported control finding is available.",
-                    })),
-                ),
-            };
-        };
-        const existing = await ctx.db
-            .query("aiTaskResults")
-            .withIndex("by_run_and_task_type_and_input_hash", (q) =>
-                q
-                    .eq("runId", run._id)
-                    .eq("taskType", "documentary_control")
-                    .eq("inputHash", args.inputHash),
-            )
-            .unique();
+                reference,
+                args.control,
+            );
         const base = {
             runId: run._id,
             corpusRevisionId: preparation.corpusRevisionId,
@@ -744,46 +901,77 @@ export const retainControl = internalMutation({
             ...(simulation
                 ? { fixtureId: "sources-simulation", fixtureVersion: "1" }
                 : {}),
-            schemaVersion: "documentary-control-v1",
+            schemaVersion: "documentary-control-v2",
             adapterVersion: "one-shot-v1",
             inputHash: args.inputHash,
-            providerCallId: call?._id,
+            ...(call ? { providerCallId: call._id } : {}),
             createdAt: Date.now(),
         };
+        const output = {
+            kind: "documentary_control" as const,
+            preparationId: preparation._id,
+            evidence: args.contributions.flatMap((c) => c.evidence),
+            inputHash: args.inputHash,
+            examination: {
+                state: "examined" as const,
+                contractVersion: 2 as const,
+                control: args.control,
+            },
+        };
+        if (
+            existing &&
+            (existing.output.kind !== "documentary_control" ||
+                stableStringify(existing.output) !== stableStringify(output) ||
+                existing.providerCallId !== call?._id)
+        )
+            throw executionError("documentary_control_invalid");
+        const controlRecord = {
+            ...base,
+            taskType: "documentary_control" as const,
+            output,
+        };
+        if (getDocumentSize(controlRecord) > CONVEX_MAX_DOCUMENT_BYTES)
+            throw executionError("sources_result_capacity");
         const controlTaskId =
             existing?._id ??
-            (await ctx.db.insert("aiTaskResults", {
-                ...base,
-                taskType: "documentary_control",
-                output: {
-                    kind: "documentary_control",
-                    preparationId: preparation._id,
-                    evidence: args.contributions.flatMap((c) => c.evidence),
-                    inputHash: args.inputHash,
-                    control: args.control,
-                },
-            }));
+            (await ctx.db.insert("aiTaskResults", controlRecord));
         if (input.kind === "request_documentary_check") {
             const restrictions = (input.targets ?? []).flatMap((target) => {
-                const finding = args.control.findings.find(
-                    (item) => item.contributionId === target.contributionId,
+                const contribution = args.contributions.find(
+                    (item) => item.id === target.contributionId,
                 );
-                if (
-                    !finding ||
-                    (finding.conclusion === "supported" &&
-                        finding.permittedUse === "documentary")
-                )
-                    return [];
-                return [
-                    {
-                        ...target,
-                        controlTaskId,
-                        permittedUse:
-                            finding.conclusion === "supported"
-                                ? finding.permittedUse
-                                : ("blocked" as const),
-                    },
-                ];
+                if (!contribution)
+                    throw executionError("documentary_target_invalid");
+                const uses = controlledDocumentaryUses(
+                    contribution,
+                    args.control,
+                );
+                const rootUse = uses.permittedUse;
+                const scopes =
+                    target.needId !== undefined
+                        ? [target.needId]
+                        : [undefined, ...contribution.needIds];
+                return scopes.flatMap((needId) => {
+                    const use =
+                        needId === undefined
+                            ? rootUse
+                            : (uses.needs[needId] ?? "blocked");
+                    if (
+                        use === "documentary" ||
+                        (target.needId === undefined &&
+                            needId !== undefined &&
+                            use === rootUse)
+                    )
+                        return [];
+                    return [
+                        {
+                            ...target,
+                            ...(needId !== undefined ? { needId } : {}),
+                            controlTaskId,
+                            permittedUse: use,
+                        },
+                    ];
+                });
             });
             if (restrictions.length)
                 await ctx.db.patch(preparation._id, {
@@ -791,11 +979,23 @@ export const retainControl = internalMutation({
                         ...data,
                         restrictedContributions: [
                             ...data.restrictedContributions,
-                            ...restrictions,
+                            ...restrictions.filter(
+                                (restriction) =>
+                                    !data.restrictedContributions.some(
+                                        (prior) =>
+                                            prior.controlTaskId ===
+                                                restriction.controlTaskId &&
+                                            prior.contributionId ===
+                                                restriction.contributionId &&
+                                            prior.version ===
+                                                restriction.version &&
+                                            prior.needId === restriction.needId,
+                                    ),
+                            ),
                         ],
                     },
                 });
-            await recordContextObservation(ctx, run._id, {
+            const reference = await recordContextObservation(ctx, run._id, {
                 key: `documentary-restrictions:${controlTaskId}`,
                 topic: "documentary",
                 actor: { type: "system" },
@@ -807,7 +1007,7 @@ export const retainControl = internalMutation({
                     control: args.control,
                 },
             });
-            return result(controlTaskId);
+            return result(controlTaskId, reference);
         }
         if (input.kind !== "submit_documentary_qualification")
             throw executionError("documentary_control_invalid");
@@ -856,10 +1056,25 @@ export const retainControl = internalMutation({
             throw executionError("qualification_version_conflict");
         if (
             previous?.output.kind === "documentary_qualification" &&
+            previous.output.controlTaskId === controlTaskId &&
             stableStringify(previous.output.contributions) ===
                 stableStringify(reconstructed)
-        )
-            return result(previous._id);
+        ) {
+            const observation = await ctx.db
+                .query("agentExecutionEvents")
+                .withIndex("by_run_and_context_key", (q) =>
+                    q
+                        .eq("runId", run._id)
+                        .eq(
+                            "contextObservation.key",
+                            `documentary-qualification:${previous._id}`,
+                        ),
+                )
+                .unique();
+            if (!observation)
+                throw executionError("documentary_control_unavailable");
+            return result(previous._id, observation._id);
+        }
         const taskId = await ctx.db.insert("aiTaskResults", {
             ...base,
             schemaVersion: "documentary-qualification-v1",
@@ -890,7 +1105,7 @@ export const retainControl = internalMutation({
                 ],
             },
         });
-        await recordContextObservation(ctx, run._id, {
+        const reference = await recordContextObservation(ctx, run._id, {
             key: `documentary-qualification:${taskId}`,
             topic: "documentary",
             actor: { type: "system" },
@@ -905,7 +1120,175 @@ export const retainControl = internalMutation({
                 control: args.control,
             },
         });
-        return result(taskId);
+        return result(taskId, reference);
+    },
+});
+
+/** Resolves factual control or a validated one-shot commit before the operation is marked unknown. */
+export const recoverScheduledControl = internalMutation({
+    args: workArgs,
+    returns: v.union(operationOutcomeValidator, v.null()),
+    handler: async (
+        ctx,
+        args,
+    ): Promise<
+        import("convex/values").Infer<typeof operationOutcomeValidator> | null
+    > => {
+        const request = await ctx.db.get(args.requestId);
+        if (
+            !request?.runId ||
+            request.pin?.kind !== "sources_v1" ||
+            (request.input.kind !== "submit_documentary_qualification" &&
+                request.input.kind !== "request_documentary_check")
+        )
+            return null;
+        const call = await ctx.db
+            .query("providerCalls")
+            .withIndex("by_operation_request_and_attempt", (q) =>
+                q.eq("operationRequestId", request._id),
+            )
+            .order("desc")
+            .first();
+        const preparationId = request.pin.preparationId;
+        const runId = request.runId;
+        if (
+            !call?.inputHash ||
+            !call.invocationId ||
+            call.service !== "model" ||
+            call.operation !== "source_documentary_control" ||
+            call.status !== "succeeded" ||
+            call.preparationId !== preparationId ||
+            call.runId !== request.runId ||
+            (request.scheduledExecution &&
+                (call.operationEpoch !== request.scheduledExecution.epoch ||
+                    call.executionGeneration !==
+                        request.scheduledExecution.dispatchGeneration))
+        )
+            return null;
+        const outcome = (
+            receipt: import("convex/values").Infer<
+                typeof documentarySubmissionValue
+            >,
+        ) =>
+            operationSuccess(documentarySubmissionResult, receipt, {
+                progressKeys: [sha256Hex(`control:${call.inputHash}`)],
+            });
+        const control = await retainedControlTask(
+            ctx,
+            request.runId,
+            "documentary_control",
+            call.inputHash,
+        );
+        if (
+            control?.output.kind === "documentary_control" &&
+            control.output.examination.state === "examined" &&
+            control.providerCallId === call._id
+        ) {
+            const check = request.input.kind === "request_documentary_check";
+            const task = check
+                ? control
+                : await retainedControlTask(
+                      ctx,
+                      request.runId,
+                      "documentary_qualification",
+                      call.inputHash,
+                  );
+            if (
+                task &&
+                (check ||
+                    (task.output.kind === "documentary_qualification" &&
+                        task.output.controlTaskId === control._id))
+            ) {
+                const key = check
+                    ? `documentary-restrictions:${task._id}`
+                    : `documentary-qualification:${task._id}`;
+                const event = await ctx.db
+                    .query("agentExecutionEvents")
+                    .withIndex("by_run_and_context_key", (q) =>
+                        q.eq("runId", runId).eq("contextObservation.key", key),
+                    )
+                    .unique();
+                if (event?.contextObservation)
+                    return outcome(
+                        await documentaryControlReceipt(
+                            ctx,
+                            preparationId,
+                            request.input,
+                            task._id,
+                            event._id,
+                            control.output.examination.control,
+                        ),
+                    );
+            }
+        }
+        const invocation = await ctx.db.get(call.invocationId);
+        if (
+            !invocation ||
+            invocation.providerCallId !== call._id ||
+            invocation.preparationInputHash !== call.inputHash ||
+            invocation.generation !== call.executionGeneration
+        )
+            return null;
+        if (invocation.status === "blocked" && invocation.blockCode)
+            return { kind: "unavailable", code: invocation.blockCode };
+        if (invocation.status !== "returned" || !invocation.inputJson)
+            return null;
+        const run = await ctx.db.get(runId);
+        if (
+            run?.executionStatus !== "running" ||
+            run.executionGeneration !== args.expectedGeneration ||
+            run.researchPauseRequested
+        )
+            return null;
+        let output = invocation.outputJson;
+        if (invocation.outputTextId) {
+            const text = await completeRetainedText(
+                ctx,
+                invocation.outputTextId,
+            );
+            output = verifyRetainedText(
+                text,
+                await retainedTextRange(ctx, text, 0, text.characters),
+            );
+        }
+        if (!output) return null;
+        const observed: unknown = JSON.parse(output);
+        const original: unknown = JSON.parse(invocation.inputJson);
+        if (
+            !validate(
+                v.object({
+                    status: v.literal("succeeded"),
+                    result: documentaryControlV2Validator,
+                }),
+                observed,
+            ) ||
+            !validate(
+                v.object({
+                    contributions: v.array(documentaryContributionValidator),
+                }),
+                original,
+                { allowUnknownFields: true },
+            )
+        )
+            return null;
+        try {
+            return outcome(
+                await ctx.runMutation(internal.sourcesMission.retainControl, {
+                    ...args,
+                    ...(request.scheduledExecution?.phase === "waiting_provider"
+                        ? { recoveryAdoption: true as const }
+                        : {}),
+                    inputHash: call.inputHash,
+                    contributions: original.contributions,
+                    control: observed.result,
+                    providerCallId: call._id,
+                }),
+            );
+        } catch (error) {
+            const code = executionFailureCode(error);
+            if (!code) throw error;
+            return { kind: "refused", code };
+        }
     },
 });
 
@@ -1297,6 +1680,160 @@ export async function requestSourcesSettlement(
     );
 }
 
+async function activeCaptureQualification(
+    ctx: QueryCtx,
+    runId: Id<"researchRuns">,
+    captureId: Id<"sourceCaptures">,
+    preparation: Doc<"sourceSelectionProposalRebuilds"> | null,
+) {
+    if (!preparation?.sourcesMission) return null;
+    const data = preparation.sourcesMission;
+    const reads = new SourceReviewReads(
+        ctx.db,
+        runId,
+        SOURCES_HANDOFF_READ_CAPACITY,
+    );
+    const task = await reads.latestDocumentaryQualification(
+        preparation._id,
+        captureId,
+    );
+    if (!task || !data.qualifications.includes(task._id)) return null;
+    const [qualification] = await controlledSourcesContributions(
+        ctx,
+        {
+            ...preparation,
+            sourcesMission: { ...data, qualifications: [task._id] },
+        },
+        reads,
+    );
+    if (!qualification) return null;
+    const {
+        taskId,
+        version,
+        controlTaskId,
+        objectionCount = 0,
+        contributions,
+        examination,
+    } = qualification;
+    return {
+        identity: { taskId, version, captureId, controlTaskId, objectionCount },
+        contributions,
+        historical: examination && {
+            state: "not_examined" as const,
+            originalReference: examination.originalReference,
+        },
+    };
+}
+
+async function captureExamination(
+    ctx: QueryCtx,
+    runId: Id<"researchRuns">,
+    captureId: Id<"sourceCaptures">,
+    preparation: Doc<"sourceSelectionProposalRebuilds"> | null,
+): Promise<import("convex/values").Infer<typeof captureExaminationValidator>> {
+    const qualification = await activeCaptureQualification(
+        ctx,
+        runId,
+        captureId,
+        preparation,
+    );
+    if (!qualification) return { state: "not_examined" };
+    const { identity, historical } = qualification;
+    if (historical) return historical;
+    const needOrder = [
+        ...new Set(
+            qualification.contributions.flatMap(({ needs }) =>
+                Object.keys(needs),
+            ),
+        ),
+    ].sort();
+    const needIndexes = new Map(needOrder.map((need, index) => [need, index]));
+    const event = await ctx.db
+        .query("agentExecutionEvents")
+        .withIndex("by_run_and_context_key", (q) =>
+            q
+                .eq("runId", runId)
+                .eq(
+                    "contextObservation.key",
+                    `documentary-qualification:${identity.taskId}`,
+                ),
+        )
+        .unique();
+    return {
+        state: "examined",
+        qualification: {
+            ...identity,
+            needOrder,
+            useOrder: [...documentaryUseOrder],
+            reference: event?._id,
+            contributions: qualification.contributions.map(
+                ({ id, version, permittedUse, needs, objections }) => ({
+                    id,
+                    version,
+                    permittedUse,
+                    usesByNeed: needOrder.map((need) => {
+                        const use = needs[need];
+                        return use === undefined
+                            ? null
+                            : documentaryUseOrder.indexOf(use);
+                    }),
+                    objections: objections.map(({ needIds, ...objection }) => ({
+                        ...objection,
+                        needIndexes: needIds.map((need) => {
+                            if (need === null) return null;
+                            const index = needIndexes.get(need);
+                            if (index === undefined)
+                                throw executionError(
+                                    "documentary_control_invalid",
+                                );
+                            return index;
+                        }),
+                    })),
+                }),
+            ),
+        },
+    };
+}
+
+/** Supplies the same examination projection through a capture-bound reading. */
+export const inspectCaptureExamination = internalQuery({
+    args: {
+        requestId: v.id("agentOperationRequests"),
+        expectedGeneration: v.number(),
+    },
+    returns: v.union(captureExaminationValidator, v.null()),
+    handler: async (
+        ctx,
+        args,
+    ): Promise<
+        import("convex/values").Infer<typeof captureExaminationValidator> | null
+    > => {
+        const admitted = await requireDocumentaryMaterialRequest(ctx, args);
+        if (
+            !admitted.mission ||
+            !supportsScopedDocumentaryExamination(
+                admitted.mission.definitionId,
+                admitted.mission.definitionVersion,
+            ) ||
+            !admitted.capture
+        )
+            return null;
+        const { run } = await requireDossierAuthority(
+            ctx,
+            admitted.capture.runId,
+        );
+        const preparation = run.sourcePreparationId
+            ? await ctx.db.get(run.sourcePreparationId)
+            : null;
+        return captureExamination(
+            ctx,
+            run._id,
+            admitted.capture._id,
+            preparation,
+        );
+    },
+});
+
 export const materialStatus = internalQuery({
     args: {
         runId: v.optional(v.id("researchRuns")),
@@ -1327,25 +1864,15 @@ export const materialStatus = internalQuery({
         const preparation = run.sourcePreparationId
             ? await ctx.db.get(run.sourcePreparationId)
             : null;
-        let qualification: Doc<"aiTaskResults"> | null = null;
-        for (const id of [
-            ...(preparation?.sourcesMission?.qualifications ?? []),
-        ].reverse()) {
-            const task = await ctx.db.get(id);
-            if (task?.sourceId === args.sourceId) {
-                qualification = task;
-                break;
-            }
-        }
-        const control =
-            qualification?.output.kind === "documentary_qualification"
-                ? await ctx.db.get(qualification.output.controlTaskId)
-                : null;
-        const restrictions =
-            preparation?.sourcesMission?.restrictedContributions ?? [];
         const preview = (text: string, length: number) =>
             Array.from(text).slice(0, length).join("");
         const capture = allowed.capture;
+        const qualification = await activeCaptureQualification(
+            ctx,
+            run._id,
+            capture._id,
+            preparation,
+        );
         const acquisitionAvailable =
             !mission ||
             !!getAgentDefinition(
@@ -1376,60 +1903,30 @@ export const materialStatus = internalQuery({
                       })),
                   }
                 : {}),
-            qualification:
-                qualification?.output.kind === "documentary_qualification" &&
-                control?.output.kind === "documentary_control"
-                    ? {
-                          taskId: qualification._id,
-                          version: qualification.output.version,
-                          controlTaskId: control._id,
-                          coherence: control.output.control.coherence,
-                          limitationsCount:
-                              control.output.control.limitations.length,
-                          contributions: qualification.output.contributions.map(
-                              (contribution) => {
-                                  const finding =
-                                      control.output.kind ===
-                                      "documentary_control"
-                                          ? control.output.control.findings.find(
-                                                (f) =>
-                                                    f.contributionId ===
-                                                    contribution.id,
-                                            )
-                                          : undefined;
-                                  const diagnostic =
-                                      finding?.diagnostic ??
-                                      "No documentary control is available.";
-                                  const diagnosticPreview = preview(
-                                      diagnostic,
-                                      96,
-                                  );
-                                  return {
-                                      id: contribution.id,
-                                      version: contribution.version,
-                                      permittedUse: controlledDocumentaryUse(
-                                          contribution,
-                                          control.output.kind ===
-                                              "documentary_control"
-                                              ? control.output.control
-                                              : null,
-                                          restrictions,
-                                      ),
-                                      diagnosticPreview,
-                                      diagnosticComplete:
-                                          diagnosticPreview === diagnostic,
-                                      restrictionCount: restrictions.filter(
-                                          (r) =>
-                                              r.contributionId ===
-                                                  contribution.id &&
-                                              r.version ===
-                                                  contribution.version,
-                                      ).length,
-                                  };
-                              },
+            examination: qualification
+                ? (qualification.historical ?? {
+                      state: "examined",
+                      qualification: {
+                          ...qualification.identity,
+                          contributions: qualification.contributions.map(
+                              ({
+                                  id,
+                                  version,
+                                  permittedUse,
+                                  needs,
+                                  objections,
+                              }) => ({
+                                  id,
+                                  version,
+                                  permittedUse,
+                                  needs,
+                                  objections,
+                              }),
                           ),
-                      }
-                    : null,
+                      },
+                  })
+                : { state: "not_examined" },
+            qualification: null,
         };
     },
 });
@@ -1449,7 +1946,8 @@ export const cachedControl = internalQuery({
             )
             .unique();
         return task?.output.kind === "documentary_control" &&
-            task.output.preparationId === preparation._id
+            task.output.preparationId === preparation._id &&
+            task.output.examination.state === "examined"
             ? task
             : null;
     },

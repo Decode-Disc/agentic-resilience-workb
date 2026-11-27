@@ -1,10 +1,13 @@
 import {
+    exceededQualificationAllowance,
     qualificationCategory,
+    qualificationModelReservationUsd,
+    qualificationModelScopes,
     readQualificationUsage,
 } from "@convex/qualificationUsage";
 import { PERSISTENCE_PAGE_SIZE } from "@convex/resourcePolicy";
 import { paginationOptsValidator } from "convex/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { zodToConvex } from "convex-helpers/server/zod4";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -15,13 +18,22 @@ import {
 } from "./_generated/server";
 import { sha256Hex, stableStringify } from "./domain/sourcePassages";
 import { preparationFailureClass } from "./domain/sourcePreparationAuthority";
-import { resolveReasoningPreference } from "./integrations/modelRouting";
+import { getAgentDefinition } from "./execution/agentCatalog";
+import { agentToolSchemas } from "./execution/agentDefinition";
+import { piInputProfileKey } from "./integrations/modelInput";
+import {
+    modelConfigurationKey,
+    resolveReasoningPreference,
+} from "./integrations/modelRouting";
 import { readResponseControlPolicy } from "./modelConfiguration";
+import { selectedTaskMethodVersion } from "./qualificationAgentMethods";
 import {
     analysisPricingAuthority,
     analysisProviderSchema,
     analysisReceiptSchema,
     analysisUsageChargeMicros,
+    type CampaignLimits,
+    type CampaignManifest,
     campaignConfiguration,
     campaignConfigurations,
     campaignLimitsSchema,
@@ -29,6 +41,7 @@ import {
     emptyCampaignLimits,
     framingReplayDocumentsContent,
     newCampaignManifestSchema,
+    qualificationPrerequisiteFailureSchema,
 } from "./qualificationCampaignPolicy";
 import {
     MAX_SOURCES_QUALIFICATION_RECEIPTS,
@@ -62,6 +75,197 @@ async function owned(ctx: QueryCtx, campaignId: Id<"qualificationCampaigns">) {
     )
         throw new Error("Campaign owner unavailable");
     return campaign;
+}
+type CampaignProfile = ReturnType<typeof campaignConfiguration>;
+type ConfigurableCampaign = Exclude<CampaignManifest, { version: 1 }>;
+type CampaignModel = Pick<
+    Doc<"modelRevisions">,
+    "model" | "provider" | "descriptor"
+> & {
+    role: "workbench" | "sources";
+    effort?: Doc<"modelRevisions">["reasoningEffort"];
+};
+
+export function campaignConfigurationHash(
+    configurations: CampaignModel[],
+    controllerModel: string | undefined,
+    policy: Awaited<ReturnType<typeof readResponseControlPolicy>>,
+) {
+    return hash({
+        configurations,
+        controller: controllerModel
+            ? {
+                  enabled: true,
+                  model: controllerModel,
+                  contradictionThreshold: policy.contradictionThreshold,
+                  supportThreshold: policy.supportThreshold,
+              }
+            : { enabled: false },
+    });
+}
+
+async function campaignModelBinding(
+    ctx: QueryCtx,
+    manifest: CampaignManifest,
+    profile: CampaignProfile,
+) {
+    const configurations = [];
+    for (const role of manifest.capability === "sources"
+        ? (["workbench", "sources"] as const)
+        : (["workbench"] as const)) {
+        const choice = profile.models[role];
+        if (!choice) throw new Error("Campaign model required");
+        const catalog = await ctx.db
+            .query("modelCatalog")
+            .withIndex("by_model_and_provider", (q) =>
+                q.eq("model", choice.model).eq("provider", choice.provider),
+            )
+            .unique();
+        const model = catalog?.currentRevisionId
+            ? await ctx.db.get(catalog.currentRevisionId)
+            : null;
+        if (!catalog?.enabled || catalog.status !== "ready" || !model)
+            throw new Error("Prepare the campaign model before authorization");
+        configurations.push({
+            role,
+            model: model.model,
+            provider: model.provider,
+            descriptor: model.descriptor,
+            effort: resolveReasoningPreference(
+                model.descriptor,
+                choice.reasoning,
+            ),
+        });
+    }
+    const profileHash = campaignConfigurationHash(
+        configurations,
+        profile.controllerModel,
+        await readResponseControlPolicy(ctx),
+    );
+    return { configurations, profileHash };
+}
+
+/** Checks the declared startup reservation before granting campaign or context authority. */
+export async function checkPrerequisiteReservations(
+    ctx: QueryCtx,
+    manifest: ConfigurableCampaign,
+    profile: CampaignProfile,
+    configurations: CampaignModel[],
+    grant: Pick<CampaignLimits, "model" | "costUsd">,
+) {
+    const global = qualificationModelScopes(manifest.perLot, grant);
+    const capacities = new Map<string, number | undefined>();
+    for (const scenario of manifest.scenarios) {
+        // The runner activates fresh Workbench even without an explicit framing request.
+        // A warm correction fixture instead starts Sources. Other retained fixtures
+        // are free until a scenario explicitly sends another message.
+        const role = !scenario.initialFixture
+            ? "workbench"
+            : scenario.initialFixture.id === "sources_correction"
+              ? "sources"
+              : scenario.steps.some(({ action }) => action === "send_message")
+                ? "workbench"
+                : null;
+        if (!role) continue;
+        const model = configurations.find((entry) => entry.role === role);
+        if (!model) throw new Error("Campaign model required");
+        if (!capacities.has(role)) {
+            const definitionId =
+                role === "workbench" ? "workbench_v1" : "sources_v1";
+            const definition = getAgentDefinition(
+                definitionId,
+                selectedTaskMethodVersion(profile.taskMethods, definitionId),
+            );
+            const variants = definition.nativeToolSets?.(
+                definition.operations,
+            ) ?? [undefined];
+            const outputs = await Promise.all(
+                variants.map(async (variant) => {
+                    const key = await piInputProfileKey({
+                        instructions: definition.instructions,
+                        operations: agentToolSchemas(
+                            definition,
+                            undefined,
+                            variant,
+                        ),
+                        prompt: "",
+                        nativeConversation: definition.nativeConversation,
+                        contextRendering: definition.contextRendering,
+                        completionTransport: definition.completionTransport,
+                        definitionVersion: definition.version,
+                        nativeRoute: {
+                            model: model.model,
+                            provider: model.provider,
+                            descriptor: model.descriptor,
+                            profileKey: modelConfigurationKey(model.descriptor),
+                            reasoningEffort: model.effort,
+                        },
+                    });
+                    return (
+                        await ctx.db
+                            .query("nativeInputProfiles")
+                            .withIndex("by_key", (q) => q.eq("key", key))
+                            .unique()
+                    )?.effectiveMaxOutputTokens;
+                }),
+            );
+            const [output] = outputs;
+            capacities.set(
+                role,
+                output !== undefined &&
+                    outputs.every((entry) => entry === output)
+                    ? output
+                    : undefined,
+            );
+        }
+        const output = capacities.get(role);
+        const reservation = qualificationModelReservationUsd({
+            contextWindow: model.descriptor.contextWindow,
+            // A native receipt requires a positive wire output capacity.
+            maxTokens: output ?? 1,
+        });
+        const caseLimits = scenario.limits;
+        const violation = exceededQualificationAllowance(
+            {
+                model: Math.min(global.model, caseLimits?.model ?? Infinity),
+                costUsd: Math.min(
+                    global.costUsd,
+                    caseLimits?.costUsd ?? Infinity,
+                ),
+            },
+            emptyCampaignLimits(),
+            "model",
+            reservation,
+        );
+        if (violation) {
+            const { resource, required, available } = violation;
+            if (resource !== "model" && resource !== "costUsd")
+                throw new Error("Unexpected prerequisite resource");
+            throw new ConvexError(
+                qualificationPrerequisiteFailureSchema.parse({
+                    code: "qualification_prerequisite_unfunded",
+                    configuration: profile.id,
+                    scenario: scenario.id,
+                    role,
+                    scope:
+                        (caseLimits?.[resource] ?? Infinity) < global[resource]
+                            ? "case"
+                            : grant[resource] < manifest.perLot[resource]
+                              ? "grant"
+                              : "lot",
+                    resource,
+                    basis:
+                        resource === "model"
+                            ? "request_count"
+                            : output === undefined
+                              ? "minimum"
+                              : "startup_profile",
+                    required,
+                    available,
+                }),
+            );
+        }
+    }
 }
 export const authorize = internalMutation({
     args: { manifest: zodToConvex(campaignManifestSchema) },
@@ -101,55 +305,16 @@ export const authorize = internalMutation({
         const configurationHashes: { id: string; hash: string }[] = [];
         if (manifest.mode === "live")
             for (const profile of campaignConfigurations(manifest)) {
-                const configurations = [];
-                for (const role of manifest.capability === "sources"
-                    ? (["workbench", "sources"] as const)
-                    : (["workbench"] as const)) {
-                    const choice = profile.models[role];
-                    if (!choice) throw new Error("Campaign model required");
-                    const catalog = await ctx.db
-                        .query("modelCatalog")
-                        .withIndex("by_model_and_provider", (q) =>
-                            q
-                                .eq("model", choice.model)
-                                .eq("provider", choice.provider),
-                        )
-                        .unique();
-                    const model = catalog?.currentRevisionId
-                        ? await ctx.db.get(catalog.currentRevisionId)
-                        : null;
-                    if (
-                        !catalog?.enabled ||
-                        catalog.status !== "ready" ||
-                        !model
-                    )
-                        throw new Error(
-                            "Prepare the campaign model before authorization",
-                        );
-                    configurations.push({
-                        role,
-                        model: model.model,
-                        provider: model.provider,
-                        descriptor: model.descriptor,
-                        effort: resolveReasoningPreference(
-                            model.descriptor,
-                            choice.reasoning,
-                        ),
-                    });
-                }
-                const policy = await readResponseControlPolicy(ctx);
-                const profileHash = hash({
-                    configurations,
-                    controller: profile.controllerModel
-                        ? {
-                              enabled: true,
-                              model: profile.controllerModel,
-                              contradictionThreshold:
-                                  policy.contradictionThreshold,
-                              supportThreshold: policy.supportThreshold,
-                          }
-                        : { enabled: false },
-                });
+                const { configurations, profileHash } =
+                    await campaignModelBinding(ctx, manifest, profile);
+                if (manifest.version !== 1)
+                    await checkPrerequisiteReservations(
+                        ctx,
+                        manifest,
+                        profile,
+                        configurations,
+                        manifest.perLot,
+                    );
                 configurationHashes.push({ id: profile.id, hash: profileHash });
             }
         const configurationHash =
@@ -302,6 +467,27 @@ export const admit = internalMutation({
         }
         if (campaign.lots >= m.maximumLots)
             throw new Error("Campaign lot allowance exhausted");
+        if (m.mode === "live" && m.version !== 1) {
+            const profile = campaignConfiguration(m, configurationId);
+            const { configurations, profileHash } = await campaignModelBinding(
+                ctx,
+                m,
+                profile,
+            );
+            if (
+                campaign.configurationHashes?.find(
+                    (entry) => entry.id === profile.id,
+                )?.hash !== profileHash
+            )
+                throw new Error("Campaign route or price drift");
+            await checkPrerequisiteReservations(
+                ctx,
+                m,
+                profile,
+                configurations,
+                m.perLot,
+            );
+        }
         const lotId = await ctx.db.insert("qualificationLots", {
             campaignId: campaign._id,
             key: args.key,

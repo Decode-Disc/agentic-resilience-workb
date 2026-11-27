@@ -438,6 +438,7 @@ async function fixture() {
             expectedGeneration: 4,
         });
         const reserved = await f.t.mutation(internal.sourcesMission.reserve, {
+            epoch: 1,
             requestId,
             expectedGeneration: 4,
         });

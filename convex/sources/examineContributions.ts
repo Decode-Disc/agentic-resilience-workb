@@ -6,6 +6,7 @@ import type { ActionCtx } from "@convex/_generated/server";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import { documentarySubmissionResult } from "@convex/domain/sourcesContracts";
 import { documentaryQuotationMatches } from "@convex/domain/sourceUsage";
+import { sourcesDocumentaryMethod } from "@convex/execution/agentSkillContracts";
 import type { operationOutcomeValidator } from "@convex/execution/executionProtocol";
 import { operationSuccess } from "@convex/execution/operationResults";
 import {
@@ -30,6 +31,8 @@ export async function examineContributions(
         inputHash,
         sourceId,
         needContext,
+        scheduledRecovery,
+        originalExaminationJson,
     }: Reservation,
     simulation: boolean,
     executionDeadlineAt: number,
@@ -41,6 +44,7 @@ export async function examineContributions(
     });
     if (
         cached?.output.kind === "documentary_control" &&
+        cached.output.examination.state === "examined" &&
         cached.providerCallId
     ) {
         const result = await ctx.runMutation(
@@ -49,7 +53,7 @@ export async function examineContributions(
                 ...args,
                 inputHash,
                 contributions,
-                control: cached.output.control,
+                control: cached.output.examination.control,
                 providerCallId: cached.providerCallId,
             },
         );
@@ -139,6 +143,28 @@ export async function examineContributions(
         }
     }
     const examination = { contributions, evidence, needs: needContext };
+    // A successor must use the same method as the request it is recovering.
+    const retained: unknown =
+        originalExaminationJson === undefined
+            ? undefined
+            : JSON.parse(originalExaminationJson);
+    const method =
+        retained === undefined
+            ? sourcesDocumentaryMethod.packageId
+            : retained !== null &&
+                typeof retained === "object" &&
+                "method" in retained &&
+                typeof retained.method === "string"
+              ? retained.method
+              : null;
+    const examinationJson = JSON.stringify(
+        method ? { ...examination, method } : examination,
+    );
+    if (
+        originalExaminationJson !== undefined &&
+        originalExaminationJson !== examinationJson
+    )
+        return { kind: "refused", code: "version_conflict" };
     const outcome = simulation
         ? {
               result: {
@@ -151,10 +177,12 @@ export async function examineContributions(
               preparation,
               executionDeadlineAt,
               operationRequestId: args.requestId,
+              operationEpoch: args.epoch,
+              scheduledRecovery,
               sourceId,
               operation: "source_documentary_control",
               inputHash,
-              invocationInputJson: JSON.stringify(examination),
+              invocationInputJson: originalExaminationJson ?? examinationJson,
               validate: async () => {
                   await ctx.runQuery(
                       internal.sourcesMission.assertActive,
@@ -166,8 +194,11 @@ export async function examineContributions(
                       examination,
                       route,
                       dependencies,
+                      method,
                   ),
           });
+    if ("reasonCode" in outcome && outcome.pendingProviderCallId)
+        return { kind: "waiting", reference: `operation:${args.requestId}` };
     if ("reasonCode" in outcome)
         return {
             kind: "unavailable",

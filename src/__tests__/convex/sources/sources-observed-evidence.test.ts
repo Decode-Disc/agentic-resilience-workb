@@ -2,6 +2,7 @@ import { internal } from "@convex/_generated/api";
 import { domainSnapshot } from "@convex/execution/agentDefinition";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
+import { scopedFixtureControl } from "@/__tests__/setup/model-stream";
 import { readRetainedBody } from "@/__tests__/setup/retained-history";
 import {
     dispatchSourcesOperation,
@@ -44,16 +45,15 @@ async function qualifyObservedPassage() {
             model: route.model,
             latencyMs: 1,
             dispatchOutcome: "response_received",
-            output: {
-                coherence: true,
-                limitations: [],
-                findings: input.contributions.map((c: { id: string }) => ({
+            output: scopedFixtureControl(
+                input.contributions,
+                input.contributions.map((c: { id: string }) => ({
                     contributionId: c.id,
                     conclusion: "supported",
                     permittedUse: "context_only",
                     diagnostic: "Supported context.",
                 })),
-            },
+            ),
         };
     });
     const begun = await f.t.mutation(internal.execution.invocations.begin, {
@@ -144,6 +144,9 @@ async function qualifyObservedPassage() {
 
 test("a qualification selects an observed passage and retains its exact quotation without model transcription", async () => {
     const f = await qualifyObservedPassage();
+    assert(f.qualification.output.kind === "documentary_qualification");
+    const [contribution] = f.qualification.output.contributions;
+    assert(contribution);
     const observationsRows = await f.t.run(async (ctx) =>
         ctx.db
             .query("agentExecutionEvents")
@@ -169,7 +172,15 @@ test("a qualification selects an observed passage and retains its exact quotatio
             event: "contributions_qualified",
             taskId: f.qualification._id,
             contributions: expect.any(Array),
-            control: expect.objectContaining({ coherence: true }),
+            control: {
+                findings: expect.objectContaining({
+                    [contribution.id]: expect.objectContaining({
+                        conclusion: "supported",
+                        needs: { "common-context": "context_only" },
+                    }),
+                }),
+                objections: [],
+            },
         }),
     );
 });

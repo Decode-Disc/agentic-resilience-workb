@@ -10,7 +10,10 @@ import {
     executionFailureCode,
     executionFailureValidation,
 } from "@convex/execution/errors";
-import { operationOutcomeValidator } from "@convex/execution/executionProtocol";
+import {
+    operationOutcomeValidator,
+    scheduledOperationArgs,
+} from "@convex/execution/executionProtocol";
 import { operationSuccess } from "@convex/execution/operationResults";
 import { executeScheduledOperation } from "@convex/execution/operations";
 import { nodeActionGenerationDeadline } from "@convex/resourcePolicy";
@@ -21,10 +24,7 @@ import { examineContributions } from "./sources/examineContributions";
 
 /** A canonical durable operation reuses acquisition, discovery, model receipts and indexing owners. */
 export const execute = internalAction({
-    args: {
-        requestId: v.id("agentOperationRequests"),
-        expectedGeneration: v.number(),
-    },
+    args: scheduledOperationArgs,
     returns: v.union(operationOutcomeValidator, v.null()),
     handler: async (
         ctx,
@@ -42,6 +42,7 @@ async function executeSourcesOperation(
     args: {
         requestId: import("@convex/_generated/dataModel").Id<"agentOperationRequests">;
         expectedGeneration: number;
+        epoch: number;
     },
     executionDeadlineAt: number,
 ): Promise<Infer<typeof operationOutcomeValidator>> {

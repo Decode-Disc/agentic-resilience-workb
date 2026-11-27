@@ -61,8 +61,9 @@ export function streamingModelFetch(fetchFixture: typeof fetch): typeof fetch {
 /** Supplies supported context findings at the external documentary-model boundary. */
 export function documentaryReply(init?: RequestInit) {
     const wire = JSON.parse(String(init?.body));
-    const ids: string[] =
-        wire.response_format.json_schema.schema.properties.findings.required;
+    const contributions: { id: string; needIds: string[] }[] = JSON.parse(
+        wire.messages.at(-1).content,
+    ).contributions;
     return providerFixtureResponse({
         id: "offline-valid",
         model: "z-ai/glm-5.3-flash",
@@ -72,14 +73,19 @@ export function documentaryReply(init?: RequestInit) {
                 message: {
                     role: "assistant",
                     content: JSON.stringify({
-                        coherence: true,
-                        limitations: ["Publisher description."],
+                        objections: [],
                         findings: Object.fromEntries(
-                            ids.map((id) => [
+                            contributions.map(({ id, needIds }) => [
                                 id,
                                 {
                                     conclusion: "supported",
                                     permittedUse: "context_only",
+                                    needs: Object.fromEntries(
+                                        needIds.map((needId) => [
+                                            needId,
+                                            "context_only",
+                                        ]),
+                                    ),
                                     diagnostic:
                                         "The exact quotation supports this context.",
                                 },
@@ -97,4 +103,37 @@ export function documentaryReply(init?: RequestInit) {
             cost: 0.00001,
         },
     });
+}
+
+/** Maps per-contribution fixture choices to the examiner's external result shape. */
+export function scopedFixtureControl(
+    contributions: readonly Pick<
+        import("@convex/domain/sourcesContracts").DocumentaryContribution,
+        "id" | "needIds"
+    >[],
+    findings: readonly {
+        contributionId: string;
+        conclusion: "supported" | "documentary_conflict" | "not_established";
+        permittedUse: import("@convex/domain/sourcesContracts").DocumentaryUse;
+        diagnostic: string;
+    }[],
+): import("@convex/domain/sourcesContracts").DocumentaryControlV2 {
+    return {
+        findings: Object.fromEntries(
+            findings.map(({ contributionId, ...finding }) => [
+                contributionId,
+                {
+                    ...finding,
+                    needs: Object.fromEntries(
+                        (
+                            contributions.find(
+                                ({ id }) => id === contributionId,
+                            )?.needIds ?? []
+                        ).map((needId) => [needId, finding.permittedUse]),
+                    ),
+                },
+            ]),
+        ),
+        objections: [],
+    };
 }

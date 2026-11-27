@@ -16,7 +16,10 @@ afterEach(() => {
     vi.useRealTimers();
 });
 
-test("qualification repairs missing current-binding profiles despite a compatible catalogue", async () => {
+test.each([
+    "missing",
+    "byte-only",
+] as const)("qualification refreshes %s profiles despite a compatible catalogue", async (state) => {
     const f = await seedWorkbench(
         false,
         undefined,
@@ -38,7 +41,11 @@ test("qualification repairs missing current-binding profiles despite a compatibl
         for (const profile of await ctx.db
             .query("nativeInputProfiles")
             .collect())
-            await ctx.db.delete(profile._id);
+            if (state === "missing") await ctx.db.delete(profile._id);
+            else
+                await ctx.db.patch(profile._id, {
+                    effectiveMaxOutputTokens: undefined,
+                });
     });
     const args = {
         runId: f.runId,
@@ -46,9 +53,10 @@ test("qualification repairs missing current-binding profiles despite a compatibl
         scope: { kind: "workbench_v1" as const },
         simulation: false,
     };
-    await expect(
-        f.t.mutation(internal.execution.conversations.startTurn, args),
-    ).rejects.toThrow("model_input_profile_unavailable");
+    if (state === "missing")
+        await expect(
+            f.t.mutation(internal.execution.conversations.startTurn, args),
+        ).rejects.toThrow("model_input_profile_unavailable");
     vi.stubGlobal("fetch", () => {
         throw new Error("Profile preparation cannot dispatch inference");
     });
@@ -87,6 +95,15 @@ test("qualification repairs missing current-binding profiles despite a compatibl
         },
     });
     await prepareQualificationModel(client);
+    const profiles = await f.t.run((ctx) =>
+        ctx.db.query("nativeInputProfiles").collect(),
+    );
+    expect(profiles.length).toBeGreaterThan(0);
+    expect(
+        profiles.every(
+            (profile) => (profile.effectiveMaxOutputTokens ?? 0) > 0,
+        ),
+    ).toBe(true);
     const active = await f.t.mutation(
         internal.execution.conversations.startTurn,
         args,

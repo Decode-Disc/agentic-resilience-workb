@@ -114,7 +114,7 @@ test.each([
         if (limit === "budget")
             await ctx.db.patch(f.runId, {
                 sourcePreparationBudget: {
-                    version: 1,
+                    version: 2,
                     work: 1_000_000,
                     incidents: 0,
                     reserved: 0,

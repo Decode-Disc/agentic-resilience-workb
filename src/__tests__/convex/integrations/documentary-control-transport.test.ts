@@ -20,6 +20,7 @@ const finding = {
     conclusion: "supported",
     permittedUse: "documentary",
     diagnostic: "The quotation supports the supplied statement.",
+    needs: { "common-context": "documentary" },
 };
 const input = { contributions: [contribution], needs: [], evidence: [] };
 
@@ -78,8 +79,7 @@ test.each([
             dispatched = true;
             const { contributionId: _id, ...value } = finding;
             return providerReply({
-                coherence: true,
-                limitations: [],
+                objections: [],
                 findings: { [contribution.id]: value },
             });
         },
@@ -109,13 +109,13 @@ test.each([
             fetch: async () => {
                 dispatched = true;
                 return providerReply({
-                    coherence: true,
-                    limitations: [],
+                    objections: [],
                     findings: {
                         [contribution.id]: {
                             conclusion: finding.conclusion,
                             permittedUse: finding.permittedUse,
                             diagnostic: finding.diagnostic,
+                            needs: finding.needs,
                         },
                     },
                 });
@@ -125,7 +125,7 @@ test.each([
     expect(result).toMatchObject({
         status: "succeeded",
         dispatchOutcome: "response_received",
-        output: { findings: [finding] },
+        output: { findings: { [contribution.id]: { needs: finding.needs } } },
     });
     expect(dispatched).toBe(true);
 });
@@ -143,8 +143,7 @@ test.each([
     const result = await examineDocumentaryContributions(input, currentRoute, {
         authority: modelAttemptAuthority(),
         apiKey: "offline-only",
-        fetch: async () =>
-            providerReply({ coherence: true, limitations: [], findings }),
+        fetch: async () => providerReply({ objections: [], findings }),
     });
     expect(result).toMatchObject({
         status: "failed",
@@ -162,15 +161,14 @@ test("new documentary examinations bind provider findings to the submitted ident
         fetch: async (_url, init) => {
             wire = JSON.parse(String(init?.body));
             return providerReply({
-                coherence: true,
-                limitations: [],
+                objections: [],
                 findings: { [contribution.id]: value },
             });
         },
     });
     expect(result).toMatchObject({
         status: "succeeded",
-        output: { findings: [finding], coherence: true, limitations: [] },
+        output: { findings: { [contribution.id]: value }, objections: [] },
     });
     expect(wire).toMatchObject({
         messages: expect.arrayContaining([
@@ -256,13 +254,13 @@ test.each([
         },
         fetch: async () =>
             providerReply({
-                coherence: true,
-                limitations: [],
+                objections: [],
                 findings: {
                     [contribution.id]: {
                         conclusion: "supported",
                         permittedUse: "documentary",
                         diagnostic: "Exact text",
+                        needs: { "common-context": "documentary" },
                     },
                 },
             }),
@@ -319,8 +317,7 @@ test("generation expiry remains a typed timeout when no capture RPC began", asyn
 test("streaming documentary control above 1 MiB of SSE reasoning frames completes and settles usage", async () => {
     const { contributionId: _id, ...value } = finding;
     const finalContent = JSON.stringify({
-        coherence: true,
-        limitations: [],
+        objections: [],
         findings: { [contribution.id]: value },
     });
     const reasoningPad = "r".repeat(4096);
@@ -390,13 +387,13 @@ test("streaming documentary control above 1 MiB of SSE reasoning frames complete
 
 test("writes valid Unicode when a provider delta ends with half of a surrogate pair", async () => {
     const content = JSON.stringify({
-        coherence: true,
-        limitations: ["Boundary 😀"],
+        objections: [],
         findings: {
             [contribution.id]: {
                 conclusion: "supported",
                 permittedUse: "documentary",
-                diagnostic: "Exact text",
+                diagnostic: "Boundary 😀",
+                needs: { "common-context": "documentary" },
             },
         },
     });
@@ -439,4 +436,279 @@ test("writes valid Unicode when a provider delta ends with half of a surrogate p
     });
     expect(result.status).toBe("succeeded");
     expect(captured.join("")).toBe(content);
+});
+
+test.each([
+    ["not_established", "attributed_argument_only", "attributed_argument_only"],
+    ["documentary_conflict", "attributed_argument_only", "blocked"],
+    ["not_established", "blocked", "attributed_argument_only"],
+    ["not_established", "blocked", "blocked"],
+])("checks a %s finding allowing %s globally and %s for the need", async (conclusion, permittedUse, needUse) => {
+    const response = {
+        findings: {
+            [contribution.id]: {
+                conclusion,
+                permittedUse,
+                diagnostic: "The passage identifies a launch.",
+                needs: { "common-context": needUse },
+            },
+        },
+        objections: [],
+    };
+    const result = await examineDocumentaryContributions(
+        {
+            ...input,
+            contributions: [{ ...contribution, kind: "attributed_argument" }],
+        },
+        currentRoute,
+        {
+            authority: modelAttemptAuthority(),
+            apiKey: "offline-only",
+            fetch: async () => providerReply(response),
+        },
+    );
+    if (permittedUse === "blocked" && needUse === "blocked") {
+        expect(result).toMatchObject({ status: "succeeded", output: response });
+    } else {
+        expect(result).toMatchObject({
+            status: "failed",
+            errorCode: "invalid_output",
+            outputDiagnostic: {
+                reason: "documentary_control_conclusion_use_conflict",
+                output: JSON.stringify(response),
+            },
+        });
+    }
+});
+
+test("an examination keeps a faithful vendor argument while restricting its outcomes association", async () => {
+    const vendor = {
+        ...contribution,
+        kind: "attributed_argument" as const,
+        needIds: ["review-authority", "customer-outcomes"],
+    };
+    const response = {
+        findings: {
+            [vendor.id]: {
+                conclusion: "supported",
+                permittedUse: "attributed_argument_only",
+                diagnostic:
+                    "The vendor describes how reviewers approve estimates.",
+                needs: {
+                    "review-authority": "attributed_argument_only",
+                    "customer-outcomes": "blocked",
+                },
+            },
+        },
+        objections: [
+            {
+                targets: [
+                    { contributionId: vendor.id, needId: "customer-outcomes" },
+                ],
+                maximumUse: "blocked",
+                diagnostic:
+                    "A vendor description does not establish independent customer outcomes.",
+            },
+        ],
+    };
+    const result = await examineDocumentaryContributions(
+        { ...input, contributions: [vendor] },
+        currentRoute,
+        {
+            authority: modelAttemptAuthority(),
+            apiKey: "offline-only",
+            fetch: async () => providerReply(response),
+        },
+    );
+    expect(result).toMatchObject({ status: "succeeded", output: response });
+});
+
+test.each([
+    { threshold: 4096, run: 4095, interrupted: false },
+    { threshold: 4096, run: 4096, interrupted: true },
+    { threshold: 11, run: 11, interrupted: true },
+])("outside-string whitespace run $run under policy $threshold", async ({
+    threshold,
+    run,
+    interrupted,
+}) => {
+    const { contributionId: _id, ...value } = finding;
+    const output = JSON.stringify({
+        findings: { [contribution.id]: value },
+        objections: [],
+    });
+    const chunks = [
+        output + " \t".repeat(Math.floor(run / 4)),
+        "\r\n".repeat(Math.floor(run / 4)) + " ".repeat(run % 4),
+    ];
+    let signal: AbortSignal | null | undefined;
+    const received: string[] = [];
+    const policy = {
+        version: "structured_json_whitespace_v1",
+        maxConsecutiveWhitespace: threshold,
+    };
+    const result = await examineDocumentaryContributions(input, currentRoute, {
+        apiKey: "offline-only",
+        authority: {
+            ...modelAttemptAuthority(),
+            structuredOutputPolicy: policy,
+        },
+        fetch: async (_url, init) => {
+            signal = init?.signal;
+            const frames = chunks.map(
+                (content, index) =>
+                    "data: " +
+                    JSON.stringify({
+                        id: "offline-whitespace",
+                        model: currentRoute.model,
+                        choices: [
+                            {
+                                index: 0,
+                                delta: { content },
+                                finish_reason: index ? "stop" : null,
+                            },
+                        ],
+                        usage: {
+                            prompt_tokens: 3,
+                            completion_tokens: 4,
+                            total_tokens: 7,
+                        },
+                    }) +
+                    "\n\n",
+            );
+            return new Response(`${frames.join("")}data: [DONE]\n\n`, {
+                headers: { "content-type": "text/event-stream" },
+            });
+        },
+        onVisibleText: async (text) => {
+            received.push(text);
+        },
+    });
+    expect(received.join("")).toBe(chunks.join(""));
+    expect(signal?.aborted).toBe(interrupted);
+    expect(result).toMatchObject(
+        interrupted
+            ? { status: "failed", errorCode: "structured_output_whitespace" }
+            : { status: "succeeded" },
+    );
+});
+
+test("retains valid split escapes, spaces inside JSON strings, and separated whitespace runs", async () => {
+    const slash = "\\";
+    const diagnostic = [
+        '"',
+        " ".repeat(100),
+        'quoted"',
+        slash,
+        "and text",
+    ].join(" ");
+    const { contributionId: _id, ...value } = finding;
+    const output = JSON.stringify({
+        findings: { [contribution.id]: { ...value, diagnostic } },
+        objections: [],
+    });
+    const escapedQuote = output.indexOf([slash, '"'].join("")) + 1;
+    const escapedBackslash = output.indexOf(slash.repeat(2)) + 1;
+    expect(escapedQuote).toBeGreaterThan(0);
+    expect(escapedBackslash).toBeGreaterThan(escapedQuote);
+    const chunks = [
+        " ".repeat(10) + output.slice(0, escapedQuote),
+        output.slice(escapedQuote, escapedBackslash),
+        output.slice(escapedBackslash) + " ".repeat(10),
+    ];
+    let signal: AbortSignal | null | undefined;
+    const received: string[] = [];
+    const result = await examineDocumentaryContributions(input, currentRoute, {
+        apiKey: "offline-only",
+        authority: {
+            ...modelAttemptAuthority(),
+            structuredOutputPolicy: {
+                version: "structured_json_whitespace_v1",
+                maxConsecutiveWhitespace: 11,
+            },
+        },
+        fetch: async (_url, init) => {
+            signal = init?.signal;
+            return new Response(
+                [
+                    ...chunks.map(
+                        (content, i) =>
+                            `data: ${JSON.stringify({
+                                id: "offline-valid-whitespace",
+                                model: currentRoute.model,
+                                choices: [
+                                    {
+                                        index: 0,
+                                        delta: { content },
+                                        finish_reason:
+                                            i === chunks.length - 1
+                                                ? "stop"
+                                                : null,
+                                    },
+                                ],
+                            })}\n\n`,
+                    ),
+                    "data: [DONE]\n\n",
+                ].join(""),
+                {
+                    headers: { "content-type": "text/event-stream" },
+                },
+            );
+        },
+        onVisibleText: async (text) => {
+            received.push(text);
+        },
+    });
+    expect(signal?.aborted).toBe(false);
+    expect(received.join("")).toBe(chunks.join(""));
+    expect(result).toMatchObject({
+        status: "succeeded",
+        output: { findings: { [contribution.id]: { diagnostic } } },
+    });
+});
+
+test("the examiner gets the documentary method and can retain a restriction without an explanation", async () => {
+    let system: unknown;
+    const result = await examineDocumentaryContributions(input, currentRoute, {
+        authority: modelAttemptAuthority(),
+        apiKey: "offline-only",
+        fetch: async (_url, init) => {
+            const wire = JSON.parse(String(init?.body));
+            system = wire.messages.find(
+                (message: { role: string }) => message.role === "system",
+            );
+            return providerReply({
+                findings: {
+                    [contribution.id]: {
+                        conclusion: "supported",
+                        permittedUse: "documentary",
+                        needs: { "common-context": "context_only" },
+                        diagnostic: "The passage identifies the software.",
+                    },
+                },
+                objections: [
+                    {
+                        targets: [
+                            {
+                                contributionId: contribution.id,
+                                needId: "common-context",
+                            },
+                        ],
+                        maximumUse: "context_only",
+                        diagnostic: null,
+                    },
+                ],
+            });
+        },
+    });
+    expect(result).toMatchObject({
+        status: "succeeded",
+        output: {
+            objections: [{ maximumUse: "context_only", diagnostic: null }],
+        },
+    });
+    expect(JSON.stringify(system)).toContain(
+        "A partial reading cannot establish absence",
+    );
+    expect(JSON.stringify(system)).toContain("A title alone");
 });

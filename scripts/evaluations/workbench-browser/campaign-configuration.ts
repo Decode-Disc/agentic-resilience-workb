@@ -40,7 +40,10 @@ function modelChoiceKey(choice: { model: string; provider?: string }) {
 export async function prepareCampaignModels(
     client: Pick<ConvexHttpClient, "query" | "action">,
     manifest: CampaignManifest,
-    configurationId?: string,
+    {
+        configurationId,
+        nativeOnly,
+    }: { configurationId?: string; nativeOnly?: true } = {},
 ) {
     const profiles = configurationId
         ? [campaignConfiguration(manifest, configurationId)]
@@ -72,7 +75,7 @@ export async function prepareCampaignModels(
                 ...outcome,
             });
         }
-        if (profile.controllerModel) {
+        if (!nativeOnly && profile.controllerModel) {
             let controller = verifiedControllers.get(profile.controllerModel);
             if (!controller) {
                 controller = await client.action(

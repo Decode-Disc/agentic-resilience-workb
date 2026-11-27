@@ -2433,7 +2433,6 @@ test("native_tool completion exposes submit_completion, accepts sole call with s
         requestKey: "native-completion-sole-prose",
         expectedGeneration: 4,
     });
-    await f.t.run((ctx) => ctx.db.patch(missionId, { definitionVersion: 4 }));
     const initialContext = await f.t.query(internal.execution.context.build, {
         missionId,
         expectedGeneration: 4,
@@ -2732,7 +2731,6 @@ test("definition binding refuses conflicting completion capabilities and reserve
     const textDefinition = getAgentDefinition("workbench_v1");
     const structuredDefinition = getAgentDefinition(
         "saved_material_inspection_v1",
-        4,
     );
     expect(() =>
         bindAgentDefinition({
@@ -2810,7 +2808,6 @@ test("native completion corrects a missing call, malformed wire JSON and schema 
         requestKey: "native-completion-corrections",
         expectedGeneration: 4,
     });
-    await f.t.run((ctx) => ctx.db.patch(missionId, { definitionVersion: 4 }));
     const initialContext = await f.t.query(internal.execution.context.build, {
         missionId,
         expectedGeneration: 4,
@@ -2926,7 +2923,7 @@ test("native completion corrects a missing call, malformed wire JSON and schema 
     );
     expect(state.invocations[3]?.blockCode).toBeUndefined();
     expect(
-        getAgentDefinition("saved_material_inspection_v1", 4)
+        getAgentDefinition("saved_material_inspection_v1", 5)
             .completionTransport,
     ).toBe("native_tool");
 }, 30000);
@@ -2943,7 +2940,6 @@ test("native_tool completion handles mixed rounds (completion before and after o
         requestKey: "native-completion-mixed-and-dup",
         expectedGeneration: 4,
     });
-    await f.t.run((ctx) => ctx.db.patch(missionId, { definitionVersion: 4 }));
     const initialContext = await f.t.query(internal.execution.context.build, {
         missionId,
         expectedGeneration: 4,
@@ -3099,7 +3095,6 @@ test("native_tool completion treats missing original wire arguments as a transpo
         requestKey: "native-missing-wire-args",
         expectedGeneration: 4,
     });
-    await f.t.run((ctx) => ctx.db.patch(missionId, { definitionVersion: 4 }));
     // Tool call arrives with empty arguments stream (missing original wire arguments) -> transport failure, never repaired.
     const network = vi.fn(
         async () =>

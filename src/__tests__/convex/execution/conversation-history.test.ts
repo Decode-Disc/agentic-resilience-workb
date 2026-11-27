@@ -57,7 +57,28 @@ test("issued canonical conversation fragments preserve Unicode boundaries and ca
     const first = await dispatchHistory(f2, { kind: "consult_conversation" });
     assert(first.outcome.kind === "success");
     const page = JSON.parse(first.outcome.valueJson);
-    expect(page.continueCursor).toMatch(/^history:/);
+    expect(page.continueCursor).toMatch(/^history:conversation:/);
+    expect(
+        (
+            await dispatchHistory(f2, {
+                kind: "consult_conversation",
+                cursor: page.continueCursor.replace("conversation:", ""),
+            })
+        ).outcome,
+    ).toMatchObject({ kind: "refused", code: "history_cursor_invalid" });
+    for (const cursor of [
+        page.continueCursor,
+        page.continueCursor.replace("conversation:", "mission:"),
+    ]) {
+        expect(
+            (
+                await dispatchHistory(f2, {
+                    kind: "consult_mission_state",
+                    cursor,
+                })
+            ).outcome,
+        ).toMatchObject({ kind: "refused", code: "history_cursor_invalid" });
+    }
     expect(page.entries[0].content).not.toMatch(/[\uD800-\uDBFF]$/);
     expect(page.entries[0].content.length).toBeLessThan(text.length);
     const second = await dispatchHistory(f2, {
@@ -276,7 +297,7 @@ test("conversation reading excludes queued instructions and recovers the exact n
     ).toHaveLength(1);
     const page = JSON.parse(outcome.valueJson);
     assert(typeof page.continueCursor === "string");
-    expect(page.continueCursor).toMatch(/^history:/);
+    expect(page.continueCursor).toMatch(/^history:conversation:/);
     const invalidId = await f.t.mutation(
         internal.execution.operations.enqueue,
         {

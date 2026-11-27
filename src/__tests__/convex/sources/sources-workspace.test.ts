@@ -90,17 +90,49 @@ async function qualifyWithConflict(
             latencyMs: 1,
             dispatchOutcome: "response_received",
             output: {
-                coherence: false,
-                limitations: [
-                    "The filing and the call define scope differently.",
-                ],
-                findings: input.contributions.map(
-                    (c: { id: string }, index: number) => ({
-                        contributionId: c.id,
-                        conclusion: conclusions[index],
-                        permittedUse,
-                        diagnostic: "Another filing states a different scope.",
-                    }),
+                objections: input.contributions.flatMap(
+                    (c: { id: string }, index: number) =>
+                        conclusions[index] === "documentary_conflict"
+                            ? [
+                                  {
+                                      targets: [
+                                          {
+                                              contributionId: c.id,
+                                              needId: null,
+                                          },
+                                      ],
+                                      maximumUse: "blocked",
+                                      diagnostic:
+                                          "The filing and the call define scope differently.",
+                                  },
+                              ]
+                            : [],
+                ),
+                findings: Object.fromEntries(
+                    input.contributions.map(
+                        (
+                            c: { id: string; needIds: string[] },
+                            index: number,
+                        ) => {
+                            const conclusion = conclusions[index];
+                            const use =
+                                conclusion === "supported"
+                                    ? permittedUse
+                                    : "blocked";
+                            return [
+                                c.id,
+                                {
+                                    conclusion,
+                                    permittedUse: use,
+                                    needs: Object.fromEntries(
+                                        c.needIds.map((id) => [id, use]),
+                                    ),
+                                    diagnostic:
+                                        "Another filing states a different scope.",
+                                },
+                            ];
+                        },
+                    ),
                 ),
             },
         };
@@ -269,7 +301,6 @@ test("the Sources workspace keeps reading, contribution, control and membership 
                 blocked: 1,
             },
         },
-        limitations: ["The filing and the call define scope differently."],
     });
 
     const reading = await owner.query(api.sourcesWorkspace.getSource, {
@@ -288,11 +319,75 @@ test("the Sources workspace keeps reading, contribution, control and membership 
             kind: "attributed_argument",
             conclusion: "documentary_conflict",
             permittedUse: "blocked",
-            reportedUse: "attributed_argument_only",
+            reportedUse: "blocked",
             passageOrders: [f.passage.order],
         }),
     ]);
-    expect(reading.coherence).toBe(false);
+    expect(reading.contributions[0]?.objections).toEqual([
+        {
+            needIds: [null],
+            maximumUse: "blocked",
+            diagnosticPreview:
+                "The filing and the call define scope differently.",
+            diagnosticComplete: true,
+        },
+    ]);
+});
+
+test("a stored contradictory finding keeps its reported permission inspectable and its effective use blocked", async () => {
+    const f = await seedCapturedSources();
+    await qualifyWithConflict(f);
+    await f.t.run(async (ctx) => {
+        const preparation = await ctx.db.get(f.preparationId);
+        const qualificationId = preparation?.sourcesMission?.qualifications[0];
+        assert(qualificationId);
+        const qualification = await ctx.db.get(qualificationId);
+        assert(qualification?.output.kind === "documentary_qualification");
+        const task = await ctx.db.get(qualification.output.controlTaskId);
+        assert(task?.output.kind === "documentary_control");
+        const examination = task.output.examination;
+        assert(examination.state === "examined");
+        const contribution = qualification.output.contributions[0];
+        assert(contribution);
+        const finding = examination.control.findings[contribution.id];
+        assert(finding);
+        // Restore the recorded shape from before the admission rule changed.
+        await ctx.db.patch(task._id, {
+            output: {
+                ...task.output,
+                examination: {
+                    ...examination,
+                    control: {
+                        ...examination.control,
+                        findings: {
+                            [contribution.id]: {
+                                ...finding,
+                                permittedUse: "attributed_argument_only",
+                                needs: {
+                                    "common-context":
+                                        "attributed_argument_only",
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        });
+    });
+    const reading = await f.t
+        .withIdentity({ subject: f.userId })
+        .query(api.sourcesWorkspace.getSource, {
+            runId: f.runId,
+            sourceId: f.sourceId,
+        });
+    expect(reading?.contributions).toMatchObject([
+        {
+            conclusion: "documentary_conflict",
+            reportedUse: "attributed_argument_only",
+            permittedUse: "blocked",
+            passageOrders: [f.passage.order],
+        },
+    ]);
 });
 
 function retainedNeedSources(
@@ -349,6 +444,7 @@ test("coverage handoff freezes unfinished searches for Sources and Workbench", a
         expectedGeneration,
     });
     const reserved = await f.t.mutation(internal.sourcesMission.reserve, {
+        epoch: 1,
         requestId,
         expectedGeneration,
     });

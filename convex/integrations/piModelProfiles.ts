@@ -164,7 +164,7 @@ export async function prepareNativeProfiles(
     };
     const model = configuredNativeModel(route.model, descriptor);
     const provider = openrouterProvider();
-    const profiles = new Map<string, number>();
+    const profiles = new Map<string, Infer<typeof nativeProfile>>();
     const plans: {
         definition: AgentDefinition;
         operations: ReturnType<typeof agentToolSchemas>;
@@ -222,7 +222,8 @@ export async function prepareNativeProfiles(
                 profile.bytes < 1
             )
                 throw new Error("Invalid retained native profile");
-            profiles.set(profile.key, profile.bytes);
+            if (profile.effectiveMaxOutputTokens !== undefined)
+                profiles.set(profile.key, profile);
         }
     }
     for (const { definition, operations, requests } of plans) {
@@ -238,7 +239,7 @@ export async function prepareNativeProfiles(
         );
         for (const { key, nativeRoute } of missing) {
             const generation = modelCallSettings(nativeRoute).generation;
-            let bytes: number | undefined;
+            let profile: Infer<typeof nativeProfile> | undefined;
             let dispatchAttempted = false;
             const result = provider.streamSimple(
                 model,
@@ -261,9 +262,17 @@ export async function prepareNativeProfiles(
                             throw new Error(
                                 "Native profile payload unavailable",
                             );
-                        bytes = new TextEncoder().encode(
-                            preparePiModelPayload(payload, nativeRoute).json,
-                        ).length;
+                        const prepared = preparePiModelPayload(
+                            payload,
+                            nativeRoute,
+                        );
+                        profile = {
+                            key,
+                            bytes: new TextEncoder().encode(prepared.json)
+                                .length,
+                            effectiveMaxOutputTokens:
+                                prepared.effectiveMaxOutputTokens,
+                        };
                         throw new Error(
                             "Offline preparation completed before dispatch",
                         );
@@ -271,15 +280,17 @@ export async function prepareNativeProfiles(
                 },
             );
             await result.result();
-            if (dispatchAttempted || bytes === undefined)
+            if (
+                dispatchAttempted ||
+                profile?.effectiveMaxOutputTokens === undefined
+            )
                 throw new Error("Native profile preparation failed");
-            profiles.set(key, bytes);
+            profiles.set(key, profile);
         }
     }
     return keys.map((key) => {
-        const bytes = profiles.get(key);
-        if (bytes === undefined)
-            throw new Error("Native profile preparation incomplete");
-        return { key, bytes };
+        const profile = profiles.get(key);
+        if (!profile) throw new Error("Native profile preparation incomplete");
+        return profile;
     });
 }

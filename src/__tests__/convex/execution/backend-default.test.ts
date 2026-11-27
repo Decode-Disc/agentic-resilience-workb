@@ -41,7 +41,7 @@ test("direct admission refuses the retired backend and defaults new work to Pi",
             input,
         );
         expect(await t.run((ctx) => ctx.db.get(missionId))).toMatchObject({
-            definitionVersion: 4,
+            definitionVersion: 5,
             executionRuntime: "pi-durable",
             generationBackend: { id: "pi-durable", version: 1 },
         });

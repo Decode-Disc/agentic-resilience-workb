@@ -90,7 +90,11 @@ export async function seedHistoricalResearchState(
                 preparationId: fixture.preparationId,
                 evidence: [],
                 inputHash: "historical-control",
-                control: { findings: [], coherence: true, limitations: [] },
+                examination: {
+                    state: "examined",
+                    contractVersion: 2,
+                    control: { findings: {}, objections: [] },
+                },
             },
         });
         const qualificationTaskId = await ctx.db.insert("aiTaskResults", {

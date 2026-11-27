@@ -1,7 +1,7 @@
 import { api, internal } from "@convex/_generated/api";
+import { afterEach, assert, expect, test, vi } from "vitest";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
-import { afterEach, assert, expect, test, vi } from "vitest";
 
 afterEach(() => {
     vi.useRealTimers();
@@ -131,6 +131,33 @@ test("automatically reconciles an incomplete generation once without adopting it
     expect(counts()).toEqual({ generations: 1, lookups: 1 });
 }, 20000);
 
+test("matching cancellation without a price retains termination and the financial reservation", async () => {
+    const { call, runId, t, counts } = await interruptedCall(async () =>
+        Response.json({ data: { id: "gen-billing", cancelled: true } }),
+    );
+    expect(call.providerObservation?.termination).toEqual({
+        kind: "cancelled",
+        source: "generation_lookup",
+        generationId: "gen-billing",
+        observedAt: expect.any(Number),
+    });
+    expect(call).toMatchObject({
+        status: "started",
+        reportedCostFinal: false,
+        billing: {
+            state: "unavailable",
+            attempt: 1,
+            reason: "invalid_response",
+        },
+    });
+    expect(call.reportedCost).toBeUndefined();
+    expect(
+        (await t.run((ctx) => ctx.db.get(runId)))?.sourcePreparationBudget
+            ?.reserved,
+    ).toBe(1);
+    expect(counts()).toEqual({ generations: 1, lookups: 1 });
+}, 20000);
+
 test("a failed lookup is explicit and only an administrator can request one bounded retry", async () => {
     const { t, client, admin, call, counts } = await interruptedCall(
         async () => new Response("Unavailable", { status: 404 }),
@@ -176,7 +203,7 @@ test("rejects mismatched billing identity without changing the receipt outcome",
     });
     expect(call.reportedCost).toBeUndefined();
     expect(call.status).toBe("started");
-    expect(call.providerObservation?.cancelled).toBeUndefined();
+    expect(call.providerObservation?.termination).toBeUndefined();
 }, 20000);
 
 test("later terminal observations preserve a reconciled charge and expose contradictory amounts", async () => {
@@ -251,7 +278,7 @@ test.each([
         label: "negative cost",
         response: () =>
             Response.json({
-                data: { id: "gen-billing", total_cost: -1, cancelled: true },
+                data: { id: "gen-billing", total_cost: -1 },
             }),
         reason: "invalid_response",
     },
@@ -269,7 +296,7 @@ test.each([
     const { call, counts } = await interruptedCall(async () => response());
     expect(call.billing).toMatchObject({ state: "unavailable", reason });
     expect(call.reportedCost).toBeUndefined();
-    expect(call.providerObservation?.cancelled).toBeUndefined();
+    expect(call.providerObservation?.termination).toBeUndefined();
     expect(counts()).toEqual({ generations: 1, lookups: 1 });
 }, 20000);
 

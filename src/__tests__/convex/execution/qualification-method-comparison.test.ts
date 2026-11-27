@@ -112,8 +112,8 @@ test("the authorized control pins prior methods with current tools before the fi
     expect(control.method?.(original)).toBe(
         getAgentDefinition("workbench_v1", 6).method?.(original),
     );
-    expect(getAgentDefinition("workbench_v1").version).toBe(12);
-    expect(getAgentDefinition("sources_v1").version).toBe(8);
+    expect(getAgentDefinition("workbench_v1").version).toBe(13);
+    expect(getAgentDefinition("sources_v1").version).toBe(9);
 });
 
 test.each([

@@ -6,6 +6,7 @@ import type { modelDescriptor } from "@convex/modelConfigurationSchema";
 import {
     NATIVE_PROFILE_BATCH_SIZE,
     RESOURCE_POLICY_VERSION,
+    STRUCTURED_OUTPUT_POLICY,
 } from "@convex/resourcePolicy";
 import type schema from "@convex/schema";
 import type { Infer } from "convex/values";
@@ -17,7 +18,11 @@ import { SOURCES_TEST_WINDOW_MINUTES } from "./sources-mission";
 export function modelAttemptAuthority(
     deadlineAt = Date.now() + SOURCES_TEST_WINDOW_MINUTES * 60_000,
 ) {
-    return { resourcePolicy: RESOURCE_POLICY_VERSION, deadlineAt };
+    return {
+        resourcePolicy: RESOURCE_POLICY_VERSION,
+        deadlineAt,
+        structuredOutputPolicy: STRUCTURED_OUTPUT_POLICY,
+    };
 }
 
 export const fixtureModelDescriptor = {
@@ -44,6 +49,7 @@ export async function installModel(
             | "reasoningMandatory"
             | "reasoningDefault"
             | "contextWindow"
+            | "maxTokens"
         >
     > = {},
 ) {

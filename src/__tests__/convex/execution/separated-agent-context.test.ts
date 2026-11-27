@@ -311,6 +311,7 @@ test("Sources distinguishes reserved work observations from exact completion ref
         expectedGeneration: 4,
     });
     await f.t.mutation(internal.sourcesMission.reserve, {
+        epoch: 1,
         requestId,
         expectedGeneration: 4,
     });
@@ -431,6 +432,7 @@ test("all maximum-need accounting defects fit one correction without omitting af
         expectedGeneration: 4,
     });
     await f.t.mutation(internal.sourcesMission.reserve, {
+        epoch: 1,
         requestId,
         expectedGeneration: 4,
     });
@@ -472,7 +474,7 @@ test("all maximum-need accounting defects fit one correction without omitting af
 test("directed framing selects the current method while retaining explicit historical definitions", () => {
     const retained = getAgentDefinition("workbench_v1", 4);
     const directed = getAgentDefinition("workbench_v1", 5);
-    expect(getAgentDefinition("workbench_v1").version).toBe(12);
+    expect(getAgentDefinition("workbench_v1").version).toBe(13);
     for (const version of [6, 7, 8, 9])
         expect(getAgentDefinition("workbench_v1", version).version).toBe(
             version,

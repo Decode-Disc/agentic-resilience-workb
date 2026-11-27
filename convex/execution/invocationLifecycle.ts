@@ -37,6 +37,7 @@ import {
     requireQualificationResultDeadline,
     requireQualifiedBrowserMission,
 } from "@convex/providerCalls";
+import { patchQualificationReceipt } from "@convex/qualificationUsage";
 import {
     HISTORY_PAGE_SIZE,
     MAX_CONTEXT_BYTES,
@@ -87,9 +88,11 @@ import {
     invocationStructureError,
     isOneShotPreparationOperation,
     operationInputValidator,
+    ownsScheduledEpoch,
     preparedCompletionValidator,
     preparedSubmissionValidator,
     requireSupportedMissionBackend,
+    scheduledOperationArgs,
 } from "./executionProtocol";
 import {
     admittedInputFragment,
@@ -1232,6 +1235,7 @@ export const beginOneShot = internalMutation({
             inputJson: args.inputJson,
             inputContentHash: sha256Hex(args.inputJson),
             preparationInputHash: receipt.inputHash,
+            structuredOutputPolicy: receipt.structuredOutputPolicy,
             providerCallId: receipt._id,
             createdAt: Date.now(),
         });
@@ -1242,6 +1246,52 @@ export const beginOneShot = internalMutation({
             kind: "invocation_started",
         });
         return id;
+    },
+});
+
+/** Settles a started receipt only after its local worker was fenced and provider termination proved. */
+export const closeAbandonedStructuredAttempt = internalMutation({
+    args: scheduledOperationArgs,
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const request = await ctx.db.get(args.requestId);
+        const execution = request?.scheduledExecution;
+        if (
+            !request ||
+            execution?.phase !== "waiting_provider" ||
+            !ownsScheduledEpoch(request, args.expectedGeneration, args.epoch)
+        )
+            return null;
+        const call = await ctx.db.get(execution.callId);
+        if (
+            !call?.invocationId ||
+            call.status !== "started" ||
+            !call.providerObservation?.termination ||
+            call.operationRequestId !== request._id ||
+            call.operationEpoch !== args.epoch ||
+            call.executionGeneration !== args.expectedGeneration
+        )
+            return null;
+        const invocation = await ctx.db.get(call.invocationId);
+        if (
+            invocation?.status !== "started" ||
+            invocation.providerCallId !== call._id ||
+            invocation.preparationInputHash !== call.inputHash ||
+            invocation.generation !== call.executionGeneration
+        )
+            return null;
+        await patchQualificationReceipt(ctx, call, {
+            status: "failed",
+            errorCode: "structured_result_unavailable",
+            dispatchOutcome: "response_received",
+            completedAt: Date.now(),
+        });
+        await ctx.db.patch(invocation._id, {
+            status: "blocked",
+            blockCode: "structured_result_unavailable",
+            completedAt: Date.now(),
+        });
+        return null;
     },
 });
 
@@ -2586,9 +2636,7 @@ export const finish = internalMutation({
             } catch {
                 decoded = null;
             }
-            let canonical = definition.nativeConversation
-                ? normalizeNativeHistoryInput(request.name, decoded)
-                : decoded;
+            let canonical = normalizeNativeHistoryInput(request.name, decoded);
             let normalizationRefusal: string | undefined =
                 "refusalCode" in request ? request.refusalCode : undefined;
             let normalizationValidation:

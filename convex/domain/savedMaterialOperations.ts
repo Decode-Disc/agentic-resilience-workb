@@ -4,20 +4,28 @@ import { validate } from "convex-helpers/validators";
 import {
     WORKBENCH_FRAMING_METHOD_VERSION,
     WORKBENCH_FRAMING_RECEIPT_VERSION,
+    WORKBENCH_SCOPED_DOCUMENTARY_VERSION,
 } from "./framingContracts";
 import {
     sourceDocumentMetadataValidator,
     sourceMaterialReferenceValidator,
 } from "./sourceRetrievalPolicy";
-import { documentaryStatusValidator } from "./sourcesContracts";
+import {
+    captureExaminationValidator,
+    documentaryStatusValidator,
+    retainedCaptureExaminationValidator,
+    retainedDocumentaryStatusValidator,
+} from "./sourcesContracts";
 
 export const SAVED_MATERIAL_DEFINITION_ID = "saved_material_inspection_v1";
 export const SAVED_MATERIAL_DEFINITION_VERSION = 2;
 export const WORKBENCH_DOCUMENTARY_DEFINITION_VERSION = 10;
 export const REFERENCED_INSPECTION_VERSION = 3;
 export const NATIVE_COMPLETION_INSPECTION_VERSION = 4;
+export const SCOPED_DOCUMENTARY_INSPECTION_VERSION = 5;
 export const REFERENCED_SOURCES_VERSION = 7;
 export const NATIVE_COMPLETION_SOURCES_VERSION = 8;
+export const SCOPED_DOCUMENTARY_SOURCES_VERSION = 9;
 export const savedMaterialDefinitionId = v.literal(
     SAVED_MATERIAL_DEFINITION_ID,
 );
@@ -366,7 +374,7 @@ export const referencedSearchResult = v.object({
     limitReached: v.boolean(),
 });
 
-export const referencedContextResult = v.object({
+const retainedReferencedContextResult = v.object({
     ...displayedMaterial,
     kind: v.literal("read_in_context"),
     reference: v.string(),
@@ -391,17 +399,42 @@ export const referencedContextResult = v.object({
     ),
 });
 
+export const referencedContextResult = v.object({
+    ...retainedReferencedContextResult.fields,
+    examination: v.optional(captureExaminationValidator),
+});
+const scopedContextWire = {
+    description:
+        "Open an issued document, search-match or next reference. Returns exact text, capture provenance and a scoped documentary examination when performed for that capture. Use needOrder for need positions and useOrder for permission indexes in usesByNeed. A null use means the contribution did not address that need, and a null objection index applies to the whole contribution. Use its passage reference to cite the text, or nextReference to read further.",
+    inputValidator: referencedReadInput,
+    resultValidator: operationResultValidator(referencedContextResult),
+};
 export const searchAvailableMaterialResult = operationResultValidator(
     v.union(referencedSearchResult, legacySearchResult),
 );
 export const readInContextResult = operationResultValidator(
-    v.union(referencedContextResult, legacyContextResult),
+    v.union(
+        referencedContextResult.extend({
+            examination: v.optional(retainedCaptureExaminationValidator),
+        }),
+        legacyContextResult,
+    ),
 );
+
+const retainedLegacyStatus = v.optional(retainedDocumentaryStatusValidator);
+const retainedLegacySearchResult = v.object({
+    ...legacySearchResult.fields,
+    documentaryStatus: retainedLegacyStatus,
+});
+const retainedLegacyContextResult = v.object({
+    ...legacyContextResult.fields,
+    documentaryStatus: retainedLegacyStatus,
+});
 
 const searchWire = {
     legacy: {
         inputValidator: searchAvailableMaterialInputValidator,
-        resultValidator: operationResultValidator(legacySearchResult),
+        resultValidator: operationResultValidator(retainedLegacySearchResult),
     },
     referenced: {
         description:
@@ -413,13 +446,15 @@ const searchWire = {
 const contextWire = {
     legacy: {
         inputValidator: readInContextInputValidator,
-        resultValidator: operationResultValidator(legacyContextResult),
+        resultValidator: operationResultValidator(retainedLegacyContextResult),
     },
     referenced: {
         description:
             "Open an issued document, search-match or next reference. Returns the exact displayed text, character range, capture identity, recorded dates and representation completeness. Use the returned passage reference when citing displayed text, or nextReference to read further. When an indexed passage is returned, its order identifies the exact quote for documentary qualification.",
         inputValidator: referencedReadInput,
-        resultValidator: operationResultValidator(referencedContextResult),
+        resultValidator: operationResultValidator(
+            retainedReferencedContextResult,
+        ),
     },
 };
 
@@ -434,22 +469,42 @@ export function savedMaterialBinding(
         (definitionId === "workbench_v1" &&
             (version === WORKBENCH_DOCUMENTARY_DEFINITION_VERSION ||
                 version === WORKBENCH_FRAMING_RECEIPT_VERSION ||
-                version === WORKBENCH_FRAMING_METHOD_VERSION)) ||
+                version === WORKBENCH_FRAMING_METHOD_VERSION ||
+                version === WORKBENCH_SCOPED_DOCUMENTARY_VERSION)) ||
         (definitionId === "sources_v1" &&
             (version === REFERENCED_SOURCES_VERSION ||
-                version === NATIVE_COMPLETION_SOURCES_VERSION)) ||
+                version === NATIVE_COMPLETION_SOURCES_VERSION ||
+                version === SCOPED_DOCUMENTARY_SOURCES_VERSION)) ||
         (definitionId === SAVED_MATERIAL_DEFINITION_ID &&
             (version === REFERENCED_INSPECTION_VERSION ||
-                version === NATIVE_COMPLETION_INSPECTION_VERSION))
+                version === NATIVE_COMPLETION_INSPECTION_VERSION ||
+                version === SCOPED_DOCUMENTARY_INSPECTION_VERSION))
     )
         return "referenced";
     return "legacy";
 }
 
+export function supportsScopedDocumentaryExamination(
+    definitionId: string,
+    version: number,
+) {
+    return (
+        (definitionId === "workbench_v1" &&
+            version === WORKBENCH_SCOPED_DOCUMENTARY_VERSION) ||
+        (definitionId === "sources_v1" &&
+            version === SCOPED_DOCUMENTARY_SOURCES_VERSION) ||
+        (definitionId === SAVED_MATERIAL_DEFINITION_ID &&
+            version === SCOPED_DOCUMENTARY_INSPECTION_VERSION)
+    );
+}
+
 export function savedMaterialWireContract(
     name: string,
     binding: SavedMaterialBinding,
+    scopedExamination = false,
 ) {
+    if (name === "read_in_context" && scopedExamination)
+        return scopedContextWire;
     const wire =
         name === "search_available_material"
             ? searchWire

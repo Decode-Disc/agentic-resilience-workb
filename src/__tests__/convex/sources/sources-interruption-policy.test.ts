@@ -64,7 +64,7 @@ test.each([
             startMode: "framed",
             agentExecutionVersion: 3,
             sourcePreparationBudget: {
-                version: 1,
+                version: 2,
                 work: 1000000,
                 incidents: 0,
                 reserved: 0,

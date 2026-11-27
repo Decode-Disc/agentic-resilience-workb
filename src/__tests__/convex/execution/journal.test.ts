@@ -624,7 +624,7 @@ test("one-shot settlement commits the original reply, receipt and normalized res
 test.each([
     undefined,
     0.0002137,
-])("native documentary-control settlement requests billing only for missing cost (%s) and remains idempotent", async (reportedCost) => {
+])("an unfinished documentary stream requests reconciliation with or without a known cost (%s)", async (reportedCost) => {
     const { t, invocationId, attempt, providerCallId, runId } =
         await oneShotFixture(undefined, "source_documentary_control");
     await t.mutation(internal.execution.invocations.retainRequest, {
@@ -678,12 +678,7 @@ test.each([
         dispatchOutcome: "response_received",
     });
     expect(first.call?.reportedCost).toBe(reportedCost);
-    if (reportedCost === undefined)
-        expect(first.call?.billing).toMatchObject({
-            state: "pending",
-            attempt: 0,
-        });
-    else expect(first.call?.billing).toBeUndefined();
+    expect(first.call?.billing).toMatchObject({ state: "pending", attempt: 0 });
     expect(first.run).toMatchObject({
         executionGeneration: 4,
         executionStatus: "cancelled",

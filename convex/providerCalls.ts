@@ -3,19 +3,20 @@ import {
     RESPONSE_CONTROL_LIMITS,
     responseReviewOperationKey,
 } from "@convex/domain/workbenchResponseControlContracts";
-import { operationHasStarted } from "@convex/execution/executionProtocol";
+import {
+    isOneShotPreparationOperation,
+    operationHasStarted,
+    ownsScheduledEpoch,
+} from "@convex/execution/executionProtocol";
 import { resolveReasoningPreference } from "@convex/integrations/modelRouting";
 import { readResponseControlPolicy } from "@convex/modelConfiguration";
 import {
     assertQualificationAllowance,
     patchQualificationReceipt,
     qualificationCategory,
+    qualificationModelReservationUsd,
     updateQualificationUsage,
 } from "@convex/qualificationUsage";
-import {
-    MODEL_MAX_INPUT_PRICE_PER_MILLION,
-    MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
-} from "@convex/resourcePolicy";
 import {
     framingProviderInputHash,
     framingSecReadInput,
@@ -52,7 +53,11 @@ import {
     readPreparationLimits,
     sourcePreparationError,
 } from "./domain/sourcePreparationAuthority";
-import { executionError, requireMissionAuthority } from "./execution/authority";
+import {
+    executionError,
+    publicationControl,
+    requireMissionAuthority,
+} from "./execution/authority";
 import { admittedInputHash } from "./execution/journal";
 import { preparationModelOutputLimit } from "./integrations/modelRouting";
 import { rateLimiter } from "./rateLimiter";
@@ -70,12 +75,13 @@ import {
     IO_PROVIDER_LEASE_MS as PROVIDER_LEASE_MS,
     SOURCE_EMBEDDING_PROVIDER_LEASE_MS,
     SOURCES_MAX_EVIDENCE_REFERENCES,
+    supportsStructuredOutputPolicy,
 } from "./resourcePolicy";
 import {
     readWorkbenchQualification,
     readWorkbenchQualificationDeadline,
 } from "./runWorkspace";
-import schema from "./schema";
+import schema, { providerStreamTerminationValidator } from "./schema";
 
 /** Known observations settle independently; only qualification-funded results carry this adoption deadline. */
 export async function requireQualificationResultDeadline(
@@ -231,6 +237,14 @@ export const observeGeneration = internalMutation({
                   }
                 : {}),
         });
+        if (
+            args.generationId &&
+            !call.providerObservation?.generationId &&
+            call.operationEpoch !== undefined
+        )
+            await ctx.runMutation(internal.providerCalls.requestBilling, {
+                invocationId: args.invocationId,
+            });
         return null;
     },
 });
@@ -313,35 +327,88 @@ function reportedCostSettlement(
     };
 }
 
+function hasUnresolvedStructuredTermination(call: Doc<"providerCalls">) {
+    return (
+        call.service === "model" &&
+        isOneShotPreparationOperation(call.operation) &&
+        call.providerObservation?.termination === undefined
+    );
+}
+
+async function structuredBillingOwner(
+    ctx: QueryCtx,
+    call: Doc<"providerCalls">,
+) {
+    if (
+        call.operationEpoch === undefined ||
+        !call.operationRequestId ||
+        call.executionGeneration === undefined ||
+        !hasUnresolvedStructuredTermination(call)
+    )
+        return null;
+    const request = await ctx.db.get(call.operationRequestId);
+    if (
+        !request?.runId ||
+        request.status !== "waiting" ||
+        request.outcome ||
+        !ownsScheduledEpoch(
+            request,
+            call.executionGeneration,
+            call.operationEpoch,
+        )
+    )
+        return null;
+    const mission = request.missionId
+        ? await ctx.db.get(request.missionId)
+        : null;
+    const deadlineAt = Math.min(
+        request.deadlineAt ?? Infinity,
+        mission?.deadlineAt ?? Infinity,
+    );
+    const run = await ctx.db.get(request.runId);
+    if (
+        !run ||
+        run.withdrawnAt ||
+        !["paused", "running"].includes(run.executionStatus) ||
+        !Number.isFinite(deadlineAt) ||
+        deadlineAt <= Date.now()
+    )
+        return null;
+    return { request, deadlineAt };
+}
+
 /** Only the original admitted call can request accounting; this grants no execution authority. */
 export const requestBilling = internalMutation({
     args: { invocationId: v.id("agentInvocations") },
     returns: v.null(),
     handler: async (ctx, args) => {
+        if ((await publicationControl(ctx))?.held) return null;
         const invocation = await ctx.db.get(args.invocationId);
         if (!invocation?.providerCallId) return null;
         const call = await ctx.db.get(invocation.providerCallId);
         if (
             !call?.providerObservation?.generationId ||
             call.billing ||
-            call.reportedCost !== undefined ||
-            call.status === "succeeded"
+            (!hasUnresolvedStructuredTermination(call) &&
+                (call.reportedCost !== undefined ||
+                    call.status === "succeeded"))
         )
             return null;
         await invocationCall(ctx, args.invocationId);
+        const wakeId = await ctx.scheduler.runAfter(
+            5000,
+            internal.integrations.openRouterGeneration.reconcile,
+            { providerCallId: call._id, attempt: 1 },
+        );
         await patchQualificationReceipt(ctx, call, {
             billing: {
                 state: "pending",
                 attempt: 0,
                 updatedAt: Date.now(),
                 retryAt: Date.now() + BILLING_LEASE_MS,
+                wakeId,
             },
         });
-        await ctx.scheduler.runAfter(
-            5000,
-            internal.integrations.openRouterGeneration.reconcile,
-            { providerCallId: call._id, attempt: 1 },
-        );
         return null;
     },
 });
@@ -352,6 +419,7 @@ export const retryBilling = mutation({
     returns: billingResult,
     handler: async (ctx, args) => {
         await requireAdmin(ctx);
+        if ((await publicationControl(ctx))?.held) return { scheduled: false };
         const call = await ctx.db.get(args.providerCallId);
         if (!call?.invocationId) return { scheduled: false };
         await invocationCall(ctx, call.invocationId);
@@ -385,16 +453,30 @@ export const claimBilling = internalMutation({
     args: { providerCallId: v.id("providerCalls"), attempt: v.number() },
     returns: v.union(v.object({ generationId: v.string() }), v.null()),
     handler: async (ctx, args) => {
+        if ((await publicationControl(ctx))?.held) return null;
         const call = await ctx.db.get(args.providerCallId);
         if (
             !call?.invocationId ||
-            call.billing?.state !== "pending" ||
-            call.billing.attempt + 1 !== args.attempt ||
-            !call.providerObservation?.generationId
+            !call.providerObservation?.generationId ||
+            !call.billing ||
+            call.billing.attempt + 1 !== args.attempt
+        )
+            return null;
+        const owner = await structuredBillingOwner(ctx, call);
+        if (
+            call.billing.state !== "pending" &&
+            (!owner ||
+                !["checking", "unavailable", "confirmed"].includes(
+                    call.billing.state,
+                ) ||
+                (call.billing.retryAt ?? Infinity) > Date.now())
         )
             return null;
         await invocationCall(ctx, call.invocationId);
-        if (call.reportedCost !== undefined) {
+        if (
+            call.reportedCost !== undefined &&
+            !hasUnresolvedStructuredTermination(call)
+        ) {
             await patchQualificationReceipt(ctx, call, {
                 billing: {
                     state: "confirmed",
@@ -404,12 +486,30 @@ export const claimBilling = internalMutation({
             });
             return null;
         }
+        const retryAt = Date.now() + BILLING_LEASE_MS;
+        const wakeId =
+            owner && retryAt < owner.deadlineAt
+                ? await ctx.scheduler.runAt(
+                      retryAt,
+                      internal.integrations.openRouterGeneration.reconcile,
+                      {
+                          providerCallId: call._id,
+                          attempt: args.attempt + 1,
+                      },
+                  )
+                : undefined;
         await patchQualificationReceipt(ctx, call, {
+            // A new termination lookup must preserve the prior lookup's confirmed price.
+            ...(call.billing.state === "confirmed" &&
+            call.reportedCost !== undefined
+                ? { reportedCostFinal: true }
+                : {}),
             billing: {
                 state: "checking",
                 attempt: args.attempt,
                 updatedAt: Date.now(),
-                retryAt: Date.now() + BILLING_LEASE_MS,
+                retryAt,
+                wakeId,
             },
         });
         return { generationId: call.providerObservation.generationId };
@@ -440,6 +540,12 @@ export const settleBilling = internalMutation({
         await invocationCall(ctx, call.invocationId);
         if ((args.cost === undefined) === (args.reason === undefined))
             throw new Error("Invalid billing result");
+        const owner = await structuredBillingOwner(ctx, call);
+        const retryAt = call.billing.retryAt ?? Date.now() + BILLING_LEASE_MS;
+        const reschedule =
+            owner && !args.cancelled && retryAt < owner.deadlineAt;
+        if (!reschedule && call.billing.wakeId)
+            await ctx.scheduler.cancel(call.billing.wakeId);
         await patchQualificationReceipt(ctx, call, {
             billing: {
                 state: args.cost !== undefined ? "confirmed" : "unavailable",
@@ -447,23 +553,40 @@ export const settleBilling = internalMutation({
                 updatedAt: Date.now(),
                 httpStatus: args.httpStatus,
                 latencyMs: args.latencyMs,
-                ...(args.reason
-                    ? {
-                          reason: args.reason,
-                          retryAt: Date.now() + BILLING_LEASE_MS,
-                      }
-                    : {}),
+                ...(args.reason ? { reason: args.reason } : {}),
+                ...(args.reason || reschedule ? { retryAt } : {}),
+                ...(reschedule ? { wakeId: call.billing.wakeId } : {}),
             },
             ...reportedCostSettlement(call, args.cost),
-            ...(args.cost !== undefined && args.cancelled
+            ...(args.cancelled
                 ? {
                       providerObservation: {
                           ...call.providerObservation,
-                          cancelled: args.cancelled,
+                          termination: call.providerObservation.termination ?? {
+                              kind: "cancelled" as const,
+                              source: "generation_lookup" as const,
+                              generationId: args.generationId,
+                              observedAt: Date.now(),
+                          },
                       },
                   }
                 : {}),
         });
+        if (
+            owner &&
+            args.cancelled &&
+            call.executionGeneration !== undefined &&
+            call.operationEpoch !== undefined
+        )
+            await ctx.scheduler.runAfter(
+                0,
+                internal.execution.operations.wakeStructuredExecution,
+                {
+                    requestId: owner.request._id,
+                    expectedGeneration: call.executionGeneration,
+                    epoch: call.operationEpoch,
+                },
+            );
         return null;
     },
 });
@@ -643,6 +766,7 @@ export const providerAttemptValidator = v.object({
     searchQuery: v.optional(v.string()),
     modelContextWindowTokens: v.optional(v.number()),
     operationRequestId: v.optional(v.id("agentOperationRequests")),
+    operationEpoch: v.optional(v.number()),
     missionId: v.optional(v.id("agentMissions")),
     invocationId: v.optional(v.id("agentInvocations")),
     inputHash: v.optional(v.string()),
@@ -666,6 +790,7 @@ export const providerAttemptValidator = v.object({
     errorCode: v.optional(v.string()),
     diagnostic: schema.tables.providerCalls.validator.fields.diagnostic,
     retryable: v.optional(v.boolean()),
+    termination: v.optional(providerStreamTerminationValidator),
     dispatchOutcome: v.optional(preparationDispatchOutcomeValidator),
     httpStatus: v.optional(v.number()),
     retryAfterAt: v.optional(v.number()),
@@ -679,6 +804,17 @@ export const recordAttempt = internalMutation({
         args,
     ): Promise<Infer<typeof recordAttemptResultValidator>> => {
         const now = Date.now();
+        if (args.status === "started" && (await publicationControl(ctx))?.held)
+            throw sourcePreparationError("provider_publication_held");
+        if (
+            args.termination &&
+            (args.service !== "model" ||
+                args.status === "started" ||
+                args.dispatchOutcome !== "response_received" ||
+                !args.preparationId ||
+                !isOneShotPreparationOperation(args.operation))
+        )
+            throw sourcePreparationError("attempt_identity_conflict");
         if (
             args.status === "started" &&
             args.operationRequestId &&
@@ -1271,6 +1407,7 @@ export const recordAttempt = internalMutation({
                     );
             }
             let recoveryOfProviderCallId: Id<"providerCalls"> | undefined;
+            let structuredOutputPolicy: Doc<"providerCalls">["structuredOutputPolicy"];
             let remainingModelAuthorityMs: number | undefined;
             if (
                 args.preparationId &&
@@ -1403,6 +1540,16 @@ export const recordAttempt = internalMutation({
                 const preparation = args.preparationId
                     ? await ctx.db.get(args.preparationId)
                     : null;
+                if (
+                    preparation &&
+                    isOneShotPreparationOperation(args.operation)
+                ) {
+                    structuredOutputPolicy = preparation.structuredOutputPolicy;
+                    if (!supportsStructuredOutputPolicy(structuredOutputPolicy))
+                        throw sourcePreparationError(
+                            "structured_output_policy_unsupported",
+                        );
+                }
                 const request = args.operationRequestId
                     ? await ctx.db.get(args.operationRequestId)
                     : null;
@@ -1410,8 +1557,19 @@ export const recordAttempt = internalMutation({
                     args.operationRequestId &&
                     (!request ||
                         request.runId !== args.runId ||
-                        request.expectedGeneration !==
+                        (request.scheduledExecution?.dispatchGeneration ??
+                            request.expectedGeneration) !==
                             args.executionGeneration ||
+                        (args.operationEpoch !== undefined &&
+                            (request.scheduledExecution?.phase !== "running" ||
+                                !ownsScheduledEpoch(
+                                    request,
+                                    args.executionGeneration ?? -1,
+                                    args.operationEpoch,
+                                ))) ||
+                        (isOneShotPreparationOperation(args.operation) &&
+                            request.scheduledExecution &&
+                            args.operationEpoch === undefined) ||
                         !operationHasStarted(request) ||
                         (args.missionId &&
                             request.missionId !== args.missionId))
@@ -1553,11 +1711,7 @@ export const recordAttempt = internalMutation({
                     if (!capacity)
                         throw sourcePreparationError("missing_configuration");
                     modelReservationUsd =
-                        (capacity.contextWindow *
-                            MODEL_MAX_INPUT_PRICE_PER_MILLION +
-                            capacity.maxTokens *
-                                MODEL_MAX_OUTPUT_PRICE_PER_MILLION) /
-                        1_000_000;
+                        qualificationModelReservationUsd(capacity);
                 }
                 qualificationReservationUsd =
                     args.service === "model"
@@ -1674,6 +1828,8 @@ export const recordAttempt = internalMutation({
                 operationRequestId: args.operationRequestId,
                 missionId: args.missionId,
                 invocationId: args.invocationId,
+                operationEpoch: args.operationEpoch,
+                ...(structuredOutputPolicy ? { structuredOutputPolicy } : {}),
                 inputHash: args.inputHash,
                 searchQuery: args.searchQuery,
                 runId: args.runId,
@@ -1760,6 +1916,20 @@ export const recordAttempt = internalMutation({
                     existing.inputHash !== args.inputHash))
         )
             throw sourcePreparationError("attempt_identity_conflict");
+        if (args.termination && !existing.invocationId)
+            throw sourcePreparationError("attempt_identity_conflict");
+        const terminalObservation =
+            args.termination && !existing.providerObservation?.termination
+                ? {
+                      providerObservation: {
+                          ...existing.providerObservation,
+                          observedAt:
+                              existing.providerObservation?.observedAt ??
+                              args.termination.observedAt,
+                          termination: args.termination,
+                      },
+                  }
+                : {};
         if (
             (framingLookup || args.service === "model") &&
             (args.preparationId || args.missionId) &&
@@ -1783,7 +1953,10 @@ export const recordAttempt = internalMutation({
                     args.reportedCost,
                     args,
                 );
-                await patchQualificationReceipt(ctx, existing, settlement);
+                await patchQualificationReceipt(ctx, existing, {
+                    ...settlement,
+                    ...terminalObservation,
+                });
                 return {
                     providerCallId: existing._id,
                     shouldExecute: false,
@@ -1796,6 +1969,7 @@ export const recordAttempt = internalMutation({
             latencyMs: args.latencyMs,
             usage: args.usage,
             ...reportedCostSettlement(existing, args.reportedCost, args),
+            ...terminalObservation,
             errorCode: args.errorCode,
             ...(args.diagnostic ? { diagnostic: args.diagnostic } : {}),
             retryable: args.retryable,

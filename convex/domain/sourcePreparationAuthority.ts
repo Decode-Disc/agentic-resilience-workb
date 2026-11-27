@@ -22,6 +22,17 @@ export const SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION = "source_actions_v4";
 export const SOURCE_PREPARATION_EXECUTION_PLAN_VERSION =
     SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION;
 
+/** The preparation model operations that own a one-shot visible output stream. */
+export const ONE_SHOT_PREPARATION_OPERATIONS = [
+    "source_qualification",
+    "source_comparison",
+    "source_documentary_control",
+] as const;
+
+export function isOneShotPreparationOperation(operation: string) {
+    return ONE_SHOT_PREPARATION_OPERATIONS.some((value) => value === operation);
+}
+
 /** Transport facts emitted at send and response boundaries. */
 export type ObserveProviderDispatch = (
     outcome: "unknown" | "response_received",
@@ -84,8 +95,14 @@ export const preparationModelLimitsValidator = v.object({
     incidents: v.number(),
 });
 
+export const structuredOutputPolicyValidator = v.object({
+    version: v.string(),
+    maxConsecutiveWhitespace: v.number(),
+});
+
+export const PREPARATION_BUDGET_VERSION = 2;
 export const preparationBudgetValidator = v.object({
-    version: v.literal(1),
+    version: v.literal(PREPARATION_BUDGET_VERSION),
     work: v.number(),
     incidents: v.number(),
     reserved: v.number(),
@@ -100,7 +117,11 @@ type PreparationAttemptObservation = Pick<
     Partial<
         Pick<
             Doc<"providerCalls">,
-            "service" | "operation" | "providerObservation" | "billing"
+            | "service"
+            | "operation"
+            | "providerObservation"
+            | "billing"
+            | "invocationId"
         >
     >;
 
@@ -134,7 +155,7 @@ export async function readPreparationBudget(
         ),
     );
     const budget: PreparationBudget = {
-        version: 1,
+        version: PREPARATION_BUDGET_VERSION,
         work: 0,
         incidents: 0,
         reserved: 0,
@@ -222,12 +243,17 @@ export function preparationFailureClass(call: PreparationAttemptObservation) {
     if (
         call.status === "failed" &&
         call.service === "model" &&
-        call.operation === "source_documentary_control" &&
-        call.providerObservation?.generationId &&
-        call.providerObservation.cancelled === true &&
-        call.billing?.state === "confirmed"
+        call.operation &&
+        call.invocationId &&
+        isOneShotPreparationOperation(call.operation) &&
+        (call.errorCode === "invalid_output" ||
+            call.errorCode === "structured_output_whitespace" ||
+            call.errorCode === "structured_result_unavailable" ||
+            call.errorCode === "request_timeout")
     )
-        return "terminal";
+        return call.providerObservation?.termination
+            ? "invalid_output"
+            : "unknown";
     if (
         [
             "request_timeout",
@@ -282,6 +308,8 @@ export function nextPreparationAttempt(
     const kind = preparationFailureClass(last);
     if (kind === "succeeded") return { errorCode: "result_already_recorded" };
     if (kind === "unknown") return { errorCode: "attempt_outcome_unknown" };
+    if (calls.some((call) => call.billing?.state === "conflict"))
+        return { errorCode: "billing_conflict" };
     if (kind === "terminal")
         return { errorCode: last.errorCode ?? "terminal_failure" };
     const modelOperation = [

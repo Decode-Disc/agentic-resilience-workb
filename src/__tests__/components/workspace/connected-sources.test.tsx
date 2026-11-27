@@ -207,13 +207,14 @@ const reading: Reading = {
             needIds: ["workflow"],
             passageOrders: [3],
             permittedUse: "blocked",
+            needs: { workflow: "blocked" },
+            objections: [],
             reportedUse: "attributed_argument_only",
             conclusion: "documentary_conflict",
             diagnostic: "The call defines scope differently.",
             restricted: false,
         },
     ],
-    coherence: false,
     observedLinks: [
         {
             index: 0,
@@ -526,6 +527,47 @@ test("the reader shows effective use apart from the reported one and hands a fol
     );
 });
 
+test("the citation note distinguishes a blocked question from an allowed contextual use", () => {
+    const [original] = reading.contributions;
+    assert(original);
+    const objection =
+        "This passage does not establish who controls coordination.";
+    convexReactHarness.query(api.sourcesWorkspace.getSource).returns({
+        ...reading,
+        contributions: [
+            {
+                ...original,
+                conclusion: "supported",
+                diagnostic: "The report attributes this view to management.",
+                needIds: ["context", "workflow"],
+                permittedUse: "attributed_argument_only",
+                needs: {
+                    context: "attributed_argument_only",
+                    workflow: "blocked",
+                },
+                objections: [
+                    {
+                        needIds: ["workflow"],
+                        maximumUse: "blocked",
+                        diagnosticPreview: objection,
+                        diagnosticComplete: true,
+                    },
+                ],
+            },
+        ],
+    });
+    renderSources({ search: { sourcesView: "reader", source: sourceId } });
+    fireEvent.click(
+        screen.getAllByRole("button", {
+            name: /^Show note for citation 1/,
+        })[0] as HTMLElement,
+    );
+    expect(document.body.textContent).toMatch(/Q1[^·]*inspection only/i);
+    expect(document.body.textContent).toContain(objection);
+    expect(document.body.textContent).toMatch(/attributed argument only/i);
+    expect(document.body.textContent).not.toMatch(rawValues);
+});
+
 test.each([
     {
         field: "statement",
@@ -563,7 +605,9 @@ test.each([
     if (value.trim()) expect(document.body.textContent).not.toContain(value);
     expect(
         screen.getAllByText(
-            /Some contribution wording is unavailable\. Inspect the cited passage\./,
+            field === "diagnostic"
+                ? /Explanation unavailable\. Inspect the cited passage\./
+                : /Some contribution wording is unavailable\. Inspect the cited passage\./,
         ).length,
     ).toBeGreaterThan(0);
     expect(
@@ -571,6 +615,43 @@ test.each([
     ).toBeGreaterThan(0);
     expect(screen.getAllByText(/Inspection only/).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Conflict").length).toBeGreaterThan(0);
+});
+
+test.each([
+    ":g5566066:",
+    ":x42:",
+    "n/a",
+    "null",
+    "supported",
+    "objection",
+    "issuer_product_claim_no_outcome",
+    "",
+    "   ",
+    "S&P describes issuer_product_claim_no_outcome as a reporting label.",
+])("shows the recorded finding or an actionable explanation for %j", (diagnostic) => {
+    const fallback = "Explanation unavailable. Inspect the cited passage.";
+    convexReactHarness.query(api.sourcesWorkspace.getSource).returns({
+        ...reading,
+        contributions: reading.contributions.map((c) => ({
+            ...c,
+            diagnostic,
+            conclusion: "supported",
+            permittedUse: "attributed_argument_only",
+        })),
+    });
+    renderSources({ search: { sourcesView: "reader", source: sourceId } });
+    fireEvent.click(
+        screen.getAllByRole("button", {
+            name: /^Show note for citation 1/,
+        })[0] as HTMLElement,
+    );
+    const note = document.body.textContent ?? "";
+    expect(note).toContain(
+        diagnostic.startsWith("S&P") ? diagnostic : fallback,
+    );
+    expect(note).not.toMatch(/:g5566066:|:x42:/);
+    expect(note).toMatch(/Attributed argument only/i);
+    expect(note).toContain("The platform connects insurers.");
 });
 
 test("the reader preserves long ordinary model prose and exact quoted technical text", () => {

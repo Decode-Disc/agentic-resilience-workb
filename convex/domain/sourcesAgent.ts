@@ -1,10 +1,11 @@
 import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
-import type { QueryCtx } from "@convex/_generated/server";
+import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
 import {
     type AgentDefinition,
     domainSnapshot,
 } from "@convex/execution/agentDefinition";
+import { sourcesDocumentaryMethod } from "@convex/execution/agentSkillContracts";
 import { executionError, executionFailureCode } from "@convex/execution/errors";
 import type { AgentOperationDefinition } from "@convex/execution/executionProtocol";
 import {
@@ -33,10 +34,11 @@ import {
 } from "./savedMaterialAgentOperations";
 import {
     documentaryReference,
-    NATIVE_COMPLETION_SOURCES_VERSION,
     REFERENCED_SOURCES_VERSION,
+    SCOPED_DOCUMENTARY_SOURCES_VERSION,
     savedMaterialBinding,
     savedMaterialWireContract,
+    supportsScopedDocumentaryExamination,
 } from "./savedMaterialOperations";
 import { sha256Hex, stableStringify } from "./sourcePassages";
 import { preparationFailureCode } from "./sourcePreparationAuthority";
@@ -122,6 +124,7 @@ const operation = (
     description: string,
     inputValidator: AgentOperationDefinition["inputValidator"],
     resultValidator: AgentOperationDefinition["resultValidator"],
+    structuredRecovery = false,
 ): AgentOperationDefinition => ({
     version: 1,
     effectKind: "durable_effect",
@@ -180,6 +183,25 @@ const operation = (
             return { kind: "unavailable", code };
         }
     },
+    ...(structuredRecovery
+        ? {
+              scheduledRecovery: "structured_model_v1" as const,
+              recoverScheduledResult(
+                  ctx: MutationCtx,
+                  request: Doc<"agentOperationRequests">,
+                  generation: number,
+              ) {
+                  return ctx.runMutation(
+                      internal.sourcesMission.recoverScheduledControl,
+                      {
+                          requestId: request._id,
+                          expectedGeneration: generation,
+                          epoch: request.scheduledExecution?.epoch,
+                      },
+                  );
+              },
+          }
+        : {}),
     scheduledAction: internal.sourcesMissionActions.execute,
 });
 const retainedSourcesPreparationMethod =
@@ -358,22 +380,25 @@ export const sourcesV4Definition: AgentDefinition & { id: "sources_v1" } = {
                 `Submit 1–${SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS} new contributions or corrections for one primary capture, keeping at most ${SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS} contributions in the resulting qualification. Select each evidence passage using readRequestId and passageOrder from a successful search/read result in this scope; the system supplies its exact text. Each contribution must include the primary capture; submit contributions supported only by another capture separately. Omit contributionId for a new contribution; select its observed identity to correct it. The harness binds versions from the invocation's observed qualification. Mandatory documentary control governs use.`,
                 qualificationSubmissionInput,
                 documentarySubmissionResult,
+                true,
             ),
-            version: 2,
+            version: 3,
         },
         request_documentary_check: {
             ...operation(
                 "Check a documentary proposition using readRequestId and passageOrder selections from successful search/read results, without creating an analytical assertion. The system materializes the exact selected evidence.",
                 documentaryCheckInput,
                 documentarySubmissionResult,
+                true,
             ),
-            version: 2,
+            version: 3,
         },
     },
     modelOperation(name, operation, snapshot) {
         const wire = savedMaterialWireContract(
             name,
             savedMaterialBinding(this.id, this.version),
+            supportsScopedDocumentaryExamination(this.id, this.version),
         );
         if (wire) return { description: operation.description, ...wire };
         return {
@@ -800,10 +825,7 @@ export const sourcesV5Definition: AgentDefinition & { id: "sources_v1" } = {
 export const sourcesV7Definition: AgentDefinition & { id: "sources_v1" } = {
     ...sourcesV5Definition,
     version: REFERENCED_SOURCES_VERSION,
-    skills: {
-        packageId: "research-methods-v2",
-        skillName: "source-preparation",
-    },
+    skills: sourcesDocumentaryMethod,
     operations: {
         ...Object.fromEntries(
             Object.entries(sourcesV5Definition.operations).filter(
@@ -814,18 +836,16 @@ export const sourcesV7Definition: AgentDefinition & { id: "sources_v1" } = {
     },
 };
 
-export const sourcesV8Definition: AgentDefinition & { id: "sources_v1" } = {
+/** Current Sources binding for callers that do not pin a historical definition. */
+export const sourcesDefinition: AgentDefinition & { id: "sources_v1" } = {
     ...sourcesV7Definition,
-    version: NATIVE_COMPLETION_SOURCES_VERSION,
+    version: SCOPED_DOCUMENTARY_SOURCES_VERSION,
     completionTransport: "native_tool",
     instructions: [
         ...sourcesAuthorityInstructions,
         sourcesNativeCompletionContract,
     ].join("\n"),
 };
-
-/** Current Sources binding for callers that do not pin a historical definition. */
-export const sourcesDefinition = sourcesV8Definition;
 
 /** Qualification-only control retains the inline method with current operations and completion. */
 export const sourcesMethodControlDefinition: AgentDefinition & {

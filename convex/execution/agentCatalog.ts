@@ -9,15 +9,15 @@ import {
 } from "@convex/domain/executionValidationAgent";
 import {
     documentaryInspectionDefinition,
-    documentaryInspectionV4Definition,
+    documentaryInspectionV5Definition,
     savedMaterialInspectionDefinition,
 } from "@convex/domain/savedMaterialInspection";
 import {
+    sourcesDefinition,
     sourcesMethodControlDefinition,
     sourcesV4Definition,
     sourcesV5Definition,
     sourcesV7Definition,
-    sourcesV8Definition,
 } from "@convex/domain/sourcesAgent";
 import {
     directedWorkbenchDefinition,
@@ -28,7 +28,7 @@ import {
     workbenchV9Definition,
     workbenchV10Definition,
     workbenchV11Definition,
-    workbenchV12Definition,
+    workbenchV13Definition,
 } from "@convex/domain/workbenchAgent";
 import { getFunctionName } from "convex/server";
 import {
@@ -46,13 +46,13 @@ import { operationResultSchema } from "./operationResults";
 // Defer imported definition reads until module initialization has completed.
 function definitions() {
     return {
-        [sourcesV8Definition.id]: sourcesV8Definition,
-        [workbenchV12Definition.id]: workbenchV12Definition,
+        [sourcesDefinition.id]: sourcesDefinition,
+        [workbenchV13Definition.id]: workbenchV13Definition,
         [conversationValidationV3Definition.id]:
             conversationValidationV3Definition,
         [executionValidationV3Definition.id]: executionValidationV3Definition,
-        [documentaryInspectionV4Definition.id]:
-            documentaryInspectionV4Definition,
+        [documentaryInspectionV5Definition.id]:
+            documentaryInspectionV5Definition,
     } satisfies Record<Doc<"agentMissions">["definitionId"], AgentDefinition>;
 }
 
@@ -70,6 +70,10 @@ export function assertOperationContract(
             ? operation.effectKind !== "durable_effect" ||
               operation.execute !== undefined
             : typeof operation.execute !== "function") ||
+        (operation.effectKind === "durable_effect" &&
+            operation.scheduledAction !== undefined &&
+            (operation.scheduledRecovery !== undefined) !==
+                (typeof operation.recoverScheduledResult === "function")) ||
         typeof operation.resultValidator?.safeParse !== "function" ||
         typeof operation.pin !== "function" ||
         typeof operation.identity !== "function" ||

@@ -25,6 +25,8 @@ The final build contains one current examination contract and scheduling represe
 
 ## Implementation Overview
 
+The [implementation evidence](49-implementation-generation-resilience.md) records the verified candidate and the retained-data cutover boundary.
+
 - [ ] Phase 1: Establish reproducible baselines and conversion preconditions
 - [ ] Phase 2: Examine contributions and need associations without a global veto
 - [ ] Phase 3: Separate termination from cost and establish correct accounting baselines
@@ -44,6 +46,10 @@ Baseline and transition feasibility
 ```
 
 Each phase ends in runnable candidate code with focused evidence. Intermediate phases are development checkpoints, not separate production releases: the agreed result includes examination, detection, recovery and retirement together. Keep live admission on the old unchanged candidate until the controlled transition can complete, or keep the affected target fenced during authorized staging. Do not expose a mixture of old accounting and new classification.
+
+## Implementation Progress
+
+The checkout at `148d3b5a91822df8cd28979abdbcfdf15a00efc1` reproduced the retained baseline and probes. The candidate retains provider termination independently of price for the Phase 3 receipt changes. Phases remain open pending the remaining code and validation. See the [implementation evidence](49-implementation-generation-resilience.md).
 
 ## Execution Preconditions
 
@@ -76,7 +82,7 @@ Seed one integration fixture per conversion cohort in a planned `src/__tests__/c
 
 #### Automated Verification
 
-- [ ] Characterize current receipt accounting, queued cancellation, final-operation acknowledgement recovery and native append/writer behavior. Re-run the exact narrow filters from the verification record first; expand to these affected files when fixtures change.
+- [x] Characterize current receipt accounting, queued cancellation, final-operation acknowledgement recovery and native append/writer behavior. Re-run the exact narrow filters from the verification record first; expand to these affected files when fixtures change.
 - [ ] Reproduce lost acknowledgements after real one-shot/control commits and the abandoned lookup claim as diagnostic evidence, then use opposite expected outcomes in their correction phases.
 - [ ] Seed idle conversation, safe paused mission, completed historical handoff and unfinished preparation. Record invariant hashes and identify unsafe pending checkpoints; do not convert them yet.
 
@@ -294,7 +300,7 @@ After attempt two, preserve `explicit_recovery_required` as unfinished work. Do 
 - [ ] Reconcile while genuinely paused without inference or new documentary adoption, then exercise public Resume with slot-contention refusal and subsequent successful atomic slot reclaim/current-generation epoch. Verify unchanged consumption and identity, plus duplicate-control/wake idempotence. Do not seed paused state, invoke a recovery mutation directly or count `cancel_pause` as this positive-resume proof. Retain a separate cancel_pause case while a live operation is still draining.
 - [ ] Cancellation, deadline expiry, stale instructions/evidence, lost slot, cooldown and budget exhaustion each retain explicit containment without new inference; adoption rebind alone grants no continuation dispatch.
 - [ ] Test first failure → second attempt, then exhaustion without an automatic third/fourth call or new preparation. Cooldown schedules eligible work rather than spinning. Assert cumulative receipts, financial totals, work rows, identities and final outcome.
-- [ ] Run bounded falsifications for bypassed terminal proof and omitted original-reservation accounting; the real scheduled integration cases must fail before restoration.
+- [x] Run bounded falsifications for bypassed terminal proof and omitted original-reservation accounting; the real scheduled integration cases must fail before restoration.
 
 ```sh
 pnpm exec vitest run src/__tests__/convex/sources/documentary-control-integration.test.ts src/__tests__/convex/integrations/provider-billing.test.ts src/__tests__/convex/sources/source-preparation-budget.test.ts src/__tests__/convex/sources/sources-recovery.test.ts src/__tests__/convex/sources/sources-pause-admission.test.ts src/__tests__/convex/sources/sources-completion.test.ts

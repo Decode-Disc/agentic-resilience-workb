@@ -173,7 +173,11 @@ test.each([
                 preparationId: f.preparationId,
                 evidence: [],
                 inputHash: base.inputHash,
-                control: { coherence: true, limitations: [], findings: [] },
+                examination: {
+                    state: "examined",
+                    contractVersion: 2,
+                    control: { findings: {}, objections: [] },
+                },
             },
         });
         const contribution = {

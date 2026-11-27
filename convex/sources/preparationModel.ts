@@ -40,6 +40,8 @@ export async function executePreparationModel<
         preparation: Doc<"sourceSelectionProposalRebuilds">;
         executionDeadlineAt: number;
         operationRequestId?: Id<"agentOperationRequests">;
+        operationEpoch?: number;
+        scheduledRecovery?: "structured_model_v1";
         sourceId: Id<"sources">;
         operation:
             | "source_qualification"
@@ -70,6 +72,7 @@ export async function executePreparationModel<
     | {
           reasonCode: string;
           diagnosticReason?: string;
+          pendingProviderCallId?: Id<"providerCalls">;
           providerCallId?: Id<"providerCalls">;
           receipt?: PreparationModelReceipt;
       }
@@ -133,7 +136,10 @@ export async function executePreparationModel<
         };
         const attempt = {
             ...(input.operationRequestId
-                ? { operationRequestId: input.operationRequestId }
+                ? {
+                      operationRequestId: input.operationRequestId,
+                      operationEpoch: input.operationEpoch,
+                  }
                 : {}),
             inputHash: input.inputHash,
             runId: preparation.runId,
@@ -186,6 +192,7 @@ export async function executePreparationModel<
             result = await input.execute(route, {
                 authority: {
                     resourcePolicy: preparation.resourcePolicy,
+                    structuredOutputPolicy: preparation.structuredOutputPolicy,
                     deadlineAt,
                 },
                 signal: AbortSignal.timeout(
@@ -302,6 +309,7 @@ export async function executePreparationModel<
             dispatchOutcome: result.dispatchOutcome,
             httpStatus: result.httpStatus,
             retryAfterAt: result.retryAfterAt,
+            termination: result.termination,
             ...(result.status === "failed"
                 ? {
                       errorCode: result.errorCode,
@@ -366,10 +374,37 @@ export async function executePreparationModel<
         if (result.status === "succeeded")
             return { result, providerCallId, receipt };
         if (
+            input.scheduledRecovery === "structured_model_v1" &&
+            (result.errorCode === "invalid_output" ||
+                result.errorCode === "structured_output_whitespace" ||
+                (result.errorCode === "request_timeout" &&
+                    providerIdentityObserved)) &&
+            claimed.shouldExecute
+        )
+            return {
+                reasonCode: result.errorCode,
+                pendingProviderCallId: providerCallId,
+                diagnosticReason: result.outputDiagnostic?.reason,
+                providerCallId,
+                receipt,
+            };
+        if (
             firstAttempt !== 1 ||
             plan.attempt !== 1 ||
             !result.retryable ||
-            preparationBudgetOutcome(result) === "reserved"
+            preparationBudgetOutcome({
+                ...attempt,
+                ...result,
+                invocationId,
+                ...(result.termination
+                    ? {
+                          providerObservation: {
+                              observedAt: result.termination.observedAt,
+                              termination: result.termination,
+                          },
+                      }
+                    : {}),
+            }) === "reserved"
         )
             return {
                 reasonCode: result.errorCode,

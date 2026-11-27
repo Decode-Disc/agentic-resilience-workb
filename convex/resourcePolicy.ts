@@ -7,6 +7,25 @@
 /** Newly admitted work pins this contract; absent or unknown pins grant no dispatch authority. */
 export const RESOURCE_POLICY_VERSION = "authority_native_v1";
 
+/** Maximum consecutive JSON whitespace characters outside strings in a structured reply. */
+export const STRUCTURED_OUTPUT_POLICY = {
+    version: "structured_json_whitespace_v1",
+    maxConsecutiveWhitespace: 4096,
+} as const;
+export type StructuredOutputPolicy = {
+    version: string;
+    maxConsecutiveWhitespace: number;
+};
+export function supportsStructuredOutputPolicy(
+    policy: StructuredOutputPolicy | undefined,
+): policy is StructuredOutputPolicy {
+    return (
+        policy?.version === STRUCTURED_OUTPUT_POLICY.version &&
+        Number.isSafeInteger(policy.maxConsecutiveWhitespace) &&
+        policy.maxConsecutiveWhitespace > 0
+    );
+}
+
 /** Resolve immutable dispatch authority, never a guessed per-generation completion allowance. */
 export function resolveGenerationAuthority(
     authority: { resourcePolicy?: string; deadlineAt?: number } | undefined,

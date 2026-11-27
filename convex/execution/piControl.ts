@@ -24,6 +24,7 @@ import { getAgentDefinition } from "./agentCatalog";
 import {
     executionError,
     executionFailureCode,
+    publicationControl,
     recordMissionEvent,
     requireDossierAuthority,
     requireMissionAuthority,
@@ -50,13 +51,6 @@ import {
 import { suspendInterruptedResearch } from "./researchControl";
 import { retainedTextFragment } from "./retainedText";
 import { nativeInputsValidator } from "./schema";
-
-async function publicationControl(ctx: QueryCtx) {
-    return ctx.db
-        .query("piPublication")
-        .withIndex("by_key", (q) => q.eq("key", "workers"))
-        .unique();
-}
 
 async function publicationStatusValue(ctx: QueryCtx) {
     const control = await publicationControl(ctx);
@@ -379,14 +373,34 @@ async function unchangedScheduledWait(
     const request = waiting[0];
     if (
         waiting.length !== 1 ||
-        !request?.scheduledJobId ||
-        request.expectedGeneration !== mission.generation ||
+        !request?.scheduledExecution ||
+        request.scheduledExecution.dispatchGeneration !== mission.generation ||
         request.outcome ||
         request.effect
     )
         return false;
-    const job = await ctx.db.system.get(request.scheduledJobId);
-    return job?.state.kind === "pending" || job?.state.kind === "inProgress";
+    const scheduled = request.scheduledExecution;
+    const jobId =
+        scheduled.phase === "queued" || scheduled.phase === "running"
+            ? scheduled.jobId
+            : scheduled.phase === "waiting_provider"
+              ? scheduled.wakeId
+              : undefined;
+    const job = jobId ? await ctx.db.system.get(jobId) : null;
+    if (job?.state.kind === "pending" || job?.state.kind === "inProgress")
+        return true;
+    if (scheduled.phase !== "waiting_provider") return false;
+    const call = await ctx.db.get(scheduled.callId);
+    if (
+        !call?.billing?.wakeId ||
+        call.operationRequestId !== request._id ||
+        call.operationEpoch !== scheduled.epoch
+    )
+        return false;
+    const lookup = await ctx.db.system.get(call.billing.wakeId);
+    return (
+        lookup?.state.kind === "pending" || lookup?.state.kind === "inProgress"
+    );
 }
 
 async function blockNativeSettlement(
@@ -1273,13 +1287,32 @@ export const rebind = internalMutation({
                 numItems: PERSISTENCE_PAGE_SIZE.nativeRebind,
                 cursor: args.cursor,
             });
-        for (const request of page.page)
+        for (const request of page.page) {
             await ctx.db.patch(
                 request._id,
                 request.status === "pending"
                     ? { expectedGeneration: args.expectedGeneration }
                     : { adoptionGeneration: args.expectedGeneration },
             );
+            const execution = request.scheduledExecution;
+            if (
+                execution?.phase === "waiting_provider" &&
+                request.structuredResumeGeneration === args.expectedGeneration
+            ) {
+                const wakeId = await ctx.scheduler.runAfter(
+                    0,
+                    internal.execution.operations.wakeStructuredExecution,
+                    {
+                        requestId: request._id,
+                        expectedGeneration: execution.dispatchGeneration,
+                        epoch: execution.epoch,
+                    },
+                );
+                await ctx.db.patch(request._id, {
+                    scheduledExecution: { ...execution, wakeId },
+                });
+            }
+        }
         if (!page.isDone || args.stage < statuses.length - 1)
             await ctx.scheduler.runAfter(
                 0,

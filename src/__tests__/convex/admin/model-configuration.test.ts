@@ -987,7 +987,7 @@ test.each([
     assert(revisionBefore);
     const route = revisionRoute(revisionBefore);
 
-    // Start an already-admitted historical v3 mission and a new default v4 mission.
+    // Start an already-admitted historical v3 mission and a new default v5 mission.
     const v3MissionId = await f.t.mutation(internal.execution.missions.start, {
         runId: f.args.runId,
         corpusRevisionId: f.args.corpusRevisionId,
@@ -1003,37 +1003,37 @@ test.each([
             reasoningEffort: "low",
         }),
     );
-    const v4MissionId = await f.t.mutation(internal.execution.missions.start, {
+    const v5MissionId = await f.t.mutation(internal.execution.missions.start, {
         runId: f.args.runId,
         corpusRevisionId: f.args.corpusRevisionId,
         definitionId: "saved_material_inspection_v1",
-        requestKey: `profile-refresh-v4-${mode}`,
+        requestKey: `profile-refresh-v5-${mode}`,
         expectedGeneration: 4,
     });
-    expect(v4MissionId).not.toBe(v3MissionId);
+    expect(v5MissionId).not.toBe(v3MissionId);
     await f.t.run((ctx) =>
-        ctx.db.patch(v4MissionId, {
+        ctx.db.patch(v5MissionId, {
             modelRevisionId: revisionBefore._id,
             reasoningEffort: "low",
         }),
     );
 
-    // Simulate a database provisioned before v4 existed: remove the v4 profile key from DB.
-    const v4Def = getAgentDefinition("saved_material_inspection_v1", 4);
-    const v4Key = await piInputProfileKey({
-        instructions: v4Def.instructions,
-        operations: agentToolSchemas(v4Def),
+    // Simulate a database provisioned before v5 existed: remove the v5 profile key from DB.
+    const v5Def = getAgentDefinition("saved_material_inspection_v1", 5);
+    const v5Key = await piInputProfileKey({
+        instructions: v5Def.instructions,
+        operations: agentToolSchemas(v5Def),
         prompt: "",
-        definitionVersion: v4Def.version,
-        nativeConversation: v4Def.nativeConversation,
-        contextRendering: v4Def.contextRendering,
-        completionTransport: v4Def.completionTransport,
+        definitionVersion: v5Def.version,
+        nativeConversation: v5Def.nativeConversation,
+        contextRendering: v5Def.contextRendering,
+        completionTransport: v5Def.completionTransport,
         nativeRoute: { ...route, reasoningEffort: "low" },
     });
     await f.t.run(async (ctx) => {
         const row = await ctx.db
             .query("nativeInputProfiles")
-            .withIndex("by_key", (q) => q.eq("key", v4Key))
+            .withIndex("by_key", (q) => q.eq("key", v5Key))
             .unique();
         if (row) await ctx.db.delete(row._id);
         if (mode === "changed_catalog_revision") {
@@ -1055,7 +1055,7 @@ test.each([
         )?.compatible,
     ).toBe(mode === "unchanged_additive_catalog");
 
-    // Historical v3 continues working with its retained DB profile, while v4 explicitly blocks before refresh.
+    // Historical v3 continues working with its retained DB profile, while v5 explicitly blocks before refresh.
     const v3Before = await f.t.query(internal.execution.context.build, {
         missionId: v3MissionId,
         expectedGeneration: 4,
@@ -1063,7 +1063,7 @@ test.each([
     expect(v3Before.kind).toBe("ready");
     await expect(
         f.t.query(internal.execution.context.build, {
-            missionId: v4MissionId,
+            missionId: v5MissionId,
             expectedGeneration: 4,
         }),
     ).rejects.toThrow("model_input_profile_unavailable");
@@ -1101,17 +1101,17 @@ test.each([
         (await f.t.run((ctx) => ctx.db.get(v3MissionId)))?.modelRevisionId,
     ).toBe(revisionBefore._id);
 
-    // After refresh, both v3 and v4 resolve their DB profiles cleanly.
+    // After refresh, both v3 and v5 resolve their DB profiles cleanly.
     const v3After = await f.t.query(internal.execution.context.build, {
         missionId: v3MissionId,
         expectedGeneration: 4,
     });
-    const v4After = await f.t.query(internal.execution.context.build, {
-        missionId: v4MissionId,
+    const v5After = await f.t.query(internal.execution.context.build, {
+        missionId: v5MissionId,
         expectedGeneration: 4,
     });
     expect(v3After.kind).toBe("ready");
-    expect(v4After.kind).toBe("ready");
+    expect(v5After.kind).toBe("ready");
 }, 30000);
 
 test("profile reads reject a transaction exceeding 256 keys", async () => {

@@ -28,7 +28,7 @@ test("native input snapshots reference large analyst bodies without loading them
         undefined,
         undefined,
         undefined,
-        12,
+        13,
         "balanced",
         { bytesRead: 128 * 1024 },
     );

@@ -3,16 +3,16 @@ import { internal } from "@convex/_generated/api";
 import { internalAction } from "@convex/_generated/server";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { skillResource } from "@convex/execution/agentSkills";
-import { operationOutcomeValidator } from "@convex/execution/executionProtocol";
+import {
+    operationOutcomeValidator,
+    scheduledOperationArgs,
+} from "@convex/execution/executionProtocol";
 import { executeScheduledOperation } from "@convex/execution/operations";
 import { createReadTool } from "@earendil-works/pi-coding-agent";
 import { v } from "convex/values";
 
 export const execute = internalAction({
-    args: {
-        requestId: v.id("agentOperationRequests"),
-        expectedGeneration: v.number(),
-    },
+    args: scheduledOperationArgs,
     returns: v.union(operationOutcomeValidator, v.null()),
     handler: async (ctx, args) =>
         executeScheduledOperation(ctx, args, async () => {

@@ -82,15 +82,18 @@ export const reconcile = internalAction({
                             data &&
                             typeof data === "object" &&
                             "id" in data &&
-                            data.id === claim.generationId &&
-                            "total_cost" in data &&
-                            typeof data.total_cost === "number" &&
-                            Number.isFinite(data.total_cost) &&
-                            data.total_cost >= 0
+                            data.id === claim.generationId
                         ) {
-                            cost = data.total_cost;
                             if ("cancelled" in data && data.cancelled === true)
                                 cancelled = true;
+                            if (
+                                "total_cost" in data &&
+                                typeof data.total_cost === "number" &&
+                                Number.isFinite(data.total_cost) &&
+                                data.total_cost >= 0
+                            )
+                                cost = data.total_cost;
+                            else reason = "invalid_response";
                         } else reason = "invalid_response";
                     }
                 }
@@ -113,7 +116,8 @@ export const reconcile = internalAction({
             generationId: claim.generationId,
             httpStatus,
             latencyMs: Date.now() - startedAt,
-            ...(cost !== undefined ? { cost, cancelled } : { reason }),
+            cancelled,
+            ...(cost !== undefined ? { cost } : { reason }),
         });
         return null;
     },

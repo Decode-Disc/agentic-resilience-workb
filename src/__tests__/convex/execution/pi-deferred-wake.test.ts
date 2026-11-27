@@ -1,4 +1,6 @@
 import { api, internal } from "@convex/_generated/api";
+import type { ActionCtx } from "@convex/_generated/server";
+import { type FunctionArgs, getFunctionName } from "convex/server";
 import { afterEach, expect, test, vi } from "vitest";
 import { seedConversation } from "@/__tests__/setup/agent-harness";
 import { readMessageBodies } from "@/__tests__/setup/retained-messages";
@@ -300,21 +302,46 @@ test("an unchanged owned scheduled research wait defers hydration but a new obse
     const { recordContextObservation } = await import(
         "@convex/execution/journal"
     );
+    const { run } = await import("@convex/execution/piWorker");
+    const worker = run as typeof run & {
+        _handler(
+            ctx: ActionCtx,
+            args: FunctionArgs<typeof internal.execution.piWorker.run>,
+        ): Promise<null>;
+    };
     const f = await scheduledResearchWait();
-    const before = f.before;
-    const first = await f.t.run((ctx) => ctx.db.get(f.missionId));
-    if (!first?.piWakeToken) throw Error("no wake");
-    expect(
-        await f.t.mutation(internal.execution.piControl.prepare, {
-            missionId: f.missionId,
-            expectedGeneration: 4,
-            token: first.piWakeToken,
-            writer: "idle-fallback",
-        }),
-    ).toBe(false);
-    expect(await f.t.run((ctx) => ctx.db.get(before._id))).toMatchObject({
-        epoch: before.epoch,
-        writer: before.writer,
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.missionId, { provenance: "simulation" }),
+    );
+    const replayQueries = new Set([
+        getFunctionName(internal.execution.piStore.scan),
+        getFunctionName(internal.execution.piStore.readCommitFragment),
+    ]);
+    const runWake = async () => {
+        const mission = await f.t.run((ctx) => ctx.db.get(f.missionId));
+        if (!mission?.piWakeToken) throw Error("Missing scheduled wake");
+        const token = mission.piWakeToken;
+        let bytes = 0;
+        await f.t.action((ctx) =>
+            worker._handler(
+                {
+                    ...ctx,
+                    runQuery: async (reference, ...args) => {
+                        const value = await ctx.runQuery(reference, ...args);
+                        if (replayQueries.has(getFunctionName(reference)))
+                            bytes += Buffer.byteLength(JSON.stringify(value));
+                        return value;
+                    },
+                },
+                { missionId: f.missionId, expectedGeneration: 4, token },
+            ),
+        );
+        return bytes;
+    };
+    expect(await runWake()).toBe(0);
+    expect(await f.t.run((ctx) => ctx.db.get(f.before._id))).toMatchObject({
+        epoch: f.before.epoch,
+        writer: f.before.writer,
     });
     const deferred = await f.t.run((ctx) => ctx.db.get(f.missionId));
     expect((deferred?.piWakeAt ?? 0) - Date.now()).toBeGreaterThanOrEqual(
@@ -322,25 +349,19 @@ test("an unchanged owned scheduled research wait defers hydration but a new obse
     );
     await f.t.run((ctx) =>
         recordContextObservation(ctx, f.runId, {
-            key: "changed-while-waiting",
+            key: "changed-replay-measurement",
             topic: "research",
             actor: { type: "system" },
             value: { changed: true },
         }),
     );
-    const next = await f.t.run((ctx) => ctx.db.get(f.missionId));
-    if (!next?.piWakeToken) throw Error("no fallback");
+    expect(await runWake()).toBeGreaterThan(0);
     expect(
-        await f.t.mutation(internal.execution.piControl.prepare, {
-            missionId: f.missionId,
-            expectedGeneration: 4,
-            token: next.piWakeToken,
-            writer: "new-observation",
-        }),
-    ).toBe(true);
+        (await f.t.run((ctx) => ctx.db.get(f.before._id)))?.epoch,
+    ).toBeGreaterThan(f.before.epoch);
     expect(
-        (await f.t.run((ctx) => ctx.db.get(before._id)))?.epoch,
-    ).toBeGreaterThan(before.epoch);
+        await f.t.run((ctx) => ctx.db.query("providerCalls").collect()),
+    ).toEqual([]);
 });
 
 test("a retained scheduled result resumes immediately after an unchanged fallback was deferred", async () => {
@@ -358,6 +379,7 @@ test("a retained scheduled result resumes immediately after an unchanged fallbac
     await f.t.mutation(internal.execution.operations.recordResult, {
         requestId: f.requestId,
         expectedGeneration: 4,
+        epoch: 1,
         outcome: { kind: "unavailable", code: "fixture_result" },
     });
     const ready = await f.t.run((ctx) => ctx.db.get(f.missionId));

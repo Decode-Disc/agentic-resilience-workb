@@ -1,6 +1,7 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
 import {
+    PREPARATION_BUDGET_VERSION,
     preparationBudgetOutcome,
     preparationFailureClass,
     readPreparationBudget,
@@ -10,6 +11,52 @@ import {
     type CampaignLimits,
     emptyCampaignLimits,
 } from "@convex/qualificationCampaignPolicy";
+
+import {
+    MODEL_MAX_INPUT_PRICE_PER_MILLION,
+    MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
+} from "@convex/resourcePolicy";
+
+/** Charges maximum approved prices against the applicable full-context reservation. */
+export function qualificationModelReservationUsd(capacity: {
+    contextWindow: number;
+    maxTokens: number;
+}) {
+    return (
+        (capacity.contextWindow * MODEL_MAX_INPUT_PRICE_PER_MILLION +
+            capacity.maxTokens * MODEL_MAX_OUTPUT_PRICE_PER_MILLION) /
+        1_000_000
+    );
+}
+
+export function qualificationModelScopes(
+    lot: Pick<CampaignLimits, "model" | "costUsd">,
+    grant: Pick<CampaignLimits, "model" | "costUsd">,
+) {
+    return {
+        model: Math.min(lot.model, grant.model),
+        costUsd: Math.min(lot.costUsd, grant.costUsd),
+    };
+}
+
+/** Remaining headroom is tested the same way during planning and atomic dispatch. */
+export function exceededQualificationAllowance(
+    limits: Partial<CampaignLimits>,
+    usage: CampaignLimits,
+    kind: keyof Omit<CampaignLimits, "costUsd"> | "technical",
+    reservationUsd: number,
+) {
+    if (kind !== "technical" && usage[kind] + 1 > (limits[kind] ?? Infinity))
+        return {
+            resource: kind,
+            required: usage[kind] + 1,
+            available: limits[kind] ?? Infinity,
+        };
+    const required = usage.costUsd + reservationUsd;
+    const available = limits.costUsd ?? Infinity;
+    if (required > available)
+        return { resource: "costUsd" as const, required, available };
+}
 
 export const qualificationCategory = (
     call: Pick<Doc<"providerCalls">, "service" | "operation">,
@@ -76,6 +123,7 @@ export async function initializeQualificationUsage(
             await ctx.db.insert("qualificationUsage", {
                 contextId,
                 runId,
+                projectionVersion: PREPARATION_BUDGET_VERSION,
                 ...empty(),
             });
     }
@@ -134,6 +182,42 @@ export function qualificationUsageResolved(
     return !!row && row.unknown === 0 && row.conflicts === 0;
 }
 
+export function qualificationAllowanceScopes(
+    context: Doc<"browserTestContexts"> | null,
+    lot: Doc<"qualificationLots"> | null,
+    campaign: Doc<"qualificationCampaigns"> | null,
+    runId: Id<"researchRuns">,
+) {
+    if (
+        !context ||
+        !lot ||
+        !campaign ||
+        campaign.manifest.version === 1 ||
+        !context.paidQualification?.scenarios
+    )
+        return null;
+    const binding = context.paidQualification.scenarios.find(
+        (s) => s.runId === runId,
+    );
+    const scenario = campaign.manifest.scenarios.find(
+        (s) => s.id === binding?.id,
+    );
+    if (!scenario) return null;
+    return [
+        [
+            undefined,
+            {
+                ...lot.allocation,
+                ...qualificationModelScopes(lot.allocation, {
+                    model: context.paidQualification.maximumRequests,
+                    costUsd: context.paidQualification.maximumCostUsd,
+                }),
+            },
+        ],
+        [runId, scenario.limits ?? {}],
+    ] as const;
+}
+
 /** Reservation, including an optional case cap, is atomic with the actual provider receipt. */
 export async function assertQualificationAllowance(
     ctx: MutationCtx,
@@ -147,21 +231,11 @@ export async function assertQualificationAllowance(
         ? await ctx.db.get(context.campaignLotId)
         : null;
     const campaign = lot ? await ctx.db.get(lot.campaignId) : null;
-    if (
-        !context ||
-        !lot ||
-        !campaign ||
-        campaign.manifest.version === 1 ||
-        !context.paidQualification?.scenarios
-    )
-        throw new Error("Configurable qualification grant required");
-    const binding = context.paidQualification.scenarios.find(
-        (s) => s.runId === runId,
-    );
-    const scenario = campaign.manifest.scenarios.find(
-        (s) => s.id === binding?.id,
-    );
-    if (!scenario) throw new Error("Campaign scenario binding unavailable");
+    const scopes = qualificationAllowanceScopes(context, lot, campaign, runId);
+    if (!scopes)
+        throw new Error(
+            "Configurable qualification grant and scenario binding required",
+        );
     const expired = await ctx.db
         .query("providerCalls")
         .withIndex("by_qualification_context_and_status_and_lease", (q) =>
@@ -174,33 +248,19 @@ export async function assertQualificationAllowance(
     if (expired)
         throw sourcePreparationError("qualification_outcome_unresolved");
     const kind = qualificationCategory(call);
-    for (const [scopedRunId, limits] of [
-        [
-            undefined,
-            {
-                ...lot.allocation,
-                model: Math.min(
-                    lot.allocation.model,
-                    context.paidQualification.maximumRequests,
-                ),
-                costUsd: Math.min(
-                    lot.allocation.costUsd,
-                    context.paidQualification.maximumCostUsd,
-                ),
-            },
-        ],
-        [runId, scenario.limits ?? {}],
-    ] as const) {
+    for (const [scopedRunId, limits] of scopes) {
         const row = await readQualificationUsage(ctx, contextId, scopedRunId);
         if (!row) throw new Error("Qualification usage unavailable");
         if (!qualificationUsageResolved(row))
             throw sourcePreparationError("qualification_outcome_unresolved");
-        const ceiling: Partial<CampaignLimits> = limits;
         if (
             row.overruns ||
-            (kind !== "technical" &&
-                row.usage[kind] + 1 > (ceiling[kind] ?? Infinity)) ||
-            row.usage.costUsd + reservationUsd > (ceiling.costUsd ?? Infinity)
+            exceededQualificationAllowance(
+                limits,
+                row.usage,
+                kind,
+                reservationUsd,
+            )
         )
             throw sourcePreparationError("qualification_budget_exhausted");
     }
@@ -218,36 +278,42 @@ export async function patchQualificationReceipt(
     if (
         call.service === "model" &&
         (call.preparationId || call.missionId) &&
-        call.operation !== "source_embedding" &&
-        before !== after
+        call.operation !== "source_embedding"
     ) {
         const run = call.runId ? await ctx.db.get(call.runId) : null;
-        const preparation = call.preparationId
-            ? await ctx.db.get(call.preparationId)
-            : null;
-        if (!run || (!preparation && !call.missionId))
-            throw sourcePreparationError("stale_execution");
-        const budget = await readPreparationBudget(
-            ctx.db,
-            run,
-            preparation ?? undefined,
-        );
-        if (before !== "released") budget[before]--;
-        if (after !== "released") budget[after]++;
-        else {
-            budget.dispatches--;
-            if (preparation)
-                await ctx.db.patch(preparation._id, {
-                    modelAttemptCount: Math.max(
-                        0,
-                        (preparation.modelAttemptCount ?? 0) - 1,
-                    ),
-                });
+        if (!run) throw sourcePreparationError("stale_execution");
+        if (!run.sourcePreparationBudget)
+            throw sourcePreparationError(
+                "preparation_budget_conversion_required",
+            );
+        if (before !== after) {
+            const preparation = call.preparationId
+                ? await ctx.db.get(call.preparationId)
+                : null;
+            if (!preparation && !call.missionId)
+                throw sourcePreparationError("stale_execution");
+            const budget = await readPreparationBudget(
+                ctx.db,
+                run,
+                preparation ?? undefined,
+            );
+            if (before !== "released") budget[before]--;
+            if (after !== "released") budget[after]++;
+            else {
+                budget.dispatches--;
+                if (preparation)
+                    await ctx.db.patch(preparation._id, {
+                        modelAttemptCount: Math.max(
+                            0,
+                            (preparation.modelAttemptCount ?? 0) - 1,
+                        ),
+                    });
+            }
+            await ctx.db.patch(run._id, {
+                sourcePreparationBudget: budget,
+                sourceQualificationAttemptCount: budget.dispatches,
+            });
         }
-        await ctx.db.patch(run._id, {
-            sourcePreparationBudget: budget,
-            sourceQualificationAttemptCount: budget.dispatches,
-        });
     }
     await updateQualificationUsage(ctx, call, next);
     await ctx.db.patch(call._id, patch);

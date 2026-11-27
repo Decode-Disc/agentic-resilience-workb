@@ -36,7 +36,9 @@ import {
     documentaryContributionTallyValidator as contributionTallyValidator,
     type DocumentaryContributionTally,
     documentaryContributionValidator,
+    documentaryExaminationValidator,
     documentaryFindingValidator,
+    documentaryObjectionPreviewValidator,
     sourceDocumentStateValidator,
     sourcesCoverage,
 } from "@convex/domain/sourcesContracts";
@@ -195,14 +197,18 @@ const readerValidator = v.object({
             passageOrders: v.array(v.number()),
             /** Effective use after controls, exclusions and restrictions. */
             permittedUse,
+            needs: v.record(v.string(), permittedUse),
+            objections: v.array(documentaryObjectionPreviewValidator),
             /** What the control reported; it never widens the effective use. */
             reportedUse: v.optional(permittedUse),
             conclusion: v.optional(conclusion),
-            diagnostic: v.optional(v.string()),
+            diagnostic: v.optional(v.union(v.string(), v.null())),
             restricted: v.boolean(),
         }),
     ),
-    coherence: v.union(v.boolean(), v.null()),
+    historicalExamination: v.optional(
+        documentaryExaminationValidator.members[1],
+    ),
     observedLinks: v.array(
         v.object({
             index: v.number(),
@@ -716,21 +722,20 @@ export const getSource = query({
                         (evidence) => evidence.passageOrder,
                     ),
                     permittedUse: contribution.permittedUse,
+                    needs: contribution.needs,
+                    objections: contribution.objections,
                     ...(contribution.finding
                         ? {
                               conclusion: contribution.finding.conclusion,
                               diagnostic: contribution.finding.diagnostic,
-                              ...("reportedUse" in contribution.finding
-                                  ? {
-                                        reportedUse:
-                                            contribution.finding.reportedUse,
-                                    }
-                                  : {}),
+                              reportedUse: contribution.finding.reportedUse,
                           }
                         : {}),
                     restricted: contribution.restrictions.length > 0,
                 })) ?? [],
-            coherence: qualification?.coherence ?? null,
+            ...(qualification?.examination
+                ? { historicalExamination: qualification.examination }
+                : {}),
             observedLinks,
         };
     },

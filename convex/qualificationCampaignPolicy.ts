@@ -113,6 +113,18 @@ export const legacyCampaignManifestSchema = z
     });
 
 export type CampaignLimits = z.infer<typeof campaignLimitsSchema>;
+
+export const qualificationPrerequisiteFailureSchema = z.object({
+    code: z.literal("qualification_prerequisite_unfunded"),
+    configuration: z.string(),
+    scenario: z.string(),
+    role: z.enum(["workbench", "sources"]),
+    scope: z.enum(["case", "lot", "grant"]),
+    resource: z.enum(["costUsd", "model"]),
+    basis: z.enum(["startup_profile", "minimum", "request_count"]),
+    required: z.number(),
+    available: z.number(),
+});
 export const emptyCampaignLimits = (): CampaignLimits => ({
     model: 0,
     search: 0,

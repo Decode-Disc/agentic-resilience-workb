@@ -1173,6 +1173,7 @@ test("paired Sources fixture pins both agents before preparation and reads nativ
         expectedGeneration: state.generation,
     });
     await f.t.action(internal.integrations.agentSkillReader.execute, {
+        epoch: 1,
         requestId,
         expectedGeneration: state.generation,
     });

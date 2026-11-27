@@ -774,7 +774,7 @@ export async function requireDocumentaryMaterialRequest(
     );
     if (stableStringify(selected.pin) !== stableStringify(request.pin))
         throw executionError("version_conflict");
-    return { ...selected, input: request.input };
+    return { ...selected, input: request.input, mission };
 }
 
 export async function executeReferencedMaterialOperation(
@@ -852,7 +852,14 @@ export async function executeReferencedMaterialOperation(
         if (reading.status !== "ready")
             return { kind: "unavailable", code: reading.reason };
         if (reading.kind === "context") {
+            const examination = args.missionId
+                ? await ctx.runQuery(
+                      internal.sourcesMission.inspectCaptureExamination,
+                      authority,
+                  )
+                : null;
             const value = {
+                ...(examination ? { examination } : {}),
                 ...base,
                 kind: "read_in_context" as const,
                 text: reading.text,

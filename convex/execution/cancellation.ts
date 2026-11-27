@@ -178,8 +178,15 @@ async function cancelMission(
     }
 
     for (const request of requestsToRefuse) {
-        if (request.scheduledJobId && request.scheduledStartedAt === undefined)
-            await ctx.scheduler.cancel(request.scheduledJobId);
+        const scheduled = request.scheduledExecution;
+        if (scheduled?.phase === "queued")
+            await ctx.scheduler.cancel(scheduled.jobId);
+        if (
+            (scheduled?.phase === "waiting_provider" ||
+                scheduled?.phase === "running") &&
+            scheduled.wakeId
+        )
+            await ctx.scheduler.cancel(scheduled.wakeId);
         if (request.expiryJobId)
             await ctx.scheduler.cancel(request.expiryJobId);
         await ctx.db.patch(

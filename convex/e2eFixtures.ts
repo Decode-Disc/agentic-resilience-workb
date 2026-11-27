@@ -2598,7 +2598,7 @@ export const stageSourcePreparationRecoveryFixture = internalMutation({
                 args.exhaustedBudget === "incidents" ? limits.incidents : 0;
             await ctx.db.patch(run._id, {
                 sourcePreparationBudget: {
-                    version: 1,
+                    version: 2,
                     work,
                     incidents,
                     reserved: 0,

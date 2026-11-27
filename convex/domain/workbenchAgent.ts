@@ -25,8 +25,8 @@ import {
 import {
     framingWriteState,
     hasFramingProgram,
-    WORKBENCH_FRAMING_METHOD_VERSION,
     WORKBENCH_FRAMING_RECEIPT_VERSION,
+    WORKBENCH_SCOPED_DOCUMENTARY_VERSION,
 } from "./framingContracts";
 import { readResearchState } from "./researchState";
 import {
@@ -36,6 +36,7 @@ import {
 import {
     savedMaterialBinding,
     savedMaterialWireContract,
+    supportsScopedDocumentaryExamination,
     WORKBENCH_DOCUMENTARY_DEFINITION_VERSION,
 } from "./savedMaterialOperations";
 import { sha256Hex, stableStringify } from "./sourcePassages";
@@ -174,7 +175,11 @@ function nativeWorkbenchOperation(
     framingState: WorkbenchToolAvailability["framing"] = "established",
 ) {
     const binding = savedMaterialBinding("workbench_v1", version);
-    const materialWire = savedMaterialWireContract(name, binding);
+    const materialWire = savedMaterialWireContract(
+        name,
+        binding,
+        supportsScopedDocumentaryExamination("workbench_v1", version),
+    );
     if (materialWire)
         return { description: operation.description, ...materialWire };
     const framingInput =
@@ -1161,11 +1166,10 @@ export const workbenchV11Definition: AgentDefinition & { id: "workbench_v1" } =
         },
     };
 
-/** New method package; retained conversations keep their original method and tool contracts. */
-export const workbenchV12Definition: AgentDefinition & { id: "workbench_v1" } =
+export const workbenchV13Definition: AgentDefinition & { id: "workbench_v1" } =
     {
         ...workbenchV11Definition,
-        version: WORKBENCH_FRAMING_METHOD_VERSION,
+        version: WORKBENCH_SCOPED_DOCUMENTARY_VERSION,
         skills: {
             packageId: "research-methods-v3",
             skillName: "workbench-framing",

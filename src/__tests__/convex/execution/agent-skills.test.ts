@@ -32,8 +32,8 @@ afterEach(() => {
 
 test("current bindings expose only their native mission catalogue and preserve retained bindings", () => {
     for (const [id, version, retainedVersion, name] of [
-        ["workbench_v1", 12, 6, "workbench-framing"],
-        ["sources_v1", 8, 4, "source-preparation"],
+        ["workbench_v1", 13, 6, "workbench-framing"],
+        ["sources_v1", 9, 4, "source-preparation"],
     ] as const) {
         const current = getAgentDefinition(id);
         expect(current.version).toBe(version);
@@ -82,6 +82,7 @@ test("native read runs through scheduled settlement and retains its exact packag
         expectedGeneration: 1,
     });
     await f.t.action(internal.integrations.agentSkillReader.execute, {
+        epoch: 1,
         requestId,
         expectedGeneration: 1,
     });
@@ -117,6 +118,7 @@ test("native read runs through scheduled settlement and retains its exact packag
         expectedGeneration: 1,
     });
     await f.t.action(internal.integrations.agentSkillReader.execute, {
+        epoch: 1,
         requestId: pageId,
         expectedGeneration: 1,
     });
@@ -317,7 +319,7 @@ test("native provider requests retain consulted method and annex text", async ()
 test.each([
     {
         selected: null,
-        version: 12,
+        version: 13,
         packageId: "research-methods-v3",
         candidate: true,
     },
@@ -456,6 +458,7 @@ test("Sources native reads preserve documentary state and reject stale scheduled
         expectedGeneration: 4,
     });
     await f.t.action(internal.integrations.agentSkillReader.execute, {
+        epoch: 1,
         requestId,
         expectedGeneration: 4,
     });
@@ -477,6 +480,7 @@ test("Sources native reads preserve documentary state and reject stale scheduled
         expectedGeneration: 4,
     });
     await f.t.mutation(internal.execution.operations.beginScheduledExecution, {
+        epoch: 1,
         requestId: staleId,
         expectedGeneration: 4,
     });
@@ -507,6 +511,7 @@ test("Sources native reads preserve documentary state and reject stale scheduled
     await f.t.run((ctx) => ctx.db.patch(f.missionId, { generation: 5 }));
     await expect(
         f.t.query(internal.execution.operations.readScheduledInput, {
+            epoch: 1,
             requestId: staleId,
             expectedGeneration: 4,
         }),
@@ -515,6 +520,7 @@ test("Sources native reads preserve documentary state and reject stale scheduled
     expect(stale?.outcome).toBeUndefined();
     expect(
         await f.t.mutation(internal.execution.operations.recordResult, {
+            epoch: 1,
             requestId: staleId,
             expectedGeneration: 4,
             outcome: {
@@ -640,6 +646,7 @@ test("Sources provider input receives its native method and annex through the mi
     );
     assert(pendingRead);
     await f.t.action(internal.integrations.agentSkillReader.execute, {
+        epoch: 1,
         requestId: pendingRead._id,
         expectedGeneration: 4,
     });
@@ -665,6 +672,7 @@ test("Sources provider input receives its native method and annex through the mi
     );
     assert(annexRead);
     await f.t.action(internal.integrations.agentSkillReader.execute, {
+        epoch: 1,
         requestId: annexRead._id,
         expectedGeneration: 4,
     });

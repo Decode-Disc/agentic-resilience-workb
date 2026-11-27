@@ -2,7 +2,9 @@ import {
     reasoningEffortValues,
     reasoningPreferenceValues,
 } from "./modelConfigurationValues";
+
 export { reasoningEffortValues } from "./modelConfigurationValues";
+
 import { responseControlConfiguration } from "@convex/domain/workbenchResponseControlContracts";
 import { defineTable } from "convex/server";
 import { v } from "convex/values";
@@ -56,7 +58,11 @@ export const effectiveModelConfiguration = v.object({
     descriptor: modelDescriptor,
     reasoningEffort: v.optional(reasoningEffort),
 });
-export const nativeProfile = v.object({ key: v.string(), bytes: v.number() });
+export const nativeProfile = v.object({
+    key: v.string(),
+    bytes: v.number(),
+    effectiveMaxOutputTokens: v.optional(v.number()),
+});
 export const modelConfigurationTables = {
     responseControlSettings: defineTable({
         key: v.literal("global"),
@@ -101,10 +107,7 @@ export const modelConfigurationTables = {
         preparationHash: v.string(),
         createdAt: v.number(),
     }).index("by_catalog_and_revision", ["catalogId", "revision"]),
-    nativeInputProfiles: defineTable({
-        key: v.string(),
-        bytes: v.number(),
-    }).index("by_key", ["key"]),
+    nativeInputProfiles: defineTable(nativeProfile).index("by_key", ["key"]),
     agentModelSettings: defineTable({
         agent: modelAgent,
         catalogId: v.id("modelCatalog"),

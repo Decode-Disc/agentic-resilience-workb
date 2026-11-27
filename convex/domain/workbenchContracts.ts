@@ -14,6 +14,7 @@ import {
     legacyFramingEventBasisInput,
     WORKBENCH_FRAMING_METHOD_VERSION,
     WORKBENCH_FRAMING_RECEIPT_VERSION,
+    WORKBENCH_SCOPED_DOCUMENTARY_VERSION,
 } from "./framingContracts";
 import { savedMaterialBinding } from "./savedMaterialOperations";
 import { coverageRoleValidator } from "./sourceDiscoveryRecovery";
@@ -549,6 +550,7 @@ export function supportsFramingWriteReceipt(
 ): boolean {
     return (
         version === WORKBENCH_FRAMING_RECEIPT_VERSION ||
-        version === WORKBENCH_FRAMING_METHOD_VERSION
+        version === WORKBENCH_FRAMING_METHOD_VERSION ||
+        version === WORKBENCH_SCOPED_DOCUMENTARY_VERSION
     );
 }

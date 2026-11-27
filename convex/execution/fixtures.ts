@@ -44,9 +44,14 @@ import {
     taskMethodDefinitionVersion,
 } from "@convex/qualificationAgentMethods";
 import { campaignConfiguration } from "@convex/qualificationCampaignPolicy";
-import { requireCampaignLot } from "@convex/qualificationCampaigns";
+import {
+    campaignConfigurationHash,
+    checkPrerequisiteReservations,
+    requireCampaignLot,
+} from "@convex/qualificationCampaigns";
 import {
     initializeQualificationUsage,
+    qualificationAllowanceScopes,
     qualificationUsageResolved,
     readQualificationUsage,
 } from "@convex/qualificationUsage";
@@ -1319,27 +1324,17 @@ export const authorizeWorkbenchQualification = internalMutation({
                     profile.controllerModel !== policy.model)
             )
                 throw new Error("Campaign controller configuration mismatch");
-            const configurationHash = sha256Hex(
-                stableStringify({
-                    configurations: configurations.map(
-                        ({ role, configuration: c }) => ({
-                            role,
-                            model: c.model,
-                            provider: c.provider,
-                            descriptor: c.descriptor,
-                            effort: c.reasoningEffort,
-                        }),
-                    ),
-                    controller: policy.enabled
-                        ? {
-                              enabled: true,
-                              model: policy.model,
-                              contradictionThreshold:
-                                  policy.contradictionThreshold,
-                              supportThreshold: policy.supportThreshold,
-                          }
-                        : { enabled: false },
-                }),
+            const binding = configurations.map(({ role, configuration }) => ({
+                role,
+                model: configuration.model,
+                provider: configuration.provider,
+                descriptor: configuration.descriptor,
+                effort: configuration.reasoningEffort,
+            }));
+            const configurationHash = campaignConfigurationHash(
+                binding,
+                policy.enabled ? policy.model : undefined,
+                policy,
             );
             const expectedHash =
                 m.version !== 1
@@ -1352,6 +1347,11 @@ export const authorizeWorkbenchQualification = internalMutation({
                 (expectedHash && expectedHash !== configurationHash)
             )
                 throw new Error("Campaign route or price drift");
+            if (m.version !== 1 && !context.paidQualification)
+                await checkPrerequisiteReservations(ctx, m, profile, binding, {
+                    model: maximumRequests,
+                    costUsd: maximumCostUsd,
+                });
             if (m.version === 1)
                 await ctx.db.patch(campaign._id, { configurationHash });
             await ctx.db.patch(lot._id, { configurationHash });
@@ -2171,7 +2171,55 @@ export const qualificationSnapshot = internalQuery({
         };
     },
 });
-/** Assess shared lot state only at a case boundary, never on every polling snapshot. */
+/** A retained response can outlive its writer and still need adoption. */
+async function sourcesCanStillSettle(
+    ctx: QueryCtx,
+    sources: Doc<"agentMissions">,
+) {
+    if (
+        sources.piActiveWriter ||
+        sources.piWakeId ||
+        sources.piResultWakePending ||
+        sources.piRebinding
+    )
+        return true;
+    if (
+        sources.lastInvocationId &&
+        sources.lastInvocationId !== sources.lastSettledInvocationId
+    ) {
+        const last = await ctx.db.get(sources.lastInvocationId);
+        if (!last || last.status === "started") return true;
+        const exhausted = stableStringify({
+            kind: "blocked",
+            code: "qualification_budget_exhausted",
+        });
+        if (
+            hasReceivedResponse(last) &&
+            (last.receivedOutputTextId || last.receivedOutputJson !== exhausted)
+        )
+            return true;
+        if (
+            last.status === "returned" &&
+            (last.blockCode !== "qualification_budget_exhausted" ||
+                last.outputTextId ||
+                last.outputJson !== exhausted)
+        )
+            return true;
+    }
+    for (const status of ["pending", "observed"] as const) {
+        if (
+            await ctx.db
+                .query("agentOperationRequests")
+                .withIndex("by_run_and_status", (q) =>
+                    q.eq("runId", sources.runId).eq("status", status),
+                )
+                .first()
+        )
+            return true;
+    }
+    return false;
+}
+
 export const qualificationContinuation = internalQuery({
     args: { runId: v.id("researchRuns"), fixtureKey: v.string() },
     returns: v.object({
@@ -2180,6 +2228,7 @@ export const qualificationContinuation = internalQuery({
         authorized: v.boolean(),
         accountingSettled: v.boolean(),
         scenarioQuiet: v.boolean(),
+        terminalModelBudgetStop: v.boolean(),
         executionStatus: v.string(),
         sourcesStatus: v.union(v.string(), v.null()),
         conversation: continuationConversationValidator,
@@ -2265,14 +2314,53 @@ export const qualificationContinuation = internalQuery({
                 context.paidQualification?.costAccountingPolicy ===
                     "known_final_v1");
         const accounting = await readQualificationUsage(ctx, context._id);
+        const accountingSettled =
+            qualificationUsageResolved(accounting) &&
+            accounting?.pending === 0 &&
+            accounting.overruns === 0;
+        const sources = execution.sourcesMission;
+        let terminalModelBudgetStop = false;
+        if (
+            authorized &&
+            accountingSettled &&
+            !hasEngagedEffects &&
+            (!execution.conversation || quietConversation) &&
+            run.executionStatus === "paused" &&
+            run.lifecycleState !== "sources_prepared" &&
+            sources?.status === "blocked" &&
+            sources.blockCode === "qualification_budget_exhausted"
+        ) {
+            const scopes = qualificationAllowanceScopes(
+                context,
+                lot,
+                campaign,
+                run._id,
+            );
+            if (scopes) {
+                const local = await readQualificationUsage(
+                    ctx,
+                    context._id,
+                    run._id,
+                );
+                const [[, lotLimits], [, caseLimits]] = scopes;
+                if (
+                    local &&
+                    (accounting.usage.model >= lotLimits.model ||
+                        local.usage.model >= (caseLimits.model ?? Infinity))
+                ) {
+                    terminalModelBudgetStop = !(await sourcesCanStillSettle(
+                        ctx,
+                        sources,
+                    ));
+                }
+            }
+        }
         return {
             accounting,
             hasEngagedEffects,
             authorized,
-            accountingSettled:
-                qualificationUsageResolved(accounting) &&
-                accounting?.pending === 0 &&
-                accounting.overruns === 0,
+            accountingSettled,
+            terminalModelBudgetStop,
             scenarioQuiet,
             executionStatus: run.executionStatus,
             sourcesStatus: execution.sourcesMission?.status ?? null,

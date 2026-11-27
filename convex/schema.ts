@@ -50,6 +50,7 @@ import {
     sourcePreparationOutcomeValidator,
     sourcePreparationProgressValidator,
     sourcePreparationStopCodeValidator,
+    structuredOutputPolicyValidator,
 } from "./domain/sourcePreparationAuthority";
 import {
     qualificationSelectionStrategyValidator,
@@ -109,6 +110,13 @@ const sourceDiscoveryQueriesValidator = v.array(
         dimensionKeys: v.array(v.string()),
     }),
 );
+
+export const providerStreamTerminationValidator = v.object({
+    kind: v.literal("finished"),
+    source: v.literal("stream"),
+    rawFinishReason: v.string(),
+    observedAt: v.number(),
+});
 
 export default defineSchema({
     ...authTables,
@@ -210,6 +218,7 @@ export default defineSchema({
         activeLotId: v.optional(v.id("qualificationLots")),
     }).index("by_owner_and_key", ["ownerVisitorId", "key"]),
     qualificationUsage: defineTable({
+        projectionVersion: v.literal(2),
         conflicts: v.optional(v.number()),
         contextId: v.id("browserTestContexts"),
         runId: v.optional(v.id("researchRuns")),
@@ -665,6 +674,7 @@ export default defineSchema({
     ]),
     sourceSelectionProposalRebuilds: defineTable({
         resourcePolicy: v.optional(v.string()),
+        structuredOutputPolicy: v.optional(structuredOutputPolicyValidator),
         /** The analyst chose to use prepared material after a Sources time limit. */
         settlementRequestedAt: v.optional(v.number()),
         sourcesMission: v.optional(sourcesPreparationValidator),
@@ -1015,6 +1025,7 @@ export default defineSchema({
         modelContextWindowTokens: v.optional(v.number()),
         reservedMaxOutputTokens: v.optional(v.number()),
         operationRequestId: v.optional(v.id("agentOperationRequests")),
+        operationEpoch: v.optional(v.number()),
         qualificationReservationUsd: v.optional(v.number()),
         costAccountingPolicy: v.optional(
             v.union(v.literal("conservative_v1"), v.literal("known_final_v1")),
@@ -1052,16 +1063,28 @@ export default defineSchema({
         reportedCost: v.optional(v.number()),
         providerObservation: v.optional(
             v.object({
-                cancelled: v.optional(v.literal(true)),
+                termination: v.optional(
+                    v.union(
+                        providerStreamTerminationValidator,
+                        v.object({
+                            kind: v.literal("cancelled"),
+                            source: v.literal("generation_lookup"),
+                            generationId: v.string(),
+                            observedAt: v.number(),
+                        }),
+                    ),
+                ),
                 generationId: v.optional(v.string()),
                 observedAt: v.number(),
                 httpStatus: v.optional(v.number()),
                 requestId: v.optional(v.string()),
             }),
         ),
+        structuredOutputPolicy: v.optional(structuredOutputPolicyValidator),
         transportDiagnostic: v.optional(protectedDiagnosticValidator),
         billing: v.optional(
             v.object({
+                wakeId: v.optional(v.id("_scheduled_functions")),
                 state: v.union(
                     v.literal("pending"),
                     v.literal("checking"),
@@ -1108,6 +1131,10 @@ export default defineSchema({
         completedAt: v.optional(v.number()),
     })
         .index("by_operation_key", ["operationKey"])
+        .index("by_operation_request_and_attempt", [
+            "operationRequestId",
+            "attempt",
+        ])
         .index("by_mission_service_status_operation", [
             "missionId",
             "service",
@@ -1261,6 +1288,11 @@ export default defineSchema({
         providerCallId: v.optional(v.id("providerCalls")),
         createdAt: v.number(),
     })
+        .index("by_preparation_and_capture_and_task_type", [
+            "output.preparationId",
+            "output.captureId",
+            "taskType",
+        ])
         .index("by_run_and_task_type_and_input_hash", [
             "runId",
             "taskType",

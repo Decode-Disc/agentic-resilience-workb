@@ -65,7 +65,7 @@ test("native admission freezes the accepted delivery IDs within the context read
         undefined,
         undefined,
         undefined,
-        12,
+        13,
         "balanced",
         { bytesRead: 137 * 1024 },
     );
@@ -106,7 +106,7 @@ test("native invocation admission reuses the instruction identity from the check
         undefined,
         undefined,
         undefined,
-        12,
+        13,
         "balanced",
         { bytesRead: 137 * 1024 },
     );
@@ -151,7 +151,7 @@ test("native invocation admission reuses the instruction identity from the check
     assert(context.kind === "ready");
     const toolSetKey = await agentToolSetKey(
         agentToolSchemas(
-            getAgentDefinition("workbench_v1", 12),
+            getAgentDefinition("workbench_v1", 13),
             JSON.parse(context.inputJson),
         ),
     );
@@ -186,7 +186,7 @@ test.each([
         undefined,
         undefined,
         undefined,
-        12,
+        13,
     );
     const messageId = await client.mutation(
         api.execution.conversations.submit,
@@ -305,7 +305,7 @@ test.each([
             runId,
             missionId: active.missionId,
             generation: 1,
-            definitionVersion: 12,
+            definitionVersion: 13,
             taskKey: "reply-with-retained-wording",
             provenance: "simulation",
             status: "started",
@@ -396,7 +396,7 @@ test.each([
             { invocationId, expectedGeneration: 1 },
             response,
             responseJson,
-            getAgentDefinition("workbench_v1", 12),
+            getAgentDefinition("workbench_v1", 13),
         ),
     );
     if (framingCorrection) {
