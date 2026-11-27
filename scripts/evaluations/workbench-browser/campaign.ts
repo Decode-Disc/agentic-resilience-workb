@@ -1853,6 +1853,33 @@ async function executeCampaign(
         assert(result, "Review outcome missing");
         return result;
     };
+    const reportLot = (
+        lotRoot: string | undefined,
+        result?: Awaited<ReturnType<typeof reviewLot>>,
+    ) => {
+        if (result?.status === "assessed") {
+            const { verdict } = result.assessment;
+            process.exitCode =
+                verdict === "passed" ? 0 : verdict === "failed" ? 1 : 2;
+            console.log(
+                JSON.stringify({ status: "assessed", verdict, root: lotRoot }),
+            );
+        } else {
+            process.exitCode = 2;
+            console.log(
+                JSON.stringify({
+                    status:
+                        result?.status === "awaiting_reconciliation"
+                            ? result.status
+                            : "awaiting_review",
+                    ...(result?.status === "pending"
+                        ? { reason: result.reason }
+                        : {}),
+                    root: lotRoot,
+                }),
+            );
+        }
+    };
     const verifyBattery = () =>
         assert.equal(
             manifest.version !== 1
@@ -2049,14 +2076,7 @@ async function executeCampaign(
                     ref(internal.qualificationCampaigns.close),
                     { campaignId: existingCampaign.campaign._id },
                 );
-            process.exitCode =
-                result.status === "assessed"
-                    ? result.assessment.verdict === "passed"
-                        ? 0
-                        : result.assessment.verdict === "failed"
-                          ? 1
-                          : 2
-                    : 2;
+            reportLot(join(root, "lots", pending.key), result);
             return;
         }
     }
@@ -2192,6 +2212,7 @@ async function executeCampaign(
     let lotRoot: string | undefined = lot
         ? join(root, "lots", lot.key)
         : undefined;
+    let reviewOutcome: Awaited<ReturnType<typeof reviewLot>> | undefined;
     let completed = false;
     let cleanupCompleted = false;
     let failure: unknown;
@@ -2737,17 +2758,24 @@ async function executeCampaign(
             });
             save(lotRoot, "review-template", template);
             if (manifest.version === 3) {
-                await reviewLot(lot, result.reconciled, template.evidenceHash);
+                reviewOutcome = await reviewLot(
+                    lot,
+                    result.reconciled,
+                    template.evidenceHash,
+                );
+            } else if (!result.reconciled) {
+                reviewOutcome = { status: "awaiting_reconciliation" };
             }
         }
         if (!cleanupCompleted || failure) process.exitCode = 1;
     }
-    if (failure)
+    reportLot(lotRoot, reviewOutcome);
+    if (failure) {
+        process.exitCode = 1;
         throw new Error(
             "Campaign stopped; inspect retained evidence and cleanup diagnostics",
         );
-    process.exitCode = 2;
-    console.log(JSON.stringify({ status: "awaiting_review", root: lotRoot }));
+    }
 }
 
 type SourceBattery = ReturnType<typeof sourcesBatterySchema.parse>;

@@ -986,7 +986,27 @@ for (const fault of [
             }
             if (fault === "assess-ack")
                 await assert.rejects(run(), /acknowledgement lost/);
-            else await run();
+            else {
+                const stdout =
+                    fault === "report-ack-status"
+                        ? mock.method(console, "log", () => {})
+                        : undefined;
+                try {
+                    await run();
+                    if (stdout) {
+                        assert.equal(process.exitCode, 0);
+                        assert.ok(
+                            stdout.mock.calls.some(
+                                ({ arguments: [value] }) =>
+                                    typeof value === "string" &&
+                                    JSON.parse(value).status === "assessed",
+                            ),
+                        );
+                    }
+                } finally {
+                    stdout?.mock.restore();
+                }
+            }
             if (
                 [
                     "settlement-expired",
