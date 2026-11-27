@@ -455,8 +455,22 @@ test.each([
     expect(preparation?.sourcesMission?.work[0]?.requestId).toBe(requestId);
     if (family === "discovery")
         expect(preparation?.sourcesMission?.searches).toBe(1);
-    if (family === "check")
+    if (family === "check") {
         expect(preparation?.sourcesMission?.controls).toBe(1);
+        assert(outcome?.kind === "success");
+        expect(JSON.parse(outcome.valueJson)).toMatchObject({
+            needOrder: ["common-context"],
+            effectiveContributions: [
+                {
+                    id: "target",
+                    version: 1,
+                    permittedUse: "context_only",
+                    usesByNeed: ["context_only"],
+                },
+            ],
+        });
+        expect(preparation?.sourcesMission?.qualifications).toEqual([]);
+    }
     if (family === "acquisition") {
         assert(outcome?.kind === "success");
         expect(preparation?.sourcesMission?.captureIds).toContain(
@@ -1503,6 +1517,33 @@ test.each([
     ).toMatchObject(
         verified ? { attempt: 2 } : { errorCode: "attempt_outcome_unknown" },
     );
+    if (cancelled === false) {
+        assert(after.call?.billing?.retryAt);
+        vi.setSystemTime(after.call.billing.retryAt);
+        const lookup = { providerCallId: call._id, attempt: 2 };
+        expect(
+            await f.t.mutation(internal.providerCalls.claimBilling, lookup),
+        ).toEqual({ generationId: "documentary-generation" });
+        const usage = () =>
+            f.t.run(async (ctx) =>
+                Promise.all([
+                    readQualificationUsage(ctx, contextId),
+                    readQualificationUsage(ctx, contextId, f.runId),
+                ]),
+            );
+        for (const scope of await usage())
+            expect(scope?.usage.costUsd).toBeCloseTo(0.0002137, 12);
+        await f.t.mutation(internal.providerCalls.settleBilling, {
+            ...lookup,
+            generationId: "documentary-generation",
+            cancelled: true,
+            reason: "invalid_response",
+        });
+        for (const scope of await usage()) {
+            expect(scope?.unknown).toBe(0);
+            expect(scope?.usage.costUsd).toBeCloseTo(0.0002137, 12);
+        }
+    }
     if (verified) {
         await f.t.mutation(internal.providerCalls.recordAttempt, {
             preparationId: call.preparationId,

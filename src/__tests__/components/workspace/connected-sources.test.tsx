@@ -207,7 +207,7 @@ const reading: Reading = {
             needIds: ["workflow"],
             passageOrders: [3],
             permittedUse: "blocked",
-            needs: { "common-context": "blocked" },
+            needs: { workflow: "blocked" },
             objections: [],
             reportedUse: "attributed_argument_only",
             conclusion: "documentary_conflict",
@@ -525,6 +525,47 @@ test("the reader shows effective use apart from the reported one and hands a fol
             'targeted documentary check on "Form 10-K · FY2025"',
         ),
     );
+});
+
+test("the citation note distinguishes a blocked question from an allowed contextual use", () => {
+    const [original] = reading.contributions;
+    assert(original);
+    const objection =
+        "This passage does not establish who controls coordination.";
+    convexReactHarness.query(api.sourcesWorkspace.getSource).returns({
+        ...reading,
+        contributions: [
+            {
+                ...original,
+                conclusion: "supported",
+                diagnostic: "The report attributes this view to management.",
+                needIds: ["context", "workflow"],
+                permittedUse: "attributed_argument_only",
+                needs: {
+                    context: "attributed_argument_only",
+                    workflow: "blocked",
+                },
+                objections: [
+                    {
+                        needIds: ["workflow"],
+                        maximumUse: "blocked",
+                        diagnosticPreview: objection,
+                        diagnosticComplete: true,
+                    },
+                ],
+            },
+        ],
+    });
+    renderSources({ search: { sourcesView: "reader", source: sourceId } });
+    fireEvent.click(
+        screen.getAllByRole("button", {
+            name: /^Show note for citation 1/,
+        })[0] as HTMLElement,
+    );
+    expect(document.body.textContent).toMatch(/Q1[^·]*inspection only/i);
+    expect(document.body.textContent).toContain(objection);
+    expect(document.body.textContent).toMatch(/attributed argument only/i);
+    expect(document.body.textContent).not.toMatch(rawValues);
 });
 
 test.each([

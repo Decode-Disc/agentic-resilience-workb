@@ -944,9 +944,7 @@ export function sourcesReaderDocument(
     overview: Overview | null | undefined,
 ) {
     const labels = questionLabels(overview);
-    const needQuestions = new Map(
-        overview?.needs.map((need) => [need.id, need.questionIds]) ?? [],
-    );
+    const needs = new Map(overview?.needs.map((need) => [need.id, need]));
     const citing = new Map<number, Reading["contributions"][number]>();
     for (const contribution of reading.contributions)
         for (const order of contribution.passageOrders)
@@ -1003,13 +1001,46 @@ export function sourcesReaderDocument(
             const questions = [
                 ...new Set(
                     contribution.needIds.flatMap((needId) =>
-                        (needQuestions.get(needId) ?? []).flatMap((id) => {
+                        (needs.get(needId)?.questionIds ?? []).flatMap((id) => {
                             const label = labels.get(id);
                             return label ? [label] : [];
                         }),
                     ),
                 ),
             ].sort();
+            const objectionText = (
+                objection: (typeof contribution.objections)[number],
+            ) => {
+                const preview = documentaryCommentary(
+                    objection.diagnosticPreview,
+                );
+                if (!preview) return "Objection details unavailable.";
+                return objection.diagnosticComplete ? preview : `${preview}…`;
+            };
+            const scopedNotes = contribution.needIds.flatMap((id) => {
+                const use = contribution.needs[id];
+                const objections = contribution.objections.filter(
+                    (o) => o.needIds.includes(id) && !o.needIds.includes(null),
+                );
+                if (
+                    !use ||
+                    (use === contribution.permittedUse && !objections.length)
+                )
+                    return [];
+                const need = needs.get(id);
+                const linked =
+                    need?.questionIds.flatMap((q) => labels.get(q) ?? []) ?? [];
+                const scope =
+                    [...linked, documentaryCommentary(need?.information)]
+                        .filter(Boolean)
+                        .join(" — ") || "Linked research need";
+                return [
+                    [
+                        `${scope}: ${useLabels[use]}`,
+                        ...objections.map(objectionText),
+                    ].join(". "),
+                ];
+            });
             const narrowed =
                 contribution.reportedUse &&
                 contribution.reportedUse !== contribution.permittedUse
@@ -1040,6 +1071,10 @@ export function sourcesReaderDocument(
                         ? "Some contribution wording is unavailable. Inspect the cited passage."
                         : undefined,
                     narrowed,
+                    ...contribution.objections
+                        .filter((o) => o.needIds.includes(null))
+                        .map(objectionText),
+                    ...scopedNotes,
                     contribution.restricted
                         ? "A later control narrowed this use."
                         : undefined,

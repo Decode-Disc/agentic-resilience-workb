@@ -502,6 +502,11 @@ export const claimBilling = internalMutation({
                   )
                 : undefined;
         await patchQualificationReceipt(ctx, call, {
+            // A new termination lookup must preserve the prior lookup's confirmed price.
+            ...(call.billing.state === "confirmed" &&
+            call.reportedCost !== undefined
+                ? { reportedCostFinal: true }
+                : {}),
             billing: {
                 state: "checking",
                 attempt: args.attempt,

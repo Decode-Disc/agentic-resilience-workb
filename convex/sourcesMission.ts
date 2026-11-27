@@ -48,6 +48,7 @@ import {
     authorizedDiscovery,
     captureExaminationValidator,
     documentaryContributionValidator,
+    type DocumentaryControlV2,
     documentaryControlV2Validator,
     documentaryNeedValidator,
     documentaryStatusValidator,
@@ -263,6 +264,24 @@ const proposalReturn = v.object({
     discoveryLimit: v.optional(v.number()),
     discovery: v.optional(authorizedDiscovery),
 });
+type DocumentaryCheckSubject = Pick<
+    Extract<SourcesOperation, { kind: "request_documentary_check" }>,
+    "kind" | "sourceId" | "proposition" | "needId" | "targets"
+>;
+
+function checkedProposition(input: DocumentaryCheckSubject) {
+    return {
+        id: "target",
+        version: 1,
+        needIds: [input.needId],
+        statement: input.proposition,
+        period: "as referenced",
+        modality: "documentary check",
+        attribution: "as referenced",
+        kind: "context" as const,
+    };
+}
+
 export const reserve = internalMutation({
     args: workArgs,
     returns: proposalReturn,
@@ -499,19 +518,7 @@ export const reserve = internalMutation({
                 data,
                 input.evidence,
             );
-            contributions = [
-                {
-                    id: "target",
-                    version: 1,
-                    needIds,
-                    statement: input.proposition,
-                    period: "as referenced",
-                    modality: "documentary check",
-                    attribution: "as referenced",
-                    kind: "context",
-                    evidence,
-                },
-            ];
+            contributions = [{ ...checkedProposition(input), evidence }];
             if (input.targets?.length) {
                 if (input.targets.length > 15)
                     throw executionError("documentary_check_invalid");
@@ -710,37 +717,54 @@ async function documentaryControlReceipt(
     preparationId: Id<"sourceSelectionProposalRebuilds">,
     input:
         | { kind: "submit_documentary_qualification" }
-        | Pick<
-              Extract<SourcesOperation, { kind: "request_documentary_check" }>,
-              "kind" | "targets"
-          >,
+        | DocumentaryCheckSubject,
     taskId: Id<"aiTaskResults">,
     reference: Id<"agentExecutionEvents">,
-    objectionCount: number,
+    control: DocumentaryControlV2,
 ): Promise<import("convex/values").Infer<typeof documentarySubmissionValue>> {
     const current = await ctx.db.get(preparationId);
     if (!current?.sourcesMission)
         throw executionError("sources_mission_unavailable");
-    const qualifications =
-        input.kind === "submit_documentary_qualification"
-            ? [taskId]
-            : [
-                  ...new Set(
-                      input.targets?.map(
-                          (target) => target.qualificationTaskId,
-                      ) ?? [],
-                  ),
-              ];
-    const projected = await controlledSourcesContributions(ctx, {
-        ...current,
-        sourcesMission: {
-            ...current.sourcesMission,
-            qualifications,
-        },
-    });
-    const contributions = projected.flatMap(
-        (qualification) => qualification.contributions,
-    );
+    let contributions: Array<
+        { id: string; version: number } & ReturnType<
+            typeof controlledDocumentaryUses
+        >
+    >;
+    if (input.kind === "request_documentary_check" && !input.targets?.length) {
+        const proposition = checkedProposition(input);
+        const decision = await readPreparationSourceDecision(ctx.db, {
+            runId: current.runId,
+            corpusRevisionId: current.corpusRevisionId,
+            sourceId: input.sourceId,
+        });
+        contributions = [
+            {
+                ...proposition,
+                ...controlledDocumentaryUses(
+                    proposition,
+                    decision === "rejected" ? null : control,
+                ),
+            },
+        ];
+    } else {
+        const qualifications =
+            input.kind === "submit_documentary_qualification"
+                ? [taskId]
+                : [
+                      ...new Set(
+                          input.targets?.map(
+                              (target) => target.qualificationTaskId,
+                          ),
+                      ),
+                  ];
+        const projected = await controlledSourcesContributions(ctx, {
+            ...current,
+            sourcesMission: { ...current.sourcesMission, qualifications },
+        });
+        contributions = projected.flatMap(
+            (qualification) => qualification.contributions,
+        );
+    }
     const needOrder = [
         ...new Set(contributions.flatMap(({ needs }) => Object.keys(needs))),
     ].sort();
@@ -748,7 +772,7 @@ async function documentaryControlReceipt(
         taskId,
         controlVersion: 2 as const,
         reference,
-        objectionCount,
+        objectionCount: control.objections.length,
         needOrder,
         effectiveContributions: contributions.map(
             ({ id, version, permittedUse, needs }) => ({
@@ -865,7 +889,7 @@ export const retainControl = internalMutation({
                 input,
                 taskId,
                 reference,
-                args.control.objections.length,
+                args.control,
             );
         const base = {
             runId: run._id,
@@ -1192,8 +1216,7 @@ export const recoverScheduledControl = internalMutation({
                             request.input,
                             task._id,
                             event._id,
-                            control.output.examination.control.objections
-                                .length,
+                            control.output.examination.control,
                         ),
                     );
             }

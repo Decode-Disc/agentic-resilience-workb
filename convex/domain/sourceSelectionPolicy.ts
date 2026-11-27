@@ -2612,7 +2612,10 @@ type DocumentaryUseRestriction = {
 
 /** Applies the documentary ceilings once per contribution, then projects its declared needs. */
 export function controlledDocumentaryUses(
-    contribution: DocumentaryContribution,
+    contribution: Pick<
+        DocumentaryContribution,
+        "id" | "version" | "kind" | "needIds"
+    >,
     control: DocumentaryControlV2 | null,
     restrictions: readonly DocumentaryUseRestriction[] = [],
 ): { permittedUse: DocumentaryUse; needs: Record<string, DocumentaryUse> } {

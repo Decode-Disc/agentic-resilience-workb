@@ -1029,7 +1029,7 @@ export async function controlledSourcesContributions(
                     ({ evidence, ...contribution }) => {
                         const { permittedUse, needs } =
                             controlledDocumentaryUses(
-                                { ...contribution, evidence },
+                                contribution,
                                 sourceDecision === "rejected" ? null : control,
                                 data.restrictedContributions,
                             );
