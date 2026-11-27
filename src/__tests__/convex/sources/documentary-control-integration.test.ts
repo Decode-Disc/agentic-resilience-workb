@@ -865,9 +865,10 @@ test("the documentary provider lease cannot outlive remaining preparation author
 
 async function documentaryControlFixture(
     kind: DocumentaryContribution["kind"],
+    text?: string,
 ) {
     vi.useFakeTimers();
-    const f = await seedCapturedSources();
+    const f = await seedCapturedSources({ text });
     vi.stubEnv("OPENROUTER_API_KEY", "offline-only");
     await installModel(f.t, { model: "z-ai/glm-5.3-flash" }, "sources");
     await f.t.run(async (ctx) => {
@@ -2590,6 +2591,77 @@ test("a priced structured stream lacking a finish still reconciles remote termin
     ).toEqual([]);
 });
 
+test("a corrected examination of the same launch passage preserves the launch but excludes the unsupported promise", async () => {
+    const text = "The issuer launched workflow software for insurance claims.";
+    const f = await documentaryControlFixture("attributed_argument", text);
+    const [change] = f.input.changes;
+    assert(change);
+    const requestId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: f.missionId,
+            expectedGeneration: 4,
+            cause: "qualify launch and promise independently",
+            input: {
+                ...f.input,
+                changes: [text, "The issuer promises faster reviews."].map(
+                    (statement) => ({
+                        contribution: { ...change.contribution, statement },
+                    }),
+                ),
+            },
+        },
+    );
+    const args = { requestId, expectedGeneration: 4 };
+    let attempt = 0;
+    vi.stubGlobal("fetch", async (_url: unknown, init?: RequestInit) =>
+        fixtureExaminationReply(init, (contributions) => {
+            attempt++;
+            return scopedFixtureControl(
+                contributions,
+                contributions.map((c) => ({
+                    contributionId: c.id,
+                    conclusion:
+                        c.statement === text ? "supported" : "not_established",
+                    permittedUse:
+                        c.statement === text || attempt === 1
+                            ? "attributed_argument_only"
+                            : "blocked",
+                    diagnostic:
+                        "The quoted sentence announces the launch only.",
+                })),
+            );
+        }),
+    );
+    expect(await dispatchSourcesOperation(f.t, args)).toMatchObject({
+        kind: "waiting",
+    });
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.preparationId)))?.sourcesMission
+            ?.qualifications,
+    ).toEqual([]);
+    await f.t.mutation(internal.execution.operations.wakeStructuredExecution, {
+        ...args,
+        epoch: 1,
+    });
+    const receipt = await f.t.action(internal.sourcesMissionActions.execute, {
+        ...args,
+        epoch: 2,
+    });
+    assert(receipt?.kind === "success", JSON.stringify(receipt));
+    const result = JSON.parse(receipt.valueJson);
+    expect(
+        result.effectiveContributions.map(
+            (c: { permittedUse: string }) => c.permittedUse,
+        ),
+    ).toEqual(["attributed_argument_only", "blocked"]);
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.preparationId)))?.sourcesMission
+            ?.qualifications,
+    ).toEqual([result.taskId]);
+    expect(attempt).toBe(2);
+});
+
 test("a scoped objection leaves useful material in the handoff and outcomes research unfinished", async () => {
     const f = await documentaryControlFixture("attributed_argument");
     const outcomes = "customer-outcomes";
@@ -2810,7 +2882,7 @@ test("a scoped objection leaves useful material in the handoff and outcomes rese
                 needId: "common-context",
                 contributions: [
                     expect.objectContaining({
-                        qualificationTaskId: expect.any(String),
+                        qualificationTaskId: value.taskId,
                     }),
                 ],
             }),

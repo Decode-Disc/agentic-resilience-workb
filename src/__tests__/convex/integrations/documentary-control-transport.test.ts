@@ -438,6 +438,49 @@ test("writes valid Unicode when a provider delta ends with half of a surrogate p
     expect(captured.join("")).toBe(content);
 });
 
+test.each([
+    ["not_established", "attributed_argument_only", "attributed_argument_only"],
+    ["documentary_conflict", "attributed_argument_only", "blocked"],
+    ["not_established", "blocked", "attributed_argument_only"],
+    ["not_established", "blocked", "blocked"],
+])("checks a %s finding allowing %s globally and %s for the need", async (conclusion, permittedUse, needUse) => {
+    const response = {
+        findings: {
+            [contribution.id]: {
+                conclusion,
+                permittedUse,
+                diagnostic: "The passage identifies a launch.",
+                needs: { "common-context": needUse },
+            },
+        },
+        objections: [],
+    };
+    const result = await examineDocumentaryContributions(
+        {
+            ...input,
+            contributions: [{ ...contribution, kind: "attributed_argument" }],
+        },
+        currentRoute,
+        {
+            authority: modelAttemptAuthority(),
+            apiKey: "offline-only",
+            fetch: async () => providerReply(response),
+        },
+    );
+    if (permittedUse === "blocked" && needUse === "blocked") {
+        expect(result).toMatchObject({ status: "succeeded", output: response });
+    } else {
+        expect(result).toMatchObject({
+            status: "failed",
+            errorCode: "invalid_output",
+            outputDiagnostic: {
+                reason: "documentary_control_conclusion_use_conflict",
+                output: JSON.stringify(response),
+            },
+        });
+    }
+});
+
 test("an examination keeps a faithful vendor argument while restricting its outcomes association", async () => {
     const vendor = {
         ...contribution,

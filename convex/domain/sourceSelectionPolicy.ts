@@ -2580,6 +2580,12 @@ export function documentaryControlIssue(
             return "documentary_control_permission_invalid";
         const needs = new Set(contribution.needIds);
         const needFindings = Object.entries(finding.needs);
+        if (
+            finding.conclusion !== "supported" &&
+            (finding.permittedUse !== "blocked" ||
+                needFindings.some(([, use]) => use !== "blocked"))
+        )
+            return "documentary_control_conclusion_use_conflict";
         if (needFindings.length !== needs.size)
             return "documentary_control_need_invalid";
         for (const [needId, use] of needFindings) {
