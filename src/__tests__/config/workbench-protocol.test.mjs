@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+    chmodSync,
     mkdirSync,
     mkdtempSync,
     readdirSync,
@@ -14,6 +15,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import {
+    buildPreflightChildEnv,
+    defaultPreflightCacheRoot,
     planQualification,
     qualificationFingerprints,
     readQualificationBattery,
@@ -597,6 +600,83 @@ test("concurrent preflight publication leaves a complete winner and two usable a
             );
         }
     } finally {
+        rmSync(f.root, { recursive: true, force: true });
+    }
+});
+
+test("preflight does not inherit credentials or config overrides through package-manager prefixes", () => {
+    assert.deepEqual(
+        buildPreflightChildEnv({
+            npm_config_registry: "fixture-registry",
+            npm_config_userconfig: "/private/config",
+            npm_config_auth_token: "fixture-token",
+            PNPM_PASSWORD: "fixture-password",
+            VITEST_MAX_WORKERS: "2",
+        }),
+        { npm_config_registry: "fixture-registry", VITEST_MAX_WORKERS: "2" },
+    );
+    assert.equal(
+        defaultPreflightCacheRoot({
+            XDG_CACHE_HOME: " relative/cache ",
+            HOME: "/home/fixture ",
+        }),
+        "/home/fixture/.cache/agentic-resilience-workbench/qualification-preflight",
+    );
+    assert.equal(
+        defaultPreflightCacheRoot({
+            XDG_CACHE_HOME: " /tmp ",
+            HOME: "/home/fixture",
+        }),
+        "/home/fixture/.cache/agentic-resilience-workbench/qualification-preflight",
+    );
+});
+
+test("preflight does not trust a shared cache with group access", async () => {
+    const f = fixture();
+    try {
+        const sharedCacheRoot = join(f.root, "shared");
+        let calls = 0;
+        const execute = () => ({ status: 0, stdout: String(++calls) });
+        await verifyQualificationCandidate(f.root, f.fingerprints, execute, {
+            sharedCacheRoot,
+        });
+        chmodSync(sharedCacheRoot, 0o750);
+        const second = join(f.root, "second");
+        mkdirSync(second);
+        writeFileSync(
+            join(second, "fingerprints.json"),
+            JSON.stringify(f.fingerprints),
+        );
+        await verifyQualificationCandidate(second, f.fingerprints, execute, {
+            sharedCacheRoot,
+        });
+        assert.equal(calls, 12);
+    } finally {
+        rmSync(f.root, { recursive: true, force: true });
+    }
+});
+
+test("preflight output inside the checkout does not invalidate its own input fingerprint", async () => {
+    const f = fixture();
+    const checkout = join(f.root, "checkout");
+    const original = process.cwd();
+    try {
+        mkdirSync(checkout);
+        execFileSync("git", ["init", "-q", checkout]);
+        process.chdir(checkout);
+        const root = join(checkout, "campaign");
+        mkdirSync(root);
+        writeFileSync(
+            join(root, "fingerprints.json"),
+            JSON.stringify(f.fingerprints),
+        );
+        let calls = 0;
+        const executor = () => ({ status: 0, stdout: String(++calls) });
+        await verifyQualificationCandidate(root, f.fingerprints, executor);
+        await verifyQualificationCandidate(root, f.fingerprints, executor);
+        assert.equal(calls, 6);
+    } finally {
+        process.chdir(original);
         rmSync(f.root, { recursive: true, force: true });
     }
 });

@@ -36,6 +36,10 @@ test("the real architecture checker rejects aliases, protected writes and privat
             'import { stageRetainedText as save } from "@convex/execution/retainedText"; export const x = save;',
         retainedTextWrite:
             'export function x(ctx: unknown) { return ctx.db.insert("retainedTextFragments", {textId:"foreign",index:0,content:"forged"}); }',
+        providerReceiptOwner:
+            'import { internal } from "@convex/_generated/api"; export const receipt = internal.execution.providerCallReceipts.requestBilling;',
+        localExecutorOwner:
+            'import { internal } from "@convex/_generated/api"; export const execute = internal.execution.operations.executeLocal;',
         misplacedRuntime:
             'import { x } from "./allowed"; "use node"; export const value = x;',
         parenthesizedRuntime: '("use node"); export const value = 1;',
@@ -73,6 +77,8 @@ test("the real architecture checker rejects aliases, protected writes and privat
             directTable: ["table-owner"],
             retainedTextStage: ["executor-owner"],
             retainedTextWrite: ["table-owner"],
+            providerReceiptOwner: ["executor-owner"],
+            localExecutorOwner: ["executor-owner"],
             misplacedRuntime: ["runtime-directive"],
             parenthesizedRuntime: ["runtime-directive"],
         };
@@ -129,18 +135,48 @@ test("execution import tiers distinguish heavy dependencies, runtime Zod, and ty
             join(root, "convex/execution/tier2.ts"),
             'export { Type } from "@earendil-works/pi-ai"; import type { Doc } from "@convex/schema";',
         );
-        expect(checkExecutionBoundaries(root)).toEqual([
-            expect.objectContaining({
-                file: "convex/execution/piStore.ts",
-                rule: "execution-import",
-                message: expect.stringMatching(/bridge.*zod/),
-            }),
-            expect.objectContaining({
-                file: "convex/execution/operations.ts",
-                rule: "execution-import",
-                message: expect.stringMatching(/tier2.*pi-ai/),
-            }),
-        ]);
+        writeFileSync(
+            join(root, "convex/execution/piControlReads.ts"),
+            'export { z } from "zod";',
+        );
+        writeFileSync(
+            join(root, "convex/execution/piControl.ts"),
+            'import value = require("./bridge"); import("./missing"); import(String(value));',
+        );
+        expect(checkExecutionBoundaries(root)).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    file: "convex/execution/piStore.ts",
+                    rule: "execution-import",
+                    message: expect.stringMatching(/bridge.*zod/),
+                }),
+                expect.objectContaining({
+                    file: "convex/execution/operations.ts",
+                    rule: "execution-import",
+                    message: expect.stringMatching(/tier2.*pi-ai/),
+                }),
+                expect.objectContaining({
+                    file: "convex/execution/piControlReads.ts",
+                    rule: "execution-import",
+                    message: expect.stringMatching(/zod/),
+                }),
+                expect.objectContaining({
+                    file: "convex/execution/piControl.ts",
+                    rule: "execution-import",
+                    message: expect.stringMatching(/import equals/),
+                }),
+                expect.objectContaining({
+                    file: "convex/execution/piControl.ts",
+                    rule: "execution-import",
+                    message: expect.stringMatching(/unresolved.*missing/),
+                }),
+                expect.objectContaining({
+                    file: "convex/execution/piControl.ts",
+                    rule: "execution-import",
+                    message: expect.stringMatching(/non-literal/),
+                }),
+            ]),
+        );
     } finally {
         rmSync(root, { recursive: true, force: true });
     }

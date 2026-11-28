@@ -320,6 +320,8 @@ export async function runPiMission(
                     scope,
                 );
             } catch (error) {
+                if (executionFailureCode(error) === "pi_writer_fenced")
+                    throw error;
                 return ctx.runMutation(
                     internal.execution.operations.settleLocalRollback,
                     {
@@ -1034,6 +1036,7 @@ export async function runPiMission(
         ) {
             await ctx.runMutation(internal.execution.invocations.retainOutput, {
                 ...invocationArgs,
+                piLease,
                 responseJson: JSON.stringify({
                     kind: "blocked",
                     code: "native_input_changed",
@@ -1377,6 +1380,8 @@ export async function runPiMission(
                             onProgress?.(event);
                     }
                     const received = await stream.result();
+                    if (preparationCode === "pi_writer_fenced")
+                        throw executionError("pi_writer_fenced");
                     if (preparationCode) return reject(preparationCode);
                     if (
                         received.stopReason === "error" ||

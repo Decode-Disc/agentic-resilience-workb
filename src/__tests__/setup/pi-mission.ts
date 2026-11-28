@@ -263,6 +263,50 @@ export async function authorizeFixtureDispatch(
     );
 }
 
+/** Seeds an already-settled provider receipt for tests of late factual retention. */
+export async function seedSettledFixtureReceipt(
+    t: PiFixtureTest,
+    invocationId: import("@convex/_generated/dataModel").Id<"agentInvocations">,
+) {
+    await t.run(async (ctx) => {
+        const invocation = await ctx.db.get(invocationId);
+        if (!invocation?.missionId)
+            throw new Error("Expected mission invocation");
+        const providerCallId = await ctx.db.insert("providerCalls", {
+            invocationId,
+            missionId: invocation.missionId,
+            runId: invocation.runId,
+            service: "model",
+            operation: "agent_reasoning",
+            operationKey: `mission:${invocation.missionId}:invocation:${invocationId}:attempt:1`,
+            status: "succeeded",
+            attempt: 1,
+            createdAt: Date.now(),
+        });
+        await ctx.db.patch(invocationId, {
+            providerCallId,
+            provenance: "live",
+        });
+    });
+}
+
+export async function retainFixtureOutput(
+    t: PiFixtureTest,
+    args: import("convex/server").FunctionArgs<
+        typeof internal.execution.invocations.retainOutput
+    >,
+) {
+    const retained = await t.run((ctx) => ctx.db.get(args.invocationId));
+    if (retained?.providerCallId)
+        return t.mutation(internal.execution.invocations.retainOutput, args);
+    return withFixturePiWriter(t, args, (piLease) =>
+        t.mutation(internal.execution.invocations.retainOutput, {
+            ...args,
+            piLease,
+        }),
+    );
+}
+
 export async function recordFixtureAttempt(
     t: PiFixtureTest,
     args: import("convex/server").FunctionArgs<
@@ -273,12 +317,13 @@ export async function recordFixtureAttempt(
         !args.missionId ||
         args.executionGeneration === undefined ||
         args.status !== "started" ||
-        args.service !== "model" ||
-        (args.operation !== "agent_reasoning" &&
-            args.operation !== "agent_compaction") ||
-        args.operationRequestId ||
-        args.sourceId ||
-        args.acceptedDecisionId
+        ![
+            "agent_reasoning",
+            "agent_compaction",
+            "response_coherence",
+            "framing_context_search",
+            "framing_context_read",
+        ].includes(args.operation)
     )
         return t.mutation(internal.providerCalls.recordAttempt, args);
     return withFixturePiWriter(

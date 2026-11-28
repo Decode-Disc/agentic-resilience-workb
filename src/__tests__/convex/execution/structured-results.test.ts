@@ -10,7 +10,10 @@ import { preparePiResult } from "@convex/integrations/piInvocation";
 import { CONVEX_MAX_DOCUMENT_BYTES } from "@convex/resourcePolicy";
 import { getDocumentSize } from "convex/values";
 import { afterEach, assert, expect, test, vi } from "vitest";
-import { beginFixtureInvocation } from "@/__tests__/setup/pi-mission";
+import {
+    beginFixtureInvocation,
+    retainFixtureOutput,
+} from "@/__tests__/setup/pi-mission";
 import { readRetainedBody } from "@/__tests__/setup/retained-history";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 
@@ -72,7 +75,7 @@ async function sourceCompletion(text = "Unfinished 😀 ".repeat(12_500)) {
     const observableReplyTextId = await f.t.action((ctx) =>
         stageObservedBody(ctx, authority, "reply", envelope),
     );
-    await f.t.mutation(internal.execution.invocations.retainOutput, {
+    await retainFixtureOutput(f.t, {
         ...authority,
         ...(responseTextId ? { responseTextId } : { responseJson: original }),
         ...(observableReplyTextId

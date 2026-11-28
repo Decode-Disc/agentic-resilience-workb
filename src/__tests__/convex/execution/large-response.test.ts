@@ -16,7 +16,10 @@ import type { FunctionReturnType } from "convex/server";
 import { getDocumentSize } from "convex/values";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedConversation } from "@/__tests__/setup/agent-harness";
-import { beginFixtureInvocation } from "@/__tests__/setup/pi-mission";
+import {
+    beginFixtureInvocation,
+    retainFixtureOutput,
+} from "@/__tests__/setup/pi-mission";
 import { readMessageBodies } from "@/__tests__/setup/retained-messages";
 
 const responseProbeBytes = Number(
@@ -40,7 +43,7 @@ async function retainOriginalResponse(
     const observableReplyTextId = await f.t.action((ctx) =>
         stageObservedBody(ctx, args, "reply", observableReplyJson),
     );
-    await f.t.mutation(internal.execution.invocations.retainOutput, {
+    await retainFixtureOutput(f.t, {
         ...args,
         ...(responseTextId ? { responseTextId } : { responseJson }),
         ...(observableReplyTextId
@@ -709,7 +712,7 @@ test.each([
     const restored = await recoverReceivedResponse(f);
     expect(JSON.parse(restored ?? "null")).toEqual(response);
     await expect(
-        f.t.mutation(internal.execution.invocations.retainOutput, {
+        retainFixtureOutput(f.t, {
             ...args,
             responseJson: JSON.stringify({
                 ...response,

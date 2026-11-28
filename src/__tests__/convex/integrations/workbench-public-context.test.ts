@@ -3,10 +3,12 @@ import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import type { publicReadResultValidator } from "@convex/domain/workbenchContracts";
 import { MAX_EXA_TEXT_CHARACTERS } from "@convex/resourcePolicy";
 import { requestPinnedPublicSource } from "@convex/sourceActions";
+import { getFunctionName } from "convex/server";
 import type { Infer } from "convex/values";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import rateLimiterTest from "@/__tests__/convex/integrations/rate-limiter-test-register.js";
 import {
+    claimFixturePiLease,
     dispatchFixtureOperation,
     recordFixtureAttempt,
 } from "@/__tests__/setup/pi-mission";
@@ -2355,4 +2357,75 @@ test.each([
         ),
     ).toEqual(expect.arrayContaining(["2025-04-09", "2025-04-10"]));
     expect(reading.eventAt).toBeUndefined();
+});
+
+test("an expired writer cannot send public discovery after claiming the operation", async () => {
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    const fetchResult = vi.fn(async () =>
+        Response.json({ results: [], costDollars: { total: 0 } }),
+    );
+    vi.stubGlobal("fetch", fetchResult);
+    const { t, missionId, requestId } = await enqueueLookup(
+        "recent announcement",
+        1,
+        "search_public_context",
+    );
+    const piLease = await claimFixturePiLease(t, missionId, 1);
+    const outcome = await t.action((ctx) =>
+        ctx.runAction(internal.execution.operations.dispatch, {
+            requestId,
+            expectedGeneration: 1,
+            piLease,
+        }),
+    );
+    // The real dispatch proves this setup has the provider authority the expiry case needs.
+    expect(outcome.kind).toBe("success");
+
+    const next = await enqueueLookup(
+        "another announcement",
+        1,
+        "search_public_context",
+    );
+    const lease = await claimFixturePiLease(next.t, next.missionId, 1);
+    fetchResult.mockClear();
+    const stalled = await next.t.action(async (ctx) => {
+        const { _handler: execute } = (
+            await import("@convex/execution/operations")
+        ).dispatch as typeof import("@convex/execution/operations").dispatch & {
+            _handler: (
+                ctx: import("@convex/_generated/server").ActionCtx,
+                args: {
+                    requestId: typeof next.requestId;
+                    expectedGeneration: number;
+                    piLease: typeof lease;
+                },
+            ) => Promise<unknown>;
+        };
+        return execute(
+            {
+                ...ctx,
+                runMutation: async (reference, ...args) => {
+                    const result = await ctx.runMutation(reference, ...args);
+                    if (
+                        getFunctionName(reference) ===
+                        getFunctionName(internal.execution.operations.claim)
+                    )
+                        await next.t.run((tx) =>
+                            tx.db.patch(lease.sessionId, {
+                                leaseUntil: Date.now(),
+                            }),
+                        );
+                    return result;
+                },
+            },
+            {
+                requestId: next.requestId,
+                expectedGeneration: 1,
+                piLease: lease,
+            },
+        );
+    });
+    expect(stalled).toMatchObject({ code: "pi_writer_fenced" });
+    expect(fetchResult).not.toHaveBeenCalled();
+    expect(await providerReceipts(next)).toEqual([]);
 });

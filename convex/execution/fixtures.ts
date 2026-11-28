@@ -390,6 +390,7 @@ export const activateValidation = internalMutation({
                         {
                             invocationId: begun.invocationId,
                             expectedGeneration: generation,
+                            piLease,
                             responseJson: JSON.stringify(observation),
                             observableReplyJson: JSON.stringify({
                                 version: 1,

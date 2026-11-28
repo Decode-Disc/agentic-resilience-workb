@@ -29,6 +29,7 @@ import { seedHistoryMission } from "@/__tests__/setup/execution-history";
 import {
     beginFixtureInvocation,
     recordFixtureAttempt,
+    retainFixtureOutput,
     retainFixtureRequest,
     stageFixtureRequest,
 } from "@/__tests__/setup/pi-mission";
@@ -212,7 +213,7 @@ test.each([
         outcome === "returned"
             ? { kind: "operations" as const, requests: [] }
             : { kind: "complete" as const, captureIds: [] };
-    await f.t.mutation(internal.execution.invocations.retainOutput, {
+    await retainFixtureOutput(f.t, {
         invocationId: begun.invocationId,
         expectedGeneration: 1,
         responseJson: JSON.stringify(response),
@@ -1141,8 +1142,7 @@ test("a confirmed native observable reply retains complete large content before 
             },
         );
     assert(observableReplyTextId);
-    const retain = internal.execution.invocationLifecycle.retainOutput;
-    await f.t.mutation(retain, {
+    await retainFixtureOutput(f.t, {
         ...args,
         responseJson: JSON.stringify({ kind: "operations", requests: [] }),
         observableReplyTextId,
@@ -1203,7 +1203,7 @@ test("recovery retention leaves document capacity for bounded lifecycle results"
         ),
     );
     assert(rawOutputTextId);
-    await f.t.mutation(internal.execution.invocations.retainOutput, {
+    await retainFixtureOutput(f.t, {
         invocationId: begun.invocationId,
         expectedGeneration: 1,
         responseJson: JSON.stringify({ kind: "operations", requests: [] }),

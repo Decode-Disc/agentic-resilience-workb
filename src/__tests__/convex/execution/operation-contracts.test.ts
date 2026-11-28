@@ -1,4 +1,5 @@
 import { internal } from "@convex/_generated/api";
+import { currentVersions } from "@convex/execution/agentAuthorityCatalog";
 import {
     assertOperationContract,
     registeredAgentDefinitions,
@@ -147,4 +148,22 @@ test("common_success_does_not_depend_on_inspection_metadata", () => {
             captureId: "made-up",
         }),
     ).toBe(false);
+});
+
+test("calibration rejects an authority catalogue with a divergent current version", () => {
+    const current = currentVersions.workbench_v1;
+    Reflect.set(currentVersions, "workbench_v1", current + 1);
+    try {
+        expect(() => registeredAgentDefinitions()).toThrow(
+            "definition_version_conflict",
+        );
+    } finally {
+        Reflect.set(currentVersions, "workbench_v1", current);
+    }
+    expect(registeredAgentDefinitions()).toContainEqual(
+        expect.objectContaining({
+            id: "workbench_v1",
+            version: current,
+        }),
+    );
 });

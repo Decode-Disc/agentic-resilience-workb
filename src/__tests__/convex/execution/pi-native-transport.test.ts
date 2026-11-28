@@ -16,6 +16,7 @@ import { installModel } from "@/__tests__/setup/model-configuration";
 import {
     claimFixturePiLease,
     dispatchFixtureOperation,
+    retainFixtureOutput,
 } from "@/__tests__/setup/pi-mission";
 import {
     nativePiFixtureRoute,
@@ -47,7 +48,7 @@ test("the compaction adoption owner refuses a retained blocked response", async 
     if (begun.kind !== "ready")
         throw new Error("Expected compaction invocation");
     const args = { invocationId: begun.invocationId, expectedGeneration: 4 };
-    await f.t.mutation(internal.execution.invocations.retainOutput, {
+    await retainFixtureOutput(f.t, {
         ...args,
         responseJson: JSON.stringify({
             kind: "blocked",
@@ -1567,7 +1568,7 @@ test("the native HTTP request observes the shared mission-deadline abort signal"
 }, 30000);
 
 test("a stale Pi writer cannot reserve provider spend and a late generation receipt can still be retained", async () => {
-    const { t, missionId } = await fixture();
+    const { t, missionId, sourceId } = await fixture();
     const expectedGeneration = 4;
     const scope = { missionId, expectedGeneration };
     const piLease = await claimFixturePiLease(t, missionId, expectedGeneration);
@@ -1620,6 +1621,17 @@ test("a stale Pi writer cannot reserve provider spend and a late generation rece
         ).toBeNull();
     };
     await expectNoReservation();
+    await expect(
+        t.mutation(internal.providerCalls.recordAttempt, {
+            ...attempt,
+            sourceId,
+            piLease,
+        }),
+    ).rejects.toThrow("qualification_attempt_invalid");
+    expect(
+        await t.run((ctx) => ctx.db.query("providerCalls").first()),
+    ).toBeNull();
+
     const { sessionId, writer, epoch } = await t.mutation(
         internal.execution.piStore.claim,
         {
@@ -1639,18 +1651,19 @@ test("a stale Pi writer cannot reserve provider spend and a late generation rece
     );
     expect(granted.shouldExecute).toBe(true);
     await t.run((ctx) => ctx.db.patch(sessionId, { leaseUntil: Date.now() }));
-    await t.mutation(
-        internal.execution.providerCallReceipts.observeGeneration,
-        {
-            invocationId: begun.invocationId,
-            generationId: "generation-receipt",
-        },
-    );
+    await t.mutation(internal.providerCalls.observeGeneration, {
+        invocationId: begun.invocationId,
+        generationId: "generation-receipt",
+    });
+    await t.mutation(internal.providerCalls.requestBilling, {
+        invocationId: begun.invocationId,
+    });
     expect(
         await t.run((ctx) => ctx.db.get(granted.providerCallId)),
     ).toMatchObject({
         invocationId: begun.invocationId,
         providerObservation: { generationId: "generation-receipt" },
+        billing: { state: "pending" },
     });
 });
 

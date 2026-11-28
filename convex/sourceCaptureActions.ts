@@ -524,6 +524,9 @@ export async function inspectSourceDocument(
 type Request = FunctionArgs<
     typeof internal.workbenchPublicContext.forExecution
 >;
+type DocumentaryProviderRequest = Request & {
+    piLease?: import("@convex/execution/piSession").PiDispatchLease;
+};
 type SuppliedReference = NonNullable<
     FunctionReturnType<
         typeof internal.workbenchPublicContext.forExecution
@@ -921,7 +924,7 @@ function documentaryCaptureOutcome(
 
 export async function observeWorkbenchDocumentaryProvider<T>(
     ctx: ActionCtx,
-    request: Request,
+    { piLease, ...request }: DocumentaryProviderRequest,
     operation: "framing_context_search" | "framing_context_read",
     input: unknown,
     deadlineAt: number,
@@ -959,7 +962,7 @@ export async function observeWorkbenchDocumentaryProvider<T>(
     };
     const admitted = await ctx.runMutation(
         internal.providerCalls.recordAttempt,
-        { ...attempt, status: "started" },
+        { ...attempt, status: "started", piLease },
     );
     if (!admitted.shouldExecute)
         return {
@@ -1034,7 +1037,7 @@ export async function resolvePublicDocumentAddresses(hostname: string) {
 
 async function readPinnedPublisher(
     ctx: ActionCtx,
-    args: Request,
+    { requestId, expectedGeneration }: Request,
     url: string,
     confirmedSec: boolean,
     signal: AbortSignal,
@@ -1043,7 +1046,10 @@ async function readPinnedPublisher(
 ) {
     let current = url;
     for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect++) {
-        await ctx.runQuery(internal.workbenchPublicContext.forExecution, args);
+        await ctx.runQuery(internal.workbenchPublicContext.forExecution, {
+            requestId,
+            expectedGeneration,
+        });
         signal.throwIfAborted();
         let abort: ReturnType<typeof addAbortListener> | undefined;
         const destination = await Promise.race([
@@ -1054,7 +1060,10 @@ async function readPinnedPublisher(
         ]).finally(() => abort?.[Symbol.dispose]());
         const address = destination.addresses[0];
         if (!address) throw executionFailure("source_url_not_public");
-        await ctx.runQuery(internal.workbenchPublicContext.forExecution, args);
+        await ctx.runQuery(internal.workbenchPublicContext.forExecution, {
+            requestId,
+            expectedGeneration,
+        });
         signal.throwIfAborted();
         if (confirmedSec) {
             const { retryAfter } = await ctx.runMutation(
@@ -1062,10 +1071,10 @@ async function readPinnedPublisher(
                 {},
             );
             if (retryAfter) throw executionFailure("sec_rate_limit");
-            await ctx.runQuery(
-                internal.workbenchPublicContext.forExecution,
-                args,
-            );
+            await ctx.runQuery(internal.workbenchPublicContext.forExecution, {
+                requestId,
+                expectedGeneration,
+            });
             signal.throwIfAborted();
         }
         const response = await requestPinnedPublicSource(
@@ -1125,7 +1134,7 @@ async function readPinnedPublisher(
 
 export async function acquireWorkbenchSuppliedReference(
     ctx: ActionCtx,
-    args: Request,
+    args: DocumentaryProviderRequest,
     supplied: SuppliedReference,
     deadlineAt: number,
 ) {
@@ -1232,7 +1241,7 @@ export async function acquireWorkbenchSuppliedReference(
 
 export async function acquireWorkbenchPublicDocument(
     ctx: ActionCtx,
-    args: Request,
+    args: DocumentaryProviderRequest,
     authority: FunctionReturnType<
         typeof internal.workbenchPublicContext.forExecution
     >,
@@ -1281,7 +1290,10 @@ export async function acquireWorkbenchPublicDocument(
                 );
                 await ctx.runQuery(
                     internal.workbenchPublicContext.forExecution,
-                    args,
+                    {
+                        requestId: args.requestId,
+                        expectedGeneration: args.expectedGeneration,
+                    },
                 );
                 signal.throwIfAborted();
                 const contents = await read.getContents([url], options, {

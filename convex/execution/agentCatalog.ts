@@ -31,7 +31,11 @@ import {
     workbenchV13Definition,
 } from "@convex/domain/workbenchAgent";
 import { getFunctionName } from "convex/server";
-import { getAgentAuthority } from "./agentAuthorityCatalog";
+import {
+    currentVersions,
+    getAgentAuthority,
+    registeredAuthorityKeys,
+} from "./agentAuthorityCatalog";
 import {
     type AgentDefinition,
     agentMethodInstructions,
@@ -235,9 +239,19 @@ export function resolveAgentDefinition(
 
 /** Enumerates the exact versioned bindings accepted by runtime resolution. */
 export function registeredAgentDefinitions(): readonly AgentDefinition[] {
-    return supportedDefinitions().map(({ id, version }) =>
-        getAgentDefinition(id, version),
-    );
+    const supported = supportedDefinitions();
+    const authority = registeredAuthorityKeys();
+    if (
+        supported.length !== authority.size ||
+        supported.some(
+            ({ id, version }) => !authority.delete(`${id}:${version}`),
+        ) ||
+        Object.values(definitions()).some(
+            ({ id, version }) => currentVersions[id] !== version,
+        )
+    )
+        throw executionError("definition_version_conflict");
+    return supported.map(({ id, version }) => getAgentDefinition(id, version));
 }
 
 let nativeOperations: Map<string, AgentOperationDefinition> | undefined;

@@ -1008,6 +1008,7 @@ export const retainOutput = internalMutation({
         invocationId: v.id("agentInvocations"),
         expectedGeneration: v.number(),
         ...receivedOutputArgs,
+        piLease: v.optional(piDispatchLeaseValidator),
         observableReplyJson: v.optional(v.string()),
         observableReplyTextId: v.optional(v.id("retainedTexts")),
     },
@@ -1031,10 +1032,29 @@ export const retainOutput = internalMutation({
                 args.rawOutputTextId !== undefined)
         )
             throw executionError("invocation_result_invalid");
+        const response =
+            args.responseJson === undefined
+                ? undefined
+                : JSON.parse(args.responseJson);
+        if (
+            response?.kind === "blocked" &&
+            response.code === "pi_writer_fenced"
+        )
+            throw executionError("pi_writer_fenced");
+        const mission = invocation.missionId
+            ? await ctx.db.get(invocation.missionId)
+            : null;
+        if (mission && (!invocation.providerCallId || args.piLease))
+            await requirePiDispatchLease(
+                ctx,
+                mission,
+                args.expectedGeneration,
+                args.piLease,
+            );
         const receivedOutputJson =
-            args.responseJson !== undefined
-                ? stableStringify(JSON.parse(args.responseJson))
-                : undefined;
+            args.responseJson === undefined
+                ? undefined
+                : stableStringify(response);
         const responseText = args.responseTextId
             ? await invocationResponseManifest(
                   ctx,
@@ -1175,15 +1195,12 @@ export const retainOutput = internalMutation({
                       args.rawOutputJson,
                   )),
         });
-        if (invocation.missionId) {
-            const mission = await ctx.db.get(invocation.missionId);
-            if (mission && !hasReceivedResponse(invocation))
-                await recordMissionEvent(ctx, mission, {
-                    kind: "invocation_output_observed",
-                    cause: invocation.taskKey,
-                    invocationId: invocation._id,
-                });
-        }
+        if (mission && !hasReceivedResponse(invocation))
+            await recordMissionEvent(ctx, mission, {
+                kind: "invocation_output_observed",
+                cause: invocation.taskKey,
+                invocationId: invocation._id,
+            });
         return null;
     },
 });

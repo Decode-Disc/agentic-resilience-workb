@@ -1709,6 +1709,7 @@ export const dispatch = internalAction({
                 throw executionError("operation_not_dispatched");
             const executeArgs = {
                 ...args,
+                piLease,
                 missionId: claimed.missionId,
                 runId: claimed.runId,
                 input: claimed.input,

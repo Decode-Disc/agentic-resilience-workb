@@ -2124,7 +2124,9 @@ async function executeCampaign(
                 candidateHash(fingerprints()),
             );
             mkdirSync(validationRoot, { recursive: true, mode: 0o700 });
-            const candidate = preserveQualificationCandidate(validationRoot);
+            const candidate = preserveQualificationCandidate(validationRoot, {
+                preserveCode: false,
+            });
             await verifyQualificationCandidate(
                 validationRoot,
                 candidate,

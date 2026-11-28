@@ -23,6 +23,7 @@ import {
     executionFailureValidation,
 } from "@convex/execution/errors";
 import { operationOutcomeValidator } from "@convex/execution/executionProtocol";
+import { piDispatchLeaseValidator } from "@convex/execution/piSession";
 import { retainedTextParts } from "@convex/execution/retainedText";
 import { validateExaCandidates } from "@convex/integrations/exaCandidateValidation";
 import { configuredExaContentsClient } from "@convex/integrations/exaContentsClient";
@@ -205,11 +206,12 @@ export const execute = internalAction({
     args: {
         requestId: v.id("agentOperationRequests"),
         expectedGeneration: v.number(),
+        piLease: v.optional(piDispatchLeaseValidator),
     },
     returns: operationOutcomeValidator,
     handler: async (
         ctx,
-        args,
+        { piLease, ...args },
     ): Promise<Infer<typeof operationOutcomeValidator>> => {
         const hostDeadline = nodeActionGenerationDeadline(Date.now());
         try {
@@ -314,7 +316,7 @@ export const execute = internalAction({
                 }
                 const acquisition = await acquireWorkbenchPublicDocument(
                     ctx,
-                    args,
+                    { ...args, piLease },
                     authority,
                     reference,
                     deadlineAt,
@@ -362,7 +364,7 @@ export const execute = internalAction({
             if (supplied) {
                 const result = await acquireWorkbenchSuppliedReference(
                     ctx,
-                    args,
+                    { ...args, piLease },
                     supplied,
                     deadlineAt,
                 );
@@ -393,7 +395,7 @@ export const execute = internalAction({
                 return { kind: "unavailable", code: "missing_configuration" };
             const found = await observeWorkbenchDocumentaryProvider(
                 ctx,
-                args,
+                { ...args, piLease },
                 "framing_context_search",
                 { query: authority.query, limit },
                 deadlineAt,
@@ -455,7 +457,7 @@ export const execute = internalAction({
                 const options = { text: { maxCharacters } };
                 const contents = await observeWorkbenchDocumentaryProvider(
                     ctx,
-                    args,
+                    { ...args, piLease },
                     "framing_context_read",
                     { urls, options },
                     deadlineAt,

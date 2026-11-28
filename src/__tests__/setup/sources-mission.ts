@@ -16,6 +16,7 @@ import {
     claimFixtureOperation,
     dispatchFixtureOperation,
 } from "@/__tests__/setup/pi-mission";
+import { retainFixtureOutput } from "./pi-mission";
 import { seedInspectedEvidence } from "./source-preparation";
 
 /** Declares an already-adopted read for capacity/history fixtures; reading behavior tests dispatch the real operation. */
@@ -289,7 +290,7 @@ export async function retainSourcesProposal(
     const observableReplyTextId = await t.action((ctx) =>
         stageObservedBody(ctx, authority, "reply", envelope),
     );
-    await t.mutation(internal.execution.invocations.retainOutput, {
+    await retainFixtureOutput(t, {
         ...authority,
         ...(responseTextId ? { responseTextId } : { responseJson }),
         ...(observableReplyTextId

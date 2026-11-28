@@ -1,11 +1,14 @@
 export { requireQualificationResultDeadline } from "./execution/providerCallReceipts";
 
 import {
+    assertInvocationAttemptIdentity,
+    assertMissionModelAttemptIdentity,
     assertProviderQualificationAllowance,
     existingProviderAttempt,
     hasUnresolvedStructuredTermination,
     insertProviderReceipt,
     invocationCall,
+    observeGenerationArgs,
     qualificationInvocationCapacity,
     reportedCostSettlement,
     requireBrowserQualification,
@@ -76,7 +79,7 @@ import {
     publicationControl,
     requireMissionAuthority,
 } from "./execution/authority";
-import { admittedInputHash } from "./execution/journal";
+import { requirePiDispatchLease } from "./execution/piSession";
 import { preparationModelOutputLimit } from "./integrations/modelRouting";
 import { rateLimiter } from "./rateLimiter";
 import {
@@ -452,6 +455,27 @@ export const nextPreparationAttemptForInput = internalQuery({
     },
 });
 
+// Previous workers may still settle accounting through these RPC paths during a deploy.
+export const observeGeneration = internalMutation({
+    args: observeGenerationArgs,
+    returns: v.null(),
+    handler: (ctx, args): Promise<null> =>
+        ctx.runMutation(
+            internal.execution.providerCallReceipts.observeGeneration,
+            args,
+        ),
+});
+
+export const requestBilling = internalMutation({
+    args: { invocationId: v.id("agentInvocations") },
+    returns: v.null(),
+    handler: (ctx, args): Promise<null> =>
+        ctx.runMutation(
+            internal.execution.providerCallReceipts.requestBilling,
+            args,
+        ),
+});
+
 export const recordAttempt = internalMutation({
     args: providerAttemptValidator.fields,
     returns: recordAttemptResultValidator,
@@ -462,11 +486,8 @@ export const recordAttempt = internalMutation({
         if (
             args.status === "started" &&
             args.service === "model" &&
-            (args.operation === "agent_reasoning" ||
-                args.operation === "agent_compaction") &&
             !args.operationRequestId &&
-            !args.sourceId &&
-            !args.acceptedDecisionId
+            (args.missionId || args.invocationId)
         )
             return reserveMissionModelAttempt(ctx, args);
         const now = Date.now();
@@ -625,6 +646,16 @@ export const recordAttempt = internalMutation({
             )
                 throw sourcePreparationError("attempt_identity_conflict");
         }
+        if (
+            framingAuthority &&
+            framingAuthority.operation !== "acquire_document"
+        )
+            await requirePiDispatchLease(
+                ctx,
+                framingAuthority.mission,
+                framingAuthority.mission.generation,
+                args.piLease,
+            );
         let qualification: Awaited<
             ReturnType<typeof readWorkbenchQualification>
         > = null;
@@ -737,38 +768,29 @@ export const recordAttempt = internalMutation({
                 )
                     throw sourcePreparationError("response_review_unavailable");
             }
-            if (
-                !mission ||
-                !invocation ||
-                args.preparationId ||
-                args.service !== "model" ||
-                invocation.provenance !== "live" ||
-                invocation.missionId !== mission._id ||
-                invocation.runId !== args.runId ||
-                mission.runId !== args.runId ||
-                invocation.corpusRevisionId !== args.corpusRevisionId ||
-                args.executionGeneration !== invocation.generation ||
-                args.workflowVersion !== mission.definitionVersion ||
-                (args.operationRequestId
-                    ? !reviewIdentity
-                    : args.operation !==
-                          (invocation.purpose === "compaction"
-                              ? "agent_compaction"
-                              : "agent_reasoning") ||
-                      args.stepKey !== args.operation ||
-                      args.attempt !== 1 ||
-                      args.inputHash !== admittedInputHash(invocation) ||
-                      args.operationKey !==
-                          `mission:${mission._id}:invocation:${invocation._id}:attempt:1`)
-            )
+            if (!mission || !invocation)
                 throw sourcePreparationError("qualification_attempt_invalid");
-            // Factual settlement retains the original attempt; admission alone needs the current generation.
-            if (args.status === "started")
+            if (args.operationRequestId) {
+                assertInvocationAttemptIdentity(args, mission, invocation);
+                if (!reviewIdentity)
+                    throw sourcePreparationError(
+                        "qualification_attempt_invalid",
+                    );
+            } else assertMissionModelAttemptIdentity(args, mission, invocation);
+            // Factual settlement retains the original attempt; admission alone needs the current writer.
+            if (args.status === "started") {
                 await requireMissionAuthority(
                     ctx,
                     mission._id,
                     invocation.generation,
                 );
+                await requirePiDispatchLease(
+                    ctx,
+                    mission,
+                    invocation.generation,
+                    args.piLease,
+                );
+            }
         }
         if (
             args.service === "model" &&

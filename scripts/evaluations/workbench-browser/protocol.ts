@@ -2,10 +2,14 @@ import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import {
+    closeSync,
+    constants,
     existsSync,
+    fstatSync,
     lstatSync,
     mkdirSync,
     mkdtempSync,
+    openSync,
     readFileSync,
     readlinkSync,
     renameSync,
@@ -13,7 +17,7 @@ import {
     statSync,
     writeFileSync,
 } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import { reasoningPreferenceValues } from "../../../convex/modelConfigurationValues.ts";
@@ -184,7 +188,7 @@ export function planQualification(
 
 function checkoutFingerprints(
     paths: readonly string[] = [],
-    cacheRoot?: string,
+    outputDirectories: readonly (string | undefined)[] = [],
 ) {
     const list = (flags: string[], excludedPaths: string[] = []) => {
         const result = spawnSync(
@@ -195,19 +199,20 @@ function checkoutFingerprints(
         assert.equal(result.status, 0, "Candidate listing failed");
         return result.stdout.split("\0");
     };
-    const cache = cacheRoot && relative(process.cwd(), resolve(cacheRoot));
-    const localCache =
-        cache &&
-        !isAbsolute(cache) &&
-        cache !== ".." &&
-        !cache.startsWith(`..${sep}`);
-    const inputs = localCache
+    const exclusions = outputDirectories.flatMap((directory) => {
+        if (!directory) return [];
+        const path = relative(process.cwd(), resolve(directory));
+        return path &&
+            !isAbsolute(path) &&
+            path !== ".." &&
+            !path.startsWith(`..${sep}`)
+            ? [`:(exclude,literal)${path.replaceAll(sep, "/")}`]
+            : [];
+    });
+    const inputs = exclusions.length
         ? [
               ...list(["--cached"]),
-              ...list(
-                  ["--others", "--exclude-standard"],
-                  [`:(exclude,literal)${cache}`],
-              ),
+              ...list(["--others", "--exclude-standard"], exclusions),
           ]
         : list(["--cached", "--others", "--exclude-standard"]);
     return Object.fromEntries(
@@ -252,9 +257,12 @@ export function qualificationFingerprints() {
     ]);
 }
 /** Retains the real modules rather than reconstructing their behavior in an evaluation script. */
-export function preserveQualificationCandidate(root: string) {
+export function preserveQualificationCandidate(
+    root: string,
+    { preserveCode = true } = {},
+) {
     const fingerprints = qualificationFingerprints();
-    for (const path of Object.keys(fingerprints)) {
+    for (const path of preserveCode ? Object.keys(fingerprints) : []) {
         const target = join(root, "code", path);
         mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
         writeFileSync(target, readFileSync(path), { mode: 0o600 });
@@ -446,7 +454,14 @@ export function buildPreflightChildEnv(
         if (
             value !== undefined &&
             (preflightEnvKeys.has(key) ||
-                preflightEnvPrefixes.some((prefix) => key.startsWith(prefix)))
+                preflightEnvPrefixes.some(
+                    (prefix) =>
+                        key.startsWith(prefix) &&
+                        (prefix === "VITEST_" ||
+                            !/(auth|token|password|secret|key|cert|userconfig|globalconfig)/i.test(
+                                key,
+                            )),
+                ))
         )
             selected.push([key, value]);
     }
@@ -456,8 +471,26 @@ export function buildPreflightChildEnv(
 }
 
 export function defaultPreflightCacheRoot(env = process.env): string {
+    const safeBase = (base?: string) => {
+        const path = base?.trim();
+        if (!path || !isAbsolute(path)) return undefined;
+        const normalized = resolve(path);
+        return ["/tmp", "/var/tmp", resolve(tmpdir())].some(
+            (directory) =>
+                normalized === directory ||
+                normalized.startsWith(directory + sep),
+        )
+            ? undefined
+            : normalized;
+    };
+    const home = safeBase(env.HOME) ?? safeBase(homedir());
+    const base = safeBase(env.XDG_CACHE_HOME) ?? (home && join(home, ".cache"));
+    assert(
+        base,
+        "Preflight cache requires a non-temporary home or cache directory",
+    );
     return join(
-        env.XDG_CACHE_HOME || join(env.HOME || homedir(), ".cache"),
+        base,
         "agentic-resilience-workbench",
         "qualification-preflight",
     );
@@ -475,18 +508,37 @@ function isDirectory(path: string) {
     return lstatSync(path, { throwIfNoEntry: false })?.isDirectory() === true;
 }
 
+function isPrivateDirectory(path: string) {
+    const stat = lstatSync(path, { throwIfNoEntry: false });
+    return (
+        stat?.isDirectory() &&
+        (stat.mode & 0o077) === 0 &&
+        (process.getuid === undefined || stat.uid === process.getuid())
+    );
+}
+
+function readRegularFile(path: string) {
+    const fd = openSync(
+        path,
+        constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    );
+    try {
+        if (!fstatSync(fd).isFile())
+            throw new Error("Invalid validation artifact");
+        return readFileSync(fd);
+    } finally {
+        closeSync(fd);
+    }
+}
+
 function readVerifiedCacheHit(directory: string, expected: ValidationRecord) {
     try {
         const logs = join(directory, "checks");
-        const manifest = join(directory, "validation.json");
-        if (
-            !isDirectory(directory) ||
-            !isDirectory(logs) ||
-            !lstatSync(manifest).isFile()
-        )
-            return undefined;
+        if (!isDirectory(directory) || !isDirectory(logs)) return undefined;
         const record: ValidationRecord = JSON.parse(
-            readFileSync(manifest, "utf8"),
+            readRegularFile(join(directory, "validation.json")).toString(
+                "utf8",
+            ),
         );
         if (
             record.status !== "passed" ||
@@ -495,15 +547,27 @@ function readVerifiedCacheHit(directory: string, expected: ValidationRecord) {
             record.validationIdentity !== expected.validationIdentity ||
             !Array.isArray(record.checks) ||
             record.checks.length !== checks.length ||
-            !checks.every(
-                ({ id }) =>
-                    record.checks.some(
-                        (check) => check.id === id && check.status === "passed",
-                    ) && lstatSync(join(logs, `${id}.log`)).isFile(),
+            !checks.every(({ id }) =>
+                record.checks.some(
+                    (check) => check.id === id && check.status === "passed",
+                ),
             )
         )
             return undefined;
-        return record;
+        const accepted: ValidationRecord = {
+            ...expected,
+            status: "passed",
+            checks: checks.map(({ id }) => ({ id, status: "passed" })),
+        };
+        return {
+            record: accepted,
+            logs: new Map(
+                checks.map(({ id }) => [
+                    id,
+                    readRegularFile(join(logs, `${id}.log`)),
+                ]),
+            ),
+        };
     } catch {
         return undefined;
     }
@@ -512,7 +576,7 @@ function readVerifiedCacheHit(directory: string, expected: ValidationRecord) {
 function writeValidationArtifacts(
     root: string,
     record: ValidationRecord,
-    source: string,
+    logs: ReadonlyMap<string, Buffer>,
 ) {
     const logDirectory = join(root, "checks");
     if (lstatSync(logDirectory, { throwIfNoEntry: false })?.isSymbolicLink())
@@ -530,11 +594,11 @@ function writeValidationArtifacts(
             rmSync(temporary, { force: true });
         }
     };
-    for (const check of record.checks) {
-        const name = `${check.id}.log`;
-        const path = join(source, "checks", name);
-        if (existsSync(path))
-            replace(join(logDirectory, name), readFileSync(path));
+    for (const { id } of record.checks) {
+        const log = logs.get(id);
+        if (record.status === "passed")
+            assert(log, `Missing ${id} validation log`);
+        if (log) replace(join(logDirectory, `${id}.log`), log);
     }
     replace(
         join(root, "validation.json"),
@@ -560,7 +624,7 @@ export async function verifyQualificationCandidate(
     verify();
     // Project-wide prerequisites may read authored files outside the retained campaign archive.
     const checkoutHash = () =>
-        candidateHash(checkoutFingerprints([], sharedCacheRoot));
+        candidateHash(checkoutFingerprints([], [root, sharedCacheRoot]));
     const validationInputs = checkoutHash();
     const verifyInputs = () => {
         verify();
@@ -604,28 +668,24 @@ export async function verifyQualificationCandidate(
         ),
     };
     const local = readVerifiedCacheHit(root, record);
-    if (local) {
-        verifyInputs();
-        return local;
-    }
+    if (local) return local.record;
 
     let candidateDir: string | undefined;
     if (sharedCacheRoot) {
         if (!lstatSync(sharedCacheRoot, { throwIfNoEntry: false }))
             mkdirSync(sharedCacheRoot, { recursive: true, mode: 0o700 });
-        if (isDirectory(sharedCacheRoot)) {
+        if (isPrivateDirectory(sharedCacheRoot)) {
             const path = join(sharedCacheRoot, candidate);
             if (!lstatSync(path, { throwIfNoEntry: false }))
                 mkdirSync(path, { recursive: true, mode: 0o700 });
-            if (isDirectory(path)) candidateDir = path;
+            if (isPrivateDirectory(path)) candidateDir = path;
         }
     }
     const cache = candidateDir && join(candidateDir, record.validationIdentity);
     const hit = cache ? readVerifiedCacheHit(cache, record) : undefined;
-    if (hit && cache) {
-        verifyInputs();
-        writeValidationArtifacts(root, hit, cache);
-        return hit;
+    if (hit) {
+        writeValidationArtifacts(root, hit.record, hit.logs);
+        return hit.record;
     }
 
     const staging = mkdtempSync(
@@ -636,6 +696,7 @@ export async function verifyQualificationCandidate(
         mkdirSync(logs, { mode: 0o700 });
         const controller = new AbortController();
         const outcomes = new Map<string, "passed" | "failed">();
+        const logBodies = new Map<string, Buffer>();
         let firstError: unknown;
         await Promise.all(
             checks.map(async (check) => {
@@ -646,11 +707,13 @@ export async function verifyQualificationCandidate(
                         controller.signal,
                         childEnv,
                     );
-                    writeFileSync(
-                        join(logs, `${check.id}.log`),
+                    const log = Buffer.from(
                         `${result.stdout ?? ""}\n${result.stderr ?? ""}`,
-                        { mode: 0o600 },
                     );
+                    logBodies.set(check.id, log);
+                    writeFileSync(join(logs, `${check.id}.log`), log, {
+                        mode: 0o600,
+                    });
                     if (result.status !== 0 || result.error)
                         throw new assert.AssertionError({
                             message: `Qualification prerequisite failed: ${check.id}`,
@@ -673,11 +736,10 @@ export async function verifyQualificationCandidate(
             verifyInputs();
         } catch (error) {
             record.status = "failed";
-            writeValidationArtifacts(root, record, staging);
+            writeValidationArtifacts(root, record, logBodies);
             throw error;
         }
         record.status = "passed";
-        let source = staging;
         if (cache) {
             writeFileSync(
                 join(staging, "validation.json"),
@@ -686,7 +748,6 @@ export async function verifyQualificationCandidate(
             );
             try {
                 renameSync(staging, cache);
-                source = cache;
             } catch (error) {
                 const collision = (error as NodeJS.ErrnoException).code;
                 if (
@@ -695,15 +756,9 @@ export async function verifyQualificationCandidate(
                     collision !== "ENOTDIR"
                 )
                     throw error;
-                if (
-                    candidateDir &&
-                    isDirectory(candidateDir) &&
-                    readVerifiedCacheHit(cache, record)
-                )
-                    source = cache;
             }
         }
-        writeValidationArtifacts(root, record, source);
+        writeValidationArtifacts(root, record, logBodies);
         verifyInputs();
         return record;
     } finally {

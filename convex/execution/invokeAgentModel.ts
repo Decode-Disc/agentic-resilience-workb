@@ -122,7 +122,7 @@ export async function invokeControlledGeneration(
         await ctx.runMutation(
             internal.execution.invocationLifecycle.retainOutput,
             {
-                ...args,
+                ...dispatchArgs,
                 responseJson: JSON.stringify(reply.response),
                 ...(reply.rawOutputJson
                     ? { rawOutputJson: reply.rawOutputJson }
@@ -253,7 +253,7 @@ export async function invokeControlledGeneration(
                 await ctx.runMutation(
                     internal.execution.invocationLifecycle.retainOutput,
                     {
-                        ...args,
+                        ...dispatchArgs,
                         ...prepared,
                         ...observation,
                     },
@@ -284,10 +284,11 @@ export async function invokeControlledGeneration(
         | undefined;
     // Admission and call are separate transactions; recheck the generation immediately before I/O.
     try {
-        await ctx.runQuery(
-            internal.execution.invocationLifecycle.forExecution,
-            { ...args, inputHash },
-        );
+        if (first.fragmentCount > 1)
+            await ctx.runQuery(
+                internal.execution.invocationLifecycle.forExecution,
+                { ...args, inputHash },
+            );
     } catch (error) {
         const code =
             executionFailureCode(error) ?? "execution_validation_failed";
@@ -497,7 +498,12 @@ export async function invokeControlledGeneration(
                     : { apiKey: process.env.OPENROUTER_API_KEY ?? "" },
             },
         );
-    } catch {
+    } catch (error) {
+        if (
+            dispatchRefusal === "pi_writer_fenced" ||
+            executionFailureCode(error) === "pi_writer_fenced"
+        )
+            throw executionError("pi_writer_fenced");
         if (dispatchRefusal)
             return recordReply(
                 { response: { kind: "blocked", code: dispatchRefusal } },

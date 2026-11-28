@@ -17,6 +17,7 @@ import {
     claimFixtureOperation,
     dispatchFixtureOperation,
     recordFixtureAttempt,
+    retainFixtureOutput,
 } from "@/__tests__/setup/pi-mission";
 import { readRetainedBody } from "@/__tests__/setup/retained-history";
 import {
@@ -205,7 +206,7 @@ async function prepareDraft(
     const observableReplyTextId = await t.action((ctx) =>
         stageObservedBody(ctx, authority, "reply", envelope),
     );
-    await t.mutation(internal.execution.invocations.retainOutput, {
+    await retainFixtureOutput(t, {
         ...authority,
         ...(responseTextId ? { responseTextId } : { responseJson: json }),
         ...(observableReplyTextId

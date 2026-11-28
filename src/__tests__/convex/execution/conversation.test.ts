@@ -2,7 +2,10 @@ import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedConversation as fixture } from "@/__tests__/setup/agent-harness";
-import { beginFixtureInvocation } from "@/__tests__/setup/pi-mission";
+import {
+    beginFixtureInvocation,
+    retainFixtureOutput,
+} from "@/__tests__/setup/pi-mission";
 import { readMessageBodies } from "@/__tests__/setup/retained-messages";
 
 afterEach(() => {
@@ -15,7 +18,7 @@ async function observeSimulation(
 ) {
     const args = { invocationId, expectedGeneration: 1 };
     const response = await t.action(internal.execution.simulation.invoke, args);
-    await t.mutation(internal.execution.invocationLifecycle.retainOutput, {
+    await retainFixtureOutput(t, {
         ...args,
         responseJson: JSON.stringify(response),
     });

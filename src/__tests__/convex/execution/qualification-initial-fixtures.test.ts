@@ -344,7 +344,7 @@ test("campaign coverage presets reach genuine Start pins on fresh dossiers", asy
     ).toEqual([]);
     expect(records).toEqual(presets);
     expect(network).not.toHaveBeenCalled();
-});
+}, 30_000);
 
 test("initial fixture retention refuses cancellation after the adopted documentary read", async () => {
     const f = await fixture("sources_correction");

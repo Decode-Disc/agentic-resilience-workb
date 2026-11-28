@@ -121,15 +121,17 @@ export async function requireQualifiedBrowserMission(
     return qualification;
 }
 
+export const observeGenerationArgs = {
+    invocationId: v.id("agentInvocations"),
+    generationId: v.optional(v.string()),
+    httpStatus: v.optional(v.number()),
+    requestId: v.optional(v.string()),
+    diagnostic: providerCallsTable.validator.fields.transportDiagnostic,
+};
+
 /** Factual response identity survives an interrupted stream without settling its outcome. */
 export const observeGeneration = internalMutation({
-    args: {
-        invocationId: v.id("agentInvocations"),
-        generationId: v.optional(v.string()),
-        httpStatus: v.optional(v.number()),
-        requestId: v.optional(v.string()),
-        diagnostic: providerCallsTable.validator.fields.transportDiagnostic,
-    },
+    args: observeGenerationArgs,
     returns: v.null(),
     handler: async (ctx, args) => {
         const call = await invocationCall(ctx, args.invocationId);
@@ -635,6 +637,48 @@ export async function existingProviderAttempt(
     };
 }
 
+export function assertInvocationAttemptIdentity(
+    args: ProviderAttempt,
+    mission: Doc<"agentMissions">,
+    invocation: Doc<"agentInvocations">,
+) {
+    if (
+        args.preparationId ||
+        args.sourceId ||
+        args.acceptedDecisionId ||
+        args.service !== "model" ||
+        invocation.provenance !== "live" ||
+        invocation.missionId !== mission._id ||
+        invocation.runId !== args.runId ||
+        mission.runId !== args.runId ||
+        invocation.corpusRevisionId !== args.corpusRevisionId ||
+        invocation.generation !== args.executionGeneration ||
+        mission.definitionVersion !== args.workflowVersion
+    )
+        throw sourcePreparationError("qualification_attempt_invalid");
+}
+
+export function assertMissionModelAttemptIdentity(
+    args: ProviderAttempt,
+    mission: Doc<"agentMissions">,
+    invocation: Doc<"agentInvocations">,
+) {
+    assertInvocationAttemptIdentity(args, mission, invocation);
+    if (
+        args.operationRequestId ||
+        args.operation !==
+            (invocation.purpose === "compaction"
+                ? "agent_compaction"
+                : "agent_reasoning") ||
+        args.stepKey !== args.operation ||
+        args.attempt !== 1 ||
+        args.inputHash !== admittedInputHash(invocation) ||
+        args.operationKey !==
+            `mission:${mission._id}:invocation:${invocation._id}:attempt:1`
+    )
+        throw sourcePreparationError("qualification_attempt_invalid");
+}
+
 /** Admit a native model dispatch and its reservation in the same writer transaction. */
 export async function reserveMissionModelAttempt(
     ctx: MutationCtx,
@@ -664,31 +708,9 @@ export async function reserveMissionModelAttempt(
     )
         throw sourcePreparationError("paid_work_disabled");
     requireProviderDiagnostic(args);
-    if (
-        args.status !== "started" ||
-        args.service !== "model" ||
-        args.operationRequestId ||
-        args.preparationId ||
-        !mission ||
-        !invocation ||
-        invocation.provenance !== "live" ||
-        invocation.missionId !== mission._id ||
-        invocation.runId !== args.runId ||
-        mission.runId !== args.runId ||
-        invocation.corpusRevisionId !== args.corpusRevisionId ||
-        invocation.generation !== args.executionGeneration ||
-        mission.definitionVersion !== args.workflowVersion ||
-        args.operation !==
-            (invocation.purpose === "compaction"
-                ? "agent_compaction"
-                : "agent_reasoning") ||
-        args.stepKey !== args.operation ||
-        args.attempt !== 1 ||
-        args.inputHash !== admittedInputHash(invocation) ||
-        args.operationKey !==
-            `mission:${mission._id}:invocation:${invocation._id}:attempt:1`
-    )
+    if (args.status !== "started" || !mission || !invocation)
         throw sourcePreparationError("qualification_attempt_invalid");
+    assertMissionModelAttemptIdentity(args, mission, invocation);
     await requireMissionAuthority(ctx, mission._id, invocation.generation);
     await requirePiDispatchLease(
         ctx,

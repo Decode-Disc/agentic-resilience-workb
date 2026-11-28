@@ -11,6 +11,7 @@ import {
     dispatchFixtureOperation,
 } from "@/__tests__/setup/pi-mission";
 import { seedConversation } from "./agent-harness";
+import { retainFixtureOutput } from "./pi-mission";
 
 /** Prior published exchange followed by an active, separately authorized response. */
 export async function seedHistoryMission(
@@ -71,7 +72,7 @@ export async function seedHistoryMission(
     const observableReplyTextId = await f.t.action((ctx) =>
         stageObservedBody(ctx, authority, "reply", envelope),
     );
-    await f.t.mutation(internal.execution.invocations.retainOutput, {
+    await retainFixtureOutput(f.t, {
         ...authority,
         ...(responseTextId ? { responseTextId } : { responseJson }),
         ...(observableReplyTextId

@@ -102,6 +102,9 @@ test("a reopened final reply adopts once after an operation arrived before compl
             .collect(),
     );
     expect(before.some((i) => i.blockCode === "pending_operations")).toBe(true);
+    const wake = (await t.run((ctx) => ctx.db.get(active.missionId)))?.piWakeAt;
+    assert(wake !== undefined && wake > Date.now());
+    vi.advanceTimersByTime(wake - Date.now());
     await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
     expect(await t.run((ctx) => ctx.db.get(active.missionId))).toMatchObject({
         status: "completed",
@@ -197,6 +200,9 @@ test("reopening after a stale tool reply preserves its refusal instead of execut
     );
     assert(refused);
     expect(refused.blockCode).toBe("stale_instructions");
+    const wake = (await t.run((ctx) => ctx.db.get(active.missionId)))?.piWakeAt;
+    assert(wake !== undefined && wake > Date.now());
+    vi.advanceTimersByTime(wake - Date.now());
     await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
     expect(await t.run((ctx) => ctx.db.get(active.missionId))).toMatchObject({
         status: "completed",

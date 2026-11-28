@@ -7,6 +7,7 @@ import { API } from "typescript/unstable/sync";
 const TIER1_MODULES = [
     "convex/execution/piStore.ts",
     "convex/execution/piControl.ts",
+    "convex/execution/piControlReads.ts",
     "convex/execution/providerCallReceipts.ts",
 ];
 const TIER2_MODULES = [
@@ -77,7 +78,11 @@ type BoundaryFinding = {
     message: string;
 };
 
-type ValueImport = { specifier: string; line: number };
+type ValueImport = {
+    specifier: string;
+    line: number;
+    unsupported?: true;
+};
 
 function checkTierImports(
     root: string,
@@ -98,7 +103,9 @@ function checkTierImports(
             ) => {
                 if (visited.has(file)) return;
                 visited.add(file);
-                for (const { specifier, line } of imports.get(file) ?? []) {
+                for (const { specifier, line, unsupported } of imports.get(
+                    file,
+                ) ?? []) {
                     const local = specifier.startsWith("@convex/")
                         ? `convex/${specifier.slice(8)}`
                         : specifier.startsWith(".")
@@ -113,6 +120,7 @@ function checkTierImports(
                         : target && `${target}.ts`;
                     const next = [...chain, specifier];
                     if (
+                        unsupported ||
                         path === "convex/schema.ts" ||
                         forbidden.some(
                             (dependency) =>
@@ -130,7 +138,19 @@ function checkTierImports(
                         const resolved = imports.has(path)
                             ? path
                             : `${target}/index.ts`;
-                        walk(resolved, next, entryLine ?? line);
+                        if (imports.has(resolved))
+                            walk(resolved, next, entryLine ?? line);
+                        else if (
+                            !target?.endsWith(".json") &&
+                            path !== "convex/_generated/api.ts" &&
+                            path !== "convex/_generated/server.ts"
+                        )
+                            findings.push({
+                                file: entry,
+                                line: entryLine ?? line,
+                                rule: "execution-import",
+                                message: `${name} unresolved runtime dependency: ${next.join(" -> ")}`,
+                            });
                     }
                 }
             };
@@ -173,6 +193,22 @@ const FUNCTION_OWNERS: Record<string, readonly string[]> = {
         "operations",
         "invocationLifecycle",
     ],
+    "execution.providerCallReceipts.recordMissionModelAttempt": [
+        "invokeAgentModel",
+    ],
+    "execution.providerCallReceipts.observeGeneration": [
+        "invokeAgentModel",
+        "convex/providerCalls.ts",
+        "convex/sources/preparationModel.ts",
+    ],
+    "execution.providerCallReceipts.requestBilling": [
+        "invokeAgentModel",
+        "invocationLifecycle",
+        "providerCallReceipts",
+        "convex/providerCalls.ts",
+        "convex/sources/preparationModel.ts",
+    ],
+    "execution.operations.executeLocal": ["convex/integrations/piMission.ts"],
     "execution.operations.settleLocalRollback": [
         "convex/integrations/piMission.ts",
     ],
@@ -244,10 +280,19 @@ export function checkExecutionBoundaries(
             const identifiers: ts.Identifier[] = [];
             const collectIdentifiers = (node: ts.Node) => {
                 if (ts.isIdentifier(node)) identifiers.push(node);
-                const specifier = valueDependency(node);
+                const unsupported = ts.isImportEqualsDeclaration(node)
+                    ? "import equals declaration"
+                    : ts.isCallExpression(node) &&
+                        node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+                        (!node.arguments[0] ||
+                            !ts.isStringLiteral(node.arguments[0]))
+                      ? "non-literal dynamic import"
+                      : undefined;
+                const specifier = unsupported ?? valueDependency(node);
                 if (specifier)
                     currentImports.push({
                         specifier,
+                        ...(unsupported ? { unsupported: true } : {}),
                         line:
                             source.getLineAndCharacterOfPosition(
                                 node.getStart(source),

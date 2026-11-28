@@ -119,7 +119,8 @@ test.each([
         piWakeToken: recovering?.piWakeToken,
     });
     expect(ready?.piResultWakePending).toBeUndefined();
-    const delayed = Date.now() + PI_OPERATION_WAIT_POLL_MS;
+    const delayed =
+        Date.now() + PI_SESSION_LEASE_MS + PI_OPERATION_WAIT_POLL_MS;
     await t.mutation(internal.execution.piControl.closeWorker, {
         ...scope,
         writer,
@@ -312,6 +313,25 @@ test("adopting an uncertain acquisition leaves a later result eligible for an im
         piWakeAt: Date.now(),
         piResultWakePending: true,
         piResultWakeVersion: 2,
+    });
+});
+
+test("publication recovery preserves a result the expired writer did not adopt", async () => {
+    const { t, missionId, piLease, complete } = await waitingPiOperation();
+    await complete();
+    await t.mutation(internal.execution.piControl.holdPublication, {
+        held: true,
+    });
+    await t.run((ctx) =>
+        ctx.db.patch(piLease.sessionId, { leaseUntil: Date.now() }),
+    );
+    await t.mutation(
+        internal.execution.piControl.recoverPublicationWorkers,
+        {},
+    );
+    expect(await t.run((ctx) => ctx.db.get(missionId))).toMatchObject({
+        piResultWakePending: true,
+        piResultWakeVersion: 1,
     });
 });
 

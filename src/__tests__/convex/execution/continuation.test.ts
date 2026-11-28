@@ -11,6 +11,8 @@ import {
     beginFixtureInvocation,
     dispatchFixtureOperation,
     recordFixtureAttempt,
+    retainFixtureOutput,
+    seedSettledFixtureReceipt,
 } from "@/__tests__/setup/pi-mission";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 import {
@@ -99,7 +101,7 @@ test.each([
             },
         ],
     };
-    await t.mutation(internal.execution.invocations.retainOutput, {
+    await retainFixtureOutput(t, {
         invocationId: invocation.invocationId,
         expectedGeneration: 4,
         responseJson: JSON.stringify(response),
@@ -389,6 +391,7 @@ test("late cancelled output is retained but cannot create requests or advance th
     });
     if (invocation.kind !== "ready")
         throw new Error("Expected ready invocation");
+    await seedSettledFixtureReceipt(t, invocation.invocationId);
     await t.run((ctx) =>
         ctx.db.patch(args.runId, {
             executionStatus: "cancelled",
@@ -401,7 +404,7 @@ test("late cancelled output is retained but cannot create requests or advance th
             { callId: "late", name: "consult_mission_state", inputJson: "{}" },
         ],
     };
-    await t.mutation(internal.execution.invocations.retainOutput, {
+    await retainFixtureOutput(t, {
         invocationId: invocation.invocationId,
         expectedGeneration: 4,
         responseJson: JSON.stringify(response),
@@ -558,7 +561,7 @@ test.each([
             },
         ],
     };
-    await t.mutation(internal.execution.invocations.retainOutput, {
+    await retainFixtureOutput(t, {
         invocationId: invocation.invocationId,
         expectedGeneration: 4,
         responseJson: JSON.stringify(response),

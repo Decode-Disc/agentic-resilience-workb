@@ -6,6 +6,7 @@ import {
     beginFixtureInvocation,
     claimFixtureOperation,
     dispatchFixtureOperation,
+    retainFixtureOutput,
 } from "@/__tests__/setup/pi-mission";
 import {
     seedInspectedEvidence,
@@ -423,7 +424,7 @@ test("a legacy mission keeps its stored requests, hash identities and flat compl
     await t.run((ctx) =>
         ctx.db.patch(invocation.invocationId, { scopeKey: undefined }),
     );
-    await t.mutation(internal.execution.invocations.retainOutput, {
+    await retainFixtureOutput(t, {
         invocationId: invocation.invocationId,
         expectedGeneration: 4,
         responseJson: JSON.stringify({

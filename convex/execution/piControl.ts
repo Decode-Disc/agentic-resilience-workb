@@ -115,7 +115,13 @@ export const recoverPublicationWorkers = internalMutation({
                 writer: `publication-recovery:${session.epoch + 1}`,
                 leaseUntil: Date.now(),
             });
-            await ctx.db.patch(mission._id, { piActiveWriter: undefined });
+            await ctx.db.patch(mission._id, {
+                piActiveWriter: undefined,
+                ...((mission.piResultWakeVersion ?? 0) >
+                (mission.piPreparedWakeVersion ?? 0)
+                    ? { piResultWakePending: true }
+                    : {}),
+            });
             await recordMissionEvent(ctx, mission, {
                 kind: "publication_worker_recovered",
                 cause: "publication_recovery",
@@ -902,7 +908,7 @@ export const closeWorker = internalMutation({
                 ctx,
                 mission._id,
                 args.expectedGeneration,
-                Math.min(nextAt, mission.piWakeAt ?? nextAt),
+                nextAt,
             );
         if (settlingTerminal && session) {
             const attempts = (session.settlementAttempts ?? 0) + 1;

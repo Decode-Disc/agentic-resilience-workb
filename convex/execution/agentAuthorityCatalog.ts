@@ -134,7 +134,7 @@ function retainedMethod(base: Authority): Authority {
     };
 }
 
-const currentVersions = {
+export const currentVersions = {
     workbench_v1: WORKBENCH_SCOPED_DOCUMENTARY_VERSION,
     sources_v1: SCOPED_DOCUMENTARY_SOURCES_VERSION,
     saved_material_inspection_v1: SCOPED_DOCUMENTARY_INSPECTION_VERSION,
@@ -184,6 +184,14 @@ const bindings: Record<
         3: { ...executionValidation, completionTransport: "native_tool" },
     },
 };
+
+export function registeredAuthorityKeys() {
+    return new Set(
+        Object.entries(bindings).flatMap(([id, versions]) =>
+            Object.keys(versions).map((version) => `${id}:${version}`),
+        ),
+    );
+}
 
 export function getAgentAuthority(
     id: Doc<"agentMissions">["definitionId"],

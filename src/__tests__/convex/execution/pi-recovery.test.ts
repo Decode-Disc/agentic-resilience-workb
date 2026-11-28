@@ -29,6 +29,7 @@ import { afterEach, assert, expect, test, vi } from "vitest";
 import {
     claimFixturePiLease,
     dispatchFixtureOperation,
+    retainFixtureOutput,
     seedPiMission,
 } from "@/__tests__/setup/pi-mission";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
@@ -1036,7 +1037,7 @@ test("native recovery correlates mixed calls when original operation arguments e
         ),
     );
     assert(observableReplyTextId);
-    await t.mutation(internal.execution.invocations.retainOutput, {
+    await retainFixtureOutput(t, {
         ...observedScope,
         responseTextId,
         observableReplyTextId,
@@ -1331,7 +1332,7 @@ test("settles a native completion whose original arguments exceed the read trans
         ),
     );
     assert(observableReplyTextId);
-    await t.mutation(internal.execution.invocations.retainOutput, {
+    await retainFixtureOutput(t, {
         ...args,
         responseTextId,
         observableReplyTextId,

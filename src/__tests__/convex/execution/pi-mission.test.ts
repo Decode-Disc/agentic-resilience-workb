@@ -4,6 +4,7 @@ import { afterEach, assert, expect, test, vi } from "vitest";
 import {
     claimFixturePiLease,
     dispatchFixtureOperation,
+    retainFixtureOutput,
     seedPiHistory,
     seedPiMission as simulatedPiMissionFixture,
 } from "@/__tests__/setup/pi-mission";
@@ -256,7 +257,7 @@ test("a confirmed Pi completion refused for pending work can be adopted after th
             workingNotes: "Retained once",
         },
     };
-    await f.t.mutation(internal.execution.invocationLifecycle.retainOutput, {
+    await retainFixtureOutput(f.t, {
         invocationId: begun.invocationId,
         expectedGeneration: 4,
         responseJson: JSON.stringify(finish.response),
@@ -406,7 +407,14 @@ test("Pi fences an expired lease and its superseded epoch while retaining observ
         code: "known_result",
         kind: "blocked",
     });
-    await t.mutation(internal.execution.invocationLifecycle.retainOutput, {
+    await expect(
+        t.mutation(internal.execution.invocations.retainOutput, {
+            ...invocation,
+            piLease: current,
+            responseJson,
+        }),
+    ).rejects.toThrow("pi_writer_fenced");
+    await retainFixtureOutput(t, {
         ...invocation,
         responseJson,
     });
@@ -610,5 +618,79 @@ test("Pi prepares the next tool round with one shared context read", async () =>
     expect({ contextReads, readsAtAdmission }).toEqual({
         contextReads: 5,
         readsAtAdmission: [2, 3, 4, 5],
+    });
+});
+
+test("a superseded Pi writer cannot retain a refusal on the replacement epoch's invocation", async () => {
+    const { invokeControlledGeneration } = await import(
+        "@convex/execution/invokeAgentModel"
+    );
+    const { t, missionId } = await simulatedPiMissionFixture();
+    const scope = { missionId, expectedGeneration: 4 };
+    const original = await claimFixturePiLease(t, missionId, 4);
+    const start = {
+        ...scope,
+        taskKey: "shared-pi-turn",
+        provenance: "simulation" as const,
+    };
+    const begun = await t.mutation(internal.execution.invocations.begin, {
+        ...start,
+        piLease: original,
+    });
+    assert(begun.kind === "ready");
+    await t.run((ctx) =>
+        ctx.db.patch(original.sessionId, { leaseUntil: Date.now() }),
+    );
+    const current = await claimFixturePiLease(t, missionId, 4);
+    expect(current.epoch).toBe(original.epoch + 1);
+    expect(
+        await t.mutation(internal.execution.invocations.begin, {
+            ...start,
+            piLease: current,
+        }),
+    ).toMatchObject({ kind: "ready", invocationId: begun.invocationId });
+    const invocation = {
+        invocationId: begun.invocationId,
+        expectedGeneration: 4,
+    };
+    const invoke = (piLease: typeof original, deadlineInMs: number) =>
+        t.action((ctx) =>
+            invokeControlledGeneration(
+                ctx,
+                invocation,
+                Date.now() + deadlineInMs,
+                {
+                    id: "pi-durable",
+                    version: 1,
+                    async generate(_input, lifecycle) {
+                        await lifecycle.beforeDispatch('{"messages":[]}', {
+                            effectiveMaxOutputTokens: 32,
+                        });
+                        return {
+                            status: "blocked",
+                            reason: "generation_backend_unknown",
+                        };
+                    },
+                },
+                piLease,
+            ),
+        );
+    await expect(invoke(original, 10_000)).rejects.toThrow("pi_writer_fenced");
+    await expect(invoke(original, 0)).rejects.toThrow("pi_writer_fenced");
+    await expect(
+        t.mutation(internal.execution.invocations.retainOutput, {
+            ...invocation,
+            piLease: current,
+            responseJson: '{"kind":"blocked","code":"pi_writer_fenced"}',
+        }),
+    ).rejects.toThrow("pi_writer_fenced");
+    const retained = () => t.run((ctx) => ctx.db.get(begun.invocationId));
+    expect((await retained())?.receivedOutputJson).toBeUndefined();
+    await expect(invoke(current, 10_000)).resolves.toMatchObject({
+        response: { kind: "blocked", code: "generation_backend_unknown" },
+    });
+    expect(JSON.parse((await retained())?.receivedOutputJson ?? "{}")).toEqual({
+        kind: "blocked",
+        code: "generation_backend_unknown",
     });
 });

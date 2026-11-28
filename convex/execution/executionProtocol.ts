@@ -104,6 +104,7 @@ export type OperationExecutionResult = {
     historyRead?: import("./operationContracts").HistoryReadReceipt;
 };
 export type OperationExecuteArgs = {
+    piLease?: import("./piSession").PiDispatchLease;
     missionId?: Id<"agentMissions">;
     runId?: Id<"researchRuns">;
     requestId?: Id<"agentOperationRequests">;

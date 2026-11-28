@@ -276,6 +276,10 @@ test.each([
     );
     expect(interrupted).toBe(true);
     expect(requests).toHaveLength(1);
+    const wake = (await f.t.run((ctx) => ctx.db.get(active.missionId)))
+        ?.piWakeAt;
+    assert(wake !== undefined && wake > Date.now());
+    vi.advanceTimersByTime(wake - Date.now());
     await f.t.finishAllScheduledFunctions(
         () => vi.advanceTimersByTime(10),
         500,

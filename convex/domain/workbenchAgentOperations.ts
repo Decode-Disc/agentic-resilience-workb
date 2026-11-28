@@ -327,6 +327,7 @@ export const responseCoherenceOperation: Extract<
             {
                 requestId: args.requestId,
                 expectedGeneration: args.expectedGeneration,
+                piLease: args.piLease,
             },
         );
         return {
@@ -485,6 +486,7 @@ const publicContextOperation: Extract<
                     {
                         requestId: args.requestId,
                         expectedGeneration: args.expectedGeneration,
+                        piLease: args.piLease,
                     },
                 ),
             ),

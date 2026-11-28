@@ -6,6 +6,7 @@ import { afterEach, assert, expect, test, vi } from "vitest";
 import {
     beginFixtureInvocation,
     dispatchFixtureOperation,
+    retainFixtureOutput,
 } from "@/__tests__/setup/pi-mission";
 import { readConversationPageWithBodies } from "@/__tests__/setup/retained-messages";
 import {
@@ -336,7 +337,7 @@ test("a prepared reply is refused after facts change and every attempt stays rea
         text: "Your dossier is available.",
     };
     const responseJson = stableStringify(response);
-    await f.t.mutation(internal.execution.invocations.retainOutput, {
+    await retainFixtureOutput(f.t, {
         ...args,
         responseJson,
     });

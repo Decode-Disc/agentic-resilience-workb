@@ -6,6 +6,7 @@ import { scopedFixtureControl } from "@/__tests__/setup/model-stream";
 import {
     beginFixtureInvocation,
     dispatchFixtureOperation,
+    retainFixtureOutput,
 } from "@/__tests__/setup/pi-mission";
 import { readRetainedBody } from "@/__tests__/setup/retained-history";
 import {
@@ -350,7 +351,7 @@ test.each([
             },
         ],
     };
-    await f.t.mutation(internal.execution.invocations.retainOutput, {
+    await retainFixtureOutput(f.t, {
         invocationId: begun.invocationId,
         expectedGeneration: 4,
         responseJson: JSON.stringify(response),

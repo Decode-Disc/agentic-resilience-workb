@@ -72,6 +72,7 @@ export async function requirePiDispatchLease(
         !lease ||
         !session ||
         session.missionId !== mission._id ||
+        mission.generation !== expectedGeneration ||
         session.generation !== expectedGeneration ||
         session.writer !== lease.writer ||
         session.epoch !== lease.epoch ||

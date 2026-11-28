@@ -9,7 +9,9 @@ import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 import {
     beginFixtureInvocation,
+    retainFixtureOutput,
     retainFixtureRequest,
+    seedSettledFixtureReceipt,
     stageFixtureRequest,
 } from "@/__tests__/setup/pi-mission";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
@@ -161,7 +163,7 @@ test.each([
         provenance: "simulation",
         content: "Historical reply, preserved exactly.",
     });
-    await t.mutation(internal.execution.invocations.retainOutput, {
+    await retainFixtureOutput(t, {
         invocationId,
         expectedGeneration: 4,
         responseJson: '{"kind":"blocked","code":"historical_record"}',
@@ -319,8 +321,9 @@ test("inspection preserves the adoption fence of an observation received after c
     const owner = t.withIdentity({
         subject: `${userId}|late-journal-observation`,
     });
+    await seedSettledFixtureReceipt(t, invocationId);
     await owner.mutation(api.workflowControls.cancel, { runId: args.runId });
-    await t.mutation(internal.execution.invocations.retainOutput, {
+    await retainFixtureOutput(t, {
         invocationId,
         expectedGeneration: 4,
         responseJson: '{"kind":"blocked","code":"late_response"}',
@@ -522,7 +525,7 @@ test.each([
     );
     if (!responseTextId || !observableReplyTextId)
         throw new Error("Missing staged fixture output");
-    await t.mutation(internal.execution.invocations.retainOutput, {
+    await retainFixtureOutput(t, {
         invocationId,
         expectedGeneration: 4,
         responseTextId,

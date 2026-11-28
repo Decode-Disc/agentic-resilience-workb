@@ -12,6 +12,7 @@ import { convexTest } from "convex-test";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import {
     claimFixtureOperation,
+    claimFixturePiLease,
     dispatchFixtureOperation,
 } from "@/__tests__/setup/pi-mission";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
@@ -1267,7 +1268,8 @@ test.each([
         cause: "lost-framing-lookup-ack",
         input,
     });
-    const args = { requestId, expectedGeneration: 1 };
+    const piLease = await claimFixturePiLease(t, active.missionId, 1);
+    const args = { requestId, expectedGeneration: 1, piLease };
     expect(await claimFixtureOperation(t, args)).toMatchObject({
         kind: "execute",
     });
