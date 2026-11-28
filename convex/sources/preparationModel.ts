@@ -10,6 +10,7 @@ import {
     sourcePreparationError,
 } from "@convex/domain/sourcePreparationAuthority";
 import { executionFailureCode } from "@convex/execution/errors";
+import { revisionRoute } from "@convex/execution/modelConfigurationCore";
 import { stageObservedBody } from "@convex/execution/observedReply";
 import type { DocumentaryControlAttempt } from "@convex/integrations/documentaryControl";
 import type { AttemptDependencies } from "@convex/integrations/modelTransport";
@@ -18,7 +19,6 @@ import type {
     SourceComparisonAttemptResult,
 } from "@convex/integrations/sourceQualification";
 import type { SourceQualificationRoute } from "@convex/integrations/sourceQualificationConfig";
-import { revisionRoute } from "@convex/modelConfiguration";
 import { resolveGenerationAuthority } from "@convex/resourcePolicy";
 import type { FunctionReturnType } from "convex/server";
 
@@ -236,7 +236,8 @@ export async function executePreparationModel<
                 },
                 observeProvider: async (observation) => {
                     await ctx.runMutation(
-                        internal.providerCalls.observeGeneration,
+                        internal.execution.providerCallReceipts
+                            .observeGeneration,
                         { invocationId, ...observation },
                     );
                     providerIdentityObserved ||=
@@ -245,9 +246,12 @@ export async function executePreparationModel<
             });
         } finally {
             if (providerIdentityObserved && result === undefined)
-                await ctx.runMutation(internal.providerCalls.requestBilling, {
-                    invocationId,
-                });
+                await ctx.runMutation(
+                    internal.execution.providerCallReceipts.requestBilling,
+                    {
+                        invocationId,
+                    },
+                );
         }
         receipt = {
             latencyMs: result.latencyMs,

@@ -1,3 +1,7 @@
+import { requireSourcesPreparation } from "./sourcesAuthority";
+
+export { requireSourcesPreparation } from "./sourcesAuthority";
+
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
 import {
@@ -34,8 +38,6 @@ import { captureAvailability } from "./sourceCaptureState";
 import { sha256Hex, stableStringify } from "./sourcePassages";
 import {
     assertPreparationExecutionFence,
-    assertPreparationObservationFence,
-    assertPreparationSettlementFence,
     preparationBudgetBlock,
     readPreparationBudget,
     readPreparationLimits,
@@ -101,28 +103,6 @@ export function activatedSourcesEnvelope() {
     } catch {
         return undefined;
     }
-}
-
-/** Execution admits paid work before the deadline; observation retains results during a pause; settlement hands off existing material at any time. */
-export async function requireSourcesPreparation(
-    ctx: Pick<QueryCtx, "db">,
-    preparationId: Id<"sourceSelectionProposalRebuilds">,
-    mode: "execution" | "observation" | "settlement" = "execution",
-) {
-    const { preparation, run, revision } =
-        mode === "observation"
-            ? await assertPreparationObservationFence(ctx.db, { preparationId })
-            : mode === "settlement"
-              ? await assertPreparationSettlementFence(ctx.db, {
-                    preparationId,
-                })
-              : await assertPreparationExecutionFence(ctx.db, {
-                    preparationId,
-                    now: Date.now(),
-                });
-    if (!preparation.sourcesMission || run.sourcesProtocol !== SOURCES_PROTOCOL)
-        throw executionError("sources_scope_invalid");
-    return { preparation, run, revision, data: preparation.sourcesMission };
 }
 
 export const SOURCES_RESOURCE_LIMIT_CODES = {

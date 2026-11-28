@@ -2,6 +2,10 @@ import { internal } from "@convex/_generated/api";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import {
+    beginFixtureInvocation,
+    dispatchFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
+import {
     seedWorkbench,
     workbenchAdmissionInput,
 } from "@/__tests__/setup/workbench";
@@ -187,7 +191,7 @@ test("mechanical tool arguments use the invocation snapshot and a later framing 
     );
     if (!active) throw new Error("Missing turn");
     const nativeInput = await workbenchAdmissionInput(t, active.missionId);
-    const begun = await t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(t, {
         missionId: active.missionId,
         expectedGeneration: 1,
         taskKey: "snapshot",
@@ -237,7 +241,7 @@ test("mechanical tool arguments use the invocation snapshot and a later framing 
         content,
     });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId: request._id,
             expectedGeneration: 1,
         }),

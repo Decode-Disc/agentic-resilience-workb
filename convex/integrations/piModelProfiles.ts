@@ -5,6 +5,7 @@ import {
     type AgentDefinition,
     agentToolSchemas,
 } from "@convex/execution/agentDefinition";
+import { piToolMetadata } from "@convex/integrations/piModelAdapter";
 import type {
     modelDescriptor,
     nativeProfile,
@@ -33,7 +34,6 @@ import {
     piInputProfileKey,
     piMissionInput,
     piMissionStateText,
-    piToolMetadata,
     preparePiModelPayload,
 } from "./modelInput";
 import {

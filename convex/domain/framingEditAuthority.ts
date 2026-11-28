@@ -1,7 +1,7 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { QueryCtx } from "@convex/_generated/server";
 import { researchSlotBlock } from "@convex/execution/authority";
-import { conversationInstructions } from "@convex/execution/conversations";
+import { conversationInstructions } from "@convex/execution/conversationCore";
 import { executionError } from "@convex/execution/errors";
 import { sourcePreparationWindowMs } from "@convex/resourceLimits";
 import {

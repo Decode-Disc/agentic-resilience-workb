@@ -1,6 +1,12 @@
 import { internal } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
 import type { QueryCtx } from "@convex/_generated/server";
+import {
+    acquireDocumentResult,
+    readInContextResult,
+    savedMaterialWireContract,
+    searchAvailableMaterialResult,
+} from "@convex/domain/savedMaterialOperationResults";
 import { executionError } from "@convex/execution/errors";
 import type { AgentOperationDefinition } from "@convex/execution/executionProtocol";
 import { operationReuseIdentity } from "@convex/execution/missionData";
@@ -18,16 +24,12 @@ import {
 } from "./savedMaterial";
 import {
     acquireDocumentInput,
-    acquireDocumentResult,
     documentaryReference,
     readInContextInputValidator,
-    readInContextResult,
     referencedSavedMaterialOperation,
     savedMaterialBinding,
     savedMaterialOperationValidator,
-    savedMaterialWireContract,
     searchAvailableMaterialInputValidator,
-    searchAvailableMaterialResult,
 } from "./savedMaterialOperations";
 import { stableStringify } from "./sourcePassages";
 import { sourceMaterialReferenceValidator } from "./sourceRetrievalPolicy";

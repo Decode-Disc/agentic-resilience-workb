@@ -9,12 +9,13 @@ import {
 } from "@convex/execution/agentDefinition";
 import { buildMissionContext } from "@convex/execution/context";
 import { examineDocumentaryContributions } from "@convex/integrations/documentaryControl";
-import { piToolMetadata } from "@convex/integrations/modelInput";
+import { piToolMetadata } from "@convex/integrations/piModelAdapter";
 import { SOURCE_CONTEXT_PAGE_CHARACTERS } from "@convex/resourcePolicy";
 import { requestPinnedPublicSource } from "@convex/sourceActions";
 import { acquireDocument } from "@convex/sourceCaptureActions";
 import { type FunctionArgs, getFunctionName } from "convex/server";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import { dispatchFixtureOperation } from "@/__tests__/setup/pi-mission";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 import {
     dispatchSourcesOperation,
@@ -149,7 +150,7 @@ async function documentaryTurn(
             cause,
             input,
         });
-        const outcome = await t.action(internal.execution.operations.dispatch, {
+        const outcome = await dispatchFixtureOperation(t, {
             requestId: id,
             expectedGeneration: 1,
         });
@@ -577,9 +578,7 @@ test("an uncertain scheduled acquisition preserves its receipt without fetching 
         { ...args, epoch: 1 },
     );
     expect(outcome).toMatchObject({ kind: "unavailable" });
-    expect(
-        await t.action(internal.execution.operations.dispatch, args),
-    ).toEqual(outcome);
+    expect(await dispatchFixtureOperation(t, args)).toEqual(outcome);
     expect(transport).toHaveBeenCalledOnce();
     const receipts = await t.run((ctx) =>
         ctx.db
@@ -677,9 +676,7 @@ test.each([
             status: "succeeded",
         }),
     ]);
-    expect(
-        await t.action(internal.execution.operations.dispatch, args),
-    ).toEqual(outcome);
+    expect(await dispatchFixtureOperation(t, args)).toEqual(outcome);
     expect(transport).toHaveBeenCalledOnce();
 });
 
@@ -1195,7 +1192,7 @@ test.each([
             },
         },
     );
-    const sourcesRead = await t.action(internal.execution.operations.dispatch, {
+    const sourcesRead = await dispatchFixtureOperation(t, {
         requestId: sourcesRequest,
         expectedGeneration: started.executionGeneration,
     });
@@ -1230,7 +1227,7 @@ test.each([
         },
     );
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId: sourcesAcquisition,
             expectedGeneration: started.executionGeneration,
         }),
@@ -1269,7 +1266,7 @@ test.each([
             },
         },
     );
-    const contextual = await t.action(internal.execution.operations.dispatch, {
+    const contextual = await dispatchFixtureOperation(t, {
         requestId: contextualRequestId,
         expectedGeneration: started.executionGeneration,
     });

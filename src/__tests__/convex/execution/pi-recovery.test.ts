@@ -26,7 +26,11 @@ import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { ROOT_CONVERSATION_ID } from "@earendil-works/pi-durable";
 import { convexTest } from "convex-test";
 import { afterEach, assert, expect, test, vi } from "vitest";
-import { seedPiMission } from "@/__tests__/setup/pi-mission";
+import {
+    claimFixturePiLease,
+    dispatchFixtureOperation,
+    seedPiMission,
+} from "@/__tests__/setup/pi-mission";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 
@@ -47,6 +51,7 @@ test("native operation lookup skips a large historical completion that has no re
     const scope = { missionId, expectedGeneration: 4 };
     const begun = await t.mutation(internal.execution.invocations.begin, {
         ...scope,
+        piLease: await claimFixturePiLease(t, missionId, 4),
         taskKey: "historical-no-requests",
         provenance: "simulation",
     });
@@ -75,7 +80,7 @@ test("native operation lookup skips a large historical completion that has no re
         }),
     );
     await expect(
-        t.query(internal.execution.piControl.operation, {
+        t.query(internal.execution.piControlReads.operation, {
             ...scope,
             callId: "no-associated-operation",
         }),
@@ -93,6 +98,7 @@ test("compaction settlement preserves an oversized historical refusal through it
     const begun = await t.mutation(internal.execution.invocations.begin, {
         missionId,
         expectedGeneration: 4,
+        piLease: await claimFixturePiLease(t, missionId, 4),
         taskKey: "historical-compaction",
         purpose: "compaction",
         provenance: "simulation",
@@ -506,7 +512,7 @@ test("an acknowledged read receipt survives an expired Pi writer and replays exa
             input: { kind: "consult_mission_state" },
         },
     );
-    const original = await f.t.action(internal.execution.operations.dispatch, {
+    const original = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -535,7 +541,7 @@ test("an acknowledged read receipt survives an expired Pi writer and replays exa
         await reopened.close(BACKGROUND_CONTEXT);
     });
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         }),
@@ -570,7 +576,7 @@ test("a retained continuation is refused after a new execution generation", asyn
             input: { kind: "consult_mission_state" },
         },
     );
-    const first = await f.t.action(internal.execution.operations.dispatch, {
+    const first = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -588,7 +594,7 @@ test("a retained continuation is refused after a new execution generation", asyn
         input: { kind: "consult_mission_state", cursor },
     });
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId: next,
             expectedGeneration: 5,
         }),
@@ -641,7 +647,7 @@ test.each([
     });
     expect(
         (
-            await f.t.action(internal.execution.operations.dispatch, {
+            await dispatchFixtureOperation(f.t, {
                 requestId: preRead,
                 expectedGeneration: 4,
             })
@@ -705,10 +711,10 @@ test.each([
     const finishName = getFunctionName(internal.execution.invocations.finish);
     const appendName = getFunctionName(internal.execution.piStore.append);
     const dispositionName = getFunctionName(
-        internal.execution.piControl.completionDisposition,
+        internal.execution.piControlReads.completionDisposition,
     );
     const terminalAcceptedName = getFunctionName(
-        internal.execution.piControl.terminalCompletionAccepted,
+        internal.execution.piControlReads.terminalCompletionAccepted,
     );
     const closeWorkerName = getFunctionName(
         internal.execution.piControl.closeWorker,
@@ -879,7 +885,9 @@ test.each([
 }, 30000);
 
 test("cancelled structured settlement fences inspection and cannot settle or schedule a wake", async () => {
-    const { needsNativeSettlement } = await import("@convex/execution/piStore");
+    const { needsNativeSettlement } = await import(
+        "@convex/execution/piSession"
+    );
     vi.useFakeTimers();
 
     const cancelledFixture = await seedInspectedEvidence();
@@ -920,19 +928,19 @@ test("cancelled structured settlement fences inspection and cannot settle or sch
     expect(cancelledCheck).toBe(false);
     await expect(
         cancelledFixture.t.query(
-            internal.execution.piControl.completionDisposition,
+            internal.execution.piControlReads.completionDisposition,
             { ...cancelledLease, callId: "any" },
         ),
     ).rejects.toThrow("pi_writer_fenced");
     await expect(
         cancelledFixture.t.query(
-            internal.execution.piControl.terminalCompletionAccepted,
+            internal.execution.piControlReads.terminalCompletionAccepted,
             cancelledLease,
         ),
     ).rejects.toThrow("pi_writer_fenced");
     await expect(
         cancelledFixture.t.query(
-            internal.execution.piControl.nativeInvocation,
+            internal.execution.piControlReads.nativeInvocation,
             {
                 missionId: cancelledMissionId,
                 expectedGeneration: 4,
@@ -985,6 +993,11 @@ test("native recovery correlates mixed calls when original operation arguments e
     });
     const begun = await t.mutation(internal.execution.invocations.begin, {
         ...scope,
+        piLease: {
+            sessionId: lease.sessionId,
+            writer: lease.writer,
+            epoch: lease.epoch,
+        },
         piSessionId: lease.sessionId,
         taskKey: "large-native-operations",
         provenance: "simulation",
@@ -1035,7 +1048,7 @@ test("native recovery correlates mixed calls when original operation arguments e
     });
     expect(finished.kind).toBe("waiting");
     await expect(
-        t.query(internal.execution.piControl.operation, {
+        t.query(internal.execution.piControlReads.operation, {
             ...scope,
             callId: "read",
         }),
@@ -1044,7 +1057,7 @@ test("native recovery correlates mixed calls when original operation arguments e
         input: { kind: "read_in_context", reference },
     });
     await expect(
-        t.query(internal.execution.piControl.completionDisposition, {
+        t.query(internal.execution.piControlReads.completionDisposition, {
             ...lease,
             callId: "mixed",
         }),
@@ -1053,7 +1066,7 @@ test("native recovery correlates mixed calls when original operation arguments e
         requestId: finished.requestIds[1],
     });
     await expect(
-        t.query(internal.execution.piControl.completionDisposition, {
+        t.query(internal.execution.piControlReads.completionDisposition, {
             ...lease,
             callId: "read",
         }),
@@ -1110,7 +1123,7 @@ test("native recovery correlates mixed calls when original operation arguments e
         });
     });
     await expect(
-        t.query(internal.execution.piControl.operation, {
+        t.query(internal.execution.piControlReads.operation, {
             ...scope,
             callId: "read",
         }),
@@ -1132,7 +1145,7 @@ test("native recovery correlates mixed calls when original operation arguments e
         });
     });
     await expect(
-        t.query(internal.execution.piControl.operation, {
+        t.query(internal.execution.piControlReads.operation, {
             ...scope,
             callId: "read",
         }),
@@ -1141,7 +1154,7 @@ test("native recovery correlates mixed calls when original operation arguments e
         input: { kind: "read_in_context", reference },
     });
     await expect(
-        t.query(internal.execution.piControl.completionDisposition, {
+        t.query(internal.execution.piControlReads.completionDisposition, {
             ...lease,
             callId: "mixed",
         }),
@@ -1171,7 +1184,10 @@ test("native recovery correlates mixed calls when original operation arguments e
         await ctx.db.patch(missionId, { status: "completed" });
     });
     await expect(
-        t.query(internal.execution.piControl.terminalCompletionAccepted, lease),
+        t.query(
+            internal.execution.piControlReads.terminalCompletionAccepted,
+            lease,
+        ),
     ).resolves.toBe(false);
     await t.run((ctx) => ctx.db.patch(missionId, { status: "waiting" }));
     const fragmentedContext = await t.query(
@@ -1185,7 +1201,7 @@ test("native recovery correlates mixed calls when original operation arguments e
         ).triggeringRequestsAndResults.map((r: { callId: string }) => r.callId),
     ).toEqual(["read", "mixed"]);
     await expect(
-        t.query(internal.execution.piControl.operation, {
+        t.query(internal.execution.piControlReads.operation, {
             ...scope,
             callId: "read",
         }),
@@ -1206,7 +1222,7 @@ test("native recovery correlates mixed calls when original operation arguments e
         input: { kind: "read_in_context", reference },
     });
     await expect(
-        t.query(internal.execution.piControl.operation, {
+        t.query(internal.execution.piControlReads.operation, {
             ...scope,
             callId: "read",
             historical: {
@@ -1217,7 +1233,7 @@ test("native recovery correlates mixed calls when original operation arguments e
         }),
     ).rejects.toThrow("invocation_result_conflict");
     const candidate = await t.query(
-        internal.execution.piControl.completionDisposition,
+        internal.execution.piControlReads.completionDisposition,
         {
             ...lease,
             callId: "mixed",
@@ -1228,7 +1244,7 @@ test("native recovery correlates mixed calls when original operation arguments e
         recoverHistoricalCompletion(ctx, lease, candidate.invocation),
     );
     await expect(
-        t.query(internal.execution.piControl.completionDisposition, {
+        t.query(internal.execution.piControlReads.completionDisposition, {
             ...lease,
             callId: "mixed",
         }),
@@ -1270,7 +1286,7 @@ test("settles a native completion whose original arguments exceed the read trans
     });
     expect(
         (
-            await t.action(internal.execution.operations.dispatch, {
+            await dispatchFixtureOperation(t, {
                 requestId,
                 expectedGeneration: 4,
             })
@@ -1284,6 +1300,11 @@ test("settles a native completion whose original arguments exceed the read trans
     const begun = await t.mutation(internal.execution.invocations.begin, {
         missionId,
         expectedGeneration: 4,
+        piLease: {
+            sessionId: lease.sessionId,
+            writer: lease.writer,
+            epoch: lease.epoch,
+        },
         piSessionId: lease.sessionId,
         taskKey: "large-completion",
         provenance: "simulation",
@@ -1322,18 +1343,18 @@ test("settles a native completion whose original arguments exceed the read trans
         }),
     ).resolves.toMatchObject({ kind: "completed" });
     await expect(
-        t.query(internal.execution.piControl.completionDisposition, {
+        t.query(internal.execution.piControlReads.completionDisposition, {
             ...lease,
             callId: "completion",
         }),
     ).resolves.toEqual({ kind: "accepted" });
     await expect(
-        t.query(internal.execution.piControl.terminalCompletionAccepted, {
+        t.query(internal.execution.piControlReads.terminalCompletionAccepted, {
             ...lease,
         }),
     ).resolves.toBe(true);
     await expect(
-        t.query(internal.execution.piControl.completionDisposition, {
+        t.query(internal.execution.piControlReads.completionDisposition, {
             ...lease,
             callId: "unrelated",
         }),
@@ -1342,7 +1363,7 @@ test("settles a native completion whose original arguments exceed the read trans
         ctx.db.patch(begun.invocationId, { nativeCompletion: undefined }),
     );
     const bounded = await t.query(
-        internal.execution.piControl.terminalCompletionAccepted,
+        internal.execution.piControlReads.terminalCompletionAccepted,
         {
             ...lease,
         },
@@ -1356,7 +1377,10 @@ test("settles a native completion whose original arguments exceed the read trans
         recoverHistoricalCompletion(ctx, lease, bounded.invocation),
     );
     await expect(
-        t.query(internal.execution.piControl.terminalCompletionAccepted, lease),
+        t.query(
+            internal.execution.piControlReads.terminalCompletionAccepted,
+            lease,
+        ),
     ).resolves.toBe(true);
     expect(await t.run((ctx) => ctx.db.get(begun.invocationId))).toMatchObject({
         nativeCompletion: {
@@ -1397,7 +1421,10 @@ test("settles a native completion whose original arguments exceed the read trans
         }),
     );
     await expect(
-        t.query(internal.execution.piControl.terminalCompletionAccepted, lease),
+        t.query(
+            internal.execution.piControlReads.terminalCompletionAccepted,
+            lease,
+        ),
     ).resolves.toBe(false);
 });
 
@@ -1434,17 +1461,20 @@ async function completedStructuredSettlement() {
 test("completed structured settlement refuses stale epochs and foreign writers", async () => {
     const { f, lease1 } = await completedStructuredSettlement();
     await expect(
-        f.t.query(internal.execution.piControl.completionDisposition, {
+        f.t.query(internal.execution.piControlReads.completionDisposition, {
             ...lease1,
             epoch: lease1.epoch + 9,
             callId: "c1",
         }),
     ).rejects.toThrow("pi_writer_fenced");
     await expect(
-        f.t.query(internal.execution.piControl.terminalCompletionAccepted, {
-            ...lease1,
-            writer: "wrong-writer",
-        }),
+        f.t.query(
+            internal.execution.piControlReads.terminalCompletionAccepted,
+            {
+                ...lease1,
+                writer: "wrong-writer",
+            },
+        ),
     ).rejects.toThrow("pi_writer_fenced");
 });
 
@@ -1506,7 +1536,7 @@ test("withdrawn dossiers refuse completed structured settlement inspection", asy
     );
     await expect(
         f.t.query(
-            internal.execution.piControl.terminalCompletionAccepted,
+            internal.execution.piControlReads.terminalCompletionAccepted,
             lease1,
         ),
     ).rejects.toThrow("not_authorized");
@@ -1754,6 +1784,7 @@ test("simulation executes an admitted snapshot above the transaction read limit"
     const begun = await t.mutation(internal.execution.invocations.begin, {
         missionId,
         expectedGeneration: 4,
+        piLease: await claimFixturePiLease(t, missionId, 4),
         taskKey: "large-simulation-input",
         provenance: "simulation",
     });
@@ -1824,21 +1855,28 @@ test("simulation executes an admitted snapshot above the transaction read limit"
         t.action(internal.execution.simulation.invoke, args),
     ).resolves.toEqual(expected);
     let observedPrompt: string | undefined;
+    const piLease = await claimFixturePiLease(t, missionId, 4);
     const reply = await t.action((ctx) =>
-        invokeControlledGeneration(ctx, args, Date.now() + 10_000, {
-            id: "pi-durable",
-            version: 1,
-            async generate(input, lifecycle) {
-                observedPrompt = input.prompt;
-                await lifecycle.beforeDispatch('{"messages":[]}', {
-                    effectiveMaxOutputTokens: 32,
-                });
-                return {
-                    status: "blocked",
-                    reason: "generation_backend_unknown",
-                };
+        invokeControlledGeneration(
+            ctx,
+            args,
+            Date.now() + 10_000,
+            {
+                id: "pi-durable",
+                version: 1,
+                async generate(input, lifecycle) {
+                    observedPrompt = input.prompt;
+                    await lifecycle.beforeDispatch('{"messages":[]}', {
+                        effectiveMaxOutputTokens: 32,
+                    });
+                    return {
+                        status: "blocked",
+                        reason: "generation_backend_unknown",
+                    };
+                },
             },
-        }),
+            piLease,
+        ),
     );
     expect(observedPrompt).toBe(parts.join(""));
     expect(reply.response).toEqual({
@@ -1856,6 +1894,7 @@ test("simulation executes an admitted snapshot above the transaction read limit"
     const retried = await t.mutation(internal.execution.invocations.begin, {
         missionId,
         expectedGeneration: 4,
+        piLease: await claimFixturePiLease(t, missionId, 4),
         taskKey: "large-simulation-input",
         provenance: "simulation",
         returnInputReference: true,
@@ -1892,7 +1931,7 @@ test("local simulation inspection finds an exact quotation in a request above th
             reference: material.readingReferences[0].reference,
         },
     });
-    const outcome = await t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -1902,11 +1941,16 @@ test("local simulation inspection finds an exact quotation in a request above th
     assert(typeof quotation === "string" && quotation.length > 0);
     const begun = await t.mutation(internal.execution.invocations.begin, {
         ...scope,
+        piLease: await claimFixturePiLease(t, missionId, 4),
         taskKey: "inspect-fragmented-request",
         provenance: "simulation",
     });
     assert(begun.kind === "ready");
-    const receipt = { invocationId: begun.invocationId, expectedGeneration: 4 };
+    const receipt = {
+        invocationId: begun.invocationId,
+        expectedGeneration: 4,
+        piLease: await claimFixturePiLease(t, missionId, 4),
+    };
     const { parts, manifest } = retainedTextParts(
         JSON.stringify({
             messages: [

@@ -5,6 +5,10 @@ import { skillResource } from "@convex/execution/agentSkills";
 import packages from "@convex/integrations/agentSkillPackages.json";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import {
+    beginFixtureInvocation,
+    dispatchFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
+import {
     nativePiFixtureRoute,
     nativeTextReply,
     nativeToolReply,
@@ -77,7 +81,7 @@ test("native read runs through scheduled settlement and retains its exact packag
             },
         },
     );
-    await f.t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -96,7 +100,7 @@ test("native read runs through scheduled settlement and retains its exact packag
         text: expect.stringContaining("# Framing an economic inquiry"),
     });
     expect(value.resourceHash).toMatch(/^[a-f0-9]{64}$/);
-    const replay = await f.t.action(internal.execution.operations.dispatch, {
+    const replay = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -113,7 +117,7 @@ test("native read runs through scheduled settlement and retains its exact packag
             limit: 2,
         },
     });
-    await f.t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(f.t, {
         requestId: pageId,
         expectedGeneration: 1,
     });
@@ -174,7 +178,7 @@ test("native read runs through scheduled settlement and retains its exact packag
             },
         );
         expect(
-            await f.t.action(internal.execution.operations.dispatch, {
+            await dispatchFixtureOperation(f.t, {
                 requestId: deniedId,
                 expectedGeneration: 1,
             }),
@@ -197,7 +201,7 @@ test("native read runs through scheduled settlement and retains its exact packag
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId: invalidPage,
             expectedGeneration: 1,
         }),
@@ -453,7 +457,7 @@ test("Sources native reads preserve documentary state and reject stale scheduled
             },
         },
     );
-    await f.t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -475,7 +479,7 @@ test("Sources native reads preserve documentary state and reject stale scheduled
         cause: "source-annex",
         input: { kind: "read", path: "examples/worked-cases.md" },
     });
-    await f.t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(f.t, {
         requestId: staleId,
         expectedGeneration: 4,
     });
@@ -551,9 +555,7 @@ test("Sources provider input receives its native method and annex through the mi
         "@/__tests__/setup/model-configuration"
     );
     const { runPiMission } = await import("@convex/integrations/piMission");
-    const { nodeActionGenerationDeadline } = await import(
-        "@convex/resourcePolicy"
-    );
+    const { PI_SLICE_YIELD_SAFETY_MS } = await import("@convex/resourcePolicy");
     vi.useFakeTimers();
     const f = await seedCapturedSources({
         text: "BOSTON, October 29, 2026 (GLOBE NEWSWIRE) -- The workflow requires insurer approval.",
@@ -632,7 +634,7 @@ test("Sources provider input receives its native method and annex through the mi
             ctx,
             { missionId: f.missionId, expectedGeneration: 4 },
             "source-skill-input",
-            nodeActionGenerationDeadline(Date.now()),
+            Date.now() + PI_SLICE_YIELD_SAFETY_MS,
         ),
     );
     await running;
@@ -655,7 +657,7 @@ test("Sources provider input receives its native method and annex through the mi
             ctx,
             { missionId: f.missionId, expectedGeneration: 4 },
             "source-annex-before-compaction",
-            nodeActionGenerationDeadline(Date.now()),
+            Date.now() + PI_SLICE_YIELD_SAFETY_MS,
         ),
     );
     const annexRead = await f.t.run(async (ctx) =>
@@ -777,7 +779,7 @@ test("Workbench skill admission closes when framing is fixed", async () => {
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -803,16 +805,13 @@ test("Workbench skill admission uses the active correction identity without read
         },
     );
     assert(active);
-    const invocation = await f.t.mutation(
-        internal.execution.invocations.begin,
-        {
-            missionId: active.missionId,
-            expectedGeneration: 1,
-            taskKey: "rejected-skill-draft",
-            nativeInput: await workbenchAdmissionInput(f.t, active.missionId),
-            provenance: "live",
-        },
-    );
+    const invocation = await beginFixtureInvocation(f.t, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+        taskKey: "rejected-skill-draft",
+        nativeInput: await workbenchAdmissionInput(f.t, active.missionId),
+        provenance: "live",
+    });
     assert(invocation.kind === "ready");
     await f.t.run(async (ctx) => {
         const mission = await ctx.db.get(active.missionId);
@@ -843,7 +842,7 @@ test("Workbench skill admission uses the active correction identity without read
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 1,
         }),

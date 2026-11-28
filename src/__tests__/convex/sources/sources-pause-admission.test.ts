@@ -1,6 +1,7 @@
 import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { afterEach, expect, test, vi } from "vitest";
+import { beginFixtureInvocation } from "@/__tests__/setup/pi-mission";
 import {
     seedCapturedSources,
     startSourcesOperation,
@@ -207,7 +208,7 @@ test("a pending analyst pause also blocks the next research model invocation", a
             expectedGeneration: 4,
         });
     expect(
-        await f.t.mutation(internal.execution.invocations.begin, {
+        await beginFixtureInvocation(f.t, {
             missionId: f.missionId,
             expectedGeneration: 4,
             taskKey: "after-pause",
@@ -258,6 +259,11 @@ test("a requested pause refuses new native research dispatch while an engaged op
             expectedGeneration: 4,
         }),
     ).toMatchObject({ kind: "outcome", outcome: { kind: "waiting" } });
+    await f.t.mutation(internal.execution.piStore.claim, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        writer: "pause-writer",
+    });
     await f.t
         .withIdentity({ subject: f.userId })
         .mutation(api.execution.researchControl.pause, {

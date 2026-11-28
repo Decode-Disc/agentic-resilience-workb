@@ -113,3 +113,226 @@ export async function seedPiHistory(
         });
     });
 }
+
+type PiFixtureTest = Awaited<ReturnType<typeof seedInspectedEvidence>>["t"];
+
+export async function claimFixturePiLease(
+    t: PiFixtureTest,
+    missionId: import("@convex/_generated/dataModel").Id<"agentMissions">,
+    expectedGeneration: number,
+) {
+    const { sessionId, writer, epoch } = await t.mutation(
+        internal.execution.piStore.claim,
+        { missionId, expectedGeneration, writer: "fixture-writer" },
+    );
+    return { sessionId, writer, epoch };
+}
+
+/** Opens a real temporary writer only when a seeded Pi fixture has no active writer. */
+async function withFixturePiWriter<Result>(
+    t: PiFixtureTest,
+    args: {
+        missionId?: import("@convex/_generated/dataModel").Id<"agentMissions">;
+        requestId?: import("@convex/_generated/dataModel").Id<"agentOperationRequests">;
+        invocationId?: import("@convex/_generated/dataModel").Id<"agentInvocations">;
+        expectedGeneration: number;
+        piLease?: import("@convex/execution/piSession").PiDispatchLease;
+    },
+    perform: (
+        lease?: import("@convex/execution/piSession").PiDispatchLease,
+    ) => Promise<Result>,
+): Promise<Result> {
+    if (args.piLease) return perform(args.piLease);
+    const state = await t.run(async (ctx) => {
+        const missionId =
+            args.missionId ??
+            (args.requestId
+                ? (await ctx.db.get(args.requestId))?.missionId
+                : undefined) ??
+            (args.invocationId
+                ? (await ctx.db.get(args.invocationId))?.missionId
+                : undefined);
+        const mission = missionId ? await ctx.db.get(missionId) : null;
+        if (
+            mission?.executionRuntime !== "pi-durable" ||
+            mission.generation !== args.expectedGeneration
+        )
+            return null;
+        const { sessionForMission } = await import(
+            "@convex/execution/piSession"
+        );
+        const session = await sessionForMission(ctx, mission);
+        return {
+            missionId: mission._id,
+            active:
+                session &&
+                session.missionId === mission._id &&
+                session.generation === args.expectedGeneration &&
+                session.leaseUntil > Date.now()
+                    ? {
+                          sessionId: session._id,
+                          writer: session.writer,
+                          epoch: session.epoch,
+                      }
+                    : undefined,
+        };
+    });
+    if (!state) return perform();
+    const lease =
+        state.active ??
+        (await claimFixturePiLease(
+            t,
+            state.missionId,
+            args.expectedGeneration,
+        ));
+    try {
+        return await perform(lease);
+    } finally {
+        if (!state.active)
+            await t.run(async (ctx) => {
+                const session = await ctx.db.get(lease.sessionId);
+                if (session?.epoch === lease.epoch)
+                    await ctx.db.patch(lease.sessionId, {
+                        leaseUntil: Date.now(),
+                        ...(session.sequence === 0
+                            ? { settledSequence: 0 }
+                            : {}),
+                    });
+            });
+    }
+}
+
+export async function dispatchFixtureOperation(
+    t: PiFixtureTest,
+    args: import("convex/server").FunctionArgs<
+        typeof internal.execution.operations.dispatch
+    >,
+) {
+    return withFixturePiWriter(t, args, (piLease) =>
+        t.action(internal.execution.operations.dispatch, { ...args, piLease }),
+    );
+}
+
+export async function claimFixtureOperation(
+    t: PiFixtureTest,
+    args: import("convex/server").FunctionArgs<
+        typeof internal.execution.operations.claim
+    >,
+) {
+    return withFixturePiWriter(t, args, (piLease) =>
+        t.mutation(internal.execution.operations.claim, { ...args, piLease }),
+    );
+}
+
+export async function beginFixtureInvocation(
+    t: PiFixtureTest,
+    args: import("convex/server").FunctionArgs<
+        typeof internal.execution.invocations.begin
+    >,
+) {
+    return withFixturePiWriter(t, args, (piLease) =>
+        t.mutation(internal.execution.invocations.begin, { ...args, piLease }),
+    );
+}
+
+export async function retainFixtureRequest(
+    t: PiFixtureTest,
+    args: import("convex/server").FunctionArgs<
+        typeof internal.execution.invocationLifecycle.retainRequest
+    >,
+) {
+    return withFixturePiWriter(t, args, (piLease) =>
+        t.mutation(internal.execution.invocationLifecycle.retainRequest, {
+            ...args,
+            piLease,
+        }),
+    );
+}
+
+export async function authorizeFixtureDispatch(
+    t: PiFixtureTest,
+    args: import("convex/server").FunctionArgs<
+        typeof internal.execution.invocationLifecycle.authorizeDispatch
+    >,
+) {
+    return withFixturePiWriter(t, args, (piLease) =>
+        t.query(internal.execution.invocationLifecycle.authorizeDispatch, {
+            ...args,
+            piLease,
+        }),
+    );
+}
+
+export async function recordFixtureAttempt(
+    t: PiFixtureTest,
+    args: import("convex/server").FunctionArgs<
+        typeof internal.providerCalls.recordAttempt
+    >,
+) {
+    if (
+        !args.missionId ||
+        args.executionGeneration === undefined ||
+        args.status !== "started" ||
+        args.service !== "model" ||
+        (args.operation !== "agent_reasoning" &&
+            args.operation !== "agent_compaction") ||
+        args.operationRequestId ||
+        args.sourceId ||
+        args.acceptedDecisionId
+    )
+        return t.mutation(internal.providerCalls.recordAttempt, args);
+    return withFixturePiWriter(
+        t,
+        {
+            missionId: args.missionId,
+            expectedGeneration: args.executionGeneration,
+            piLease: args.piLease,
+        },
+        (piLease) =>
+            t.mutation(internal.providerCalls.recordAttempt, {
+                ...args,
+                piLease,
+            }),
+    );
+}
+
+export async function stageFixtureRequest(
+    t: PiFixtureTest,
+    args: import("convex/server").FunctionArgs<
+        typeof internal.execution.invocationLifecycle.stageRequest
+    >,
+) {
+    return withFixturePiWriter(t, args, (piLease) =>
+        t.mutation(internal.execution.invocationLifecycle.stageRequest, {
+            ...args,
+            piLease,
+        }),
+    );
+}
+
+export async function recordFixtureMissionAttempt(
+    t: PiFixtureTest,
+    args: import("convex/server").FunctionArgs<
+        typeof internal.execution.providerCallReceipts.recordMissionModelAttempt
+    >,
+) {
+    if (args.executionGeneration === undefined)
+        return t.mutation(
+            internal.execution.providerCallReceipts.recordMissionModelAttempt,
+            args,
+        );
+    return withFixturePiWriter(
+        t,
+        {
+            missionId: args.missionId,
+            expectedGeneration: args.executionGeneration,
+            piLease: args.piLease,
+        },
+        (piLease) =>
+            t.mutation(
+                internal.execution.providerCallReceipts
+                    .recordMissionModelAttempt,
+                { ...args, piLease },
+            ),
+    );
+}

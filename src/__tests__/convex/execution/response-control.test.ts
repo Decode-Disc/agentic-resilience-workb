@@ -12,6 +12,12 @@ import {
 import { preparePiReply } from "@convex/integrations/piInvocation";
 import { recoverCorrectionDraft } from "@convex/responseControl";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import {
+    beginFixtureInvocation,
+    claimFixtureOperation,
+    dispatchFixtureOperation,
+    recordFixtureAttempt,
+} from "@/__tests__/setup/pi-mission";
 import { readRetainedBody } from "@/__tests__/setup/retained-history";
 import {
     readConversationPageWithBodies,
@@ -52,7 +58,7 @@ test("native correction reconstructs an exact draft above the transaction read l
     );
     assert(active);
     const scope = { missionId: active.missionId, expectedGeneration: 1 };
-    const begun = await t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(t, {
         ...scope,
         taskKey: "large-correction",
         provenance: "simulation",
@@ -239,7 +245,7 @@ test.each([
         },
     );
     assert(active);
-    const invocation = await t.mutation(internal.execution.invocations.begin, {
+    const invocation = await beginFixtureInvocation(t, {
         missionId: active.missionId,
         expectedGeneration: 1,
         taskKey: "conflicting-draft",
@@ -362,7 +368,7 @@ test.each([
     expect(anchorControl.draftResponseHash).toBe(
         admissionInput.domain.responseControl.draftResponseHash,
     );
-    const correction = await t.mutation(internal.execution.invocations.begin, {
+    const correction = await beginFixtureInvocation(t, {
         missionId: active.missionId,
         expectedGeneration: 1,
         taskKey: "corrected-draft",
@@ -421,7 +427,7 @@ test("an enabled controller defers an operation-bearing reply for a host-owned c
         },
     );
     assert(active);
-    const invocation = await t.mutation(internal.execution.invocations.begin, {
+    const invocation = await beginFixtureInvocation(t, {
         missionId: active.missionId,
         expectedGeneration: 1,
         taskKey: "operation-bearing",
@@ -435,7 +441,7 @@ test("an enabled controller defers an operation-bearing reply for a host-owned c
         cause: "inspect-state",
         input: { kind: "consult_run_state" },
     });
-    await t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -493,16 +499,13 @@ async function liveReviewFixture() {
     assert(active);
     const missionId = active.missionId;
     async function draft(key: string) {
-        const invocation = await t.mutation(
-            internal.execution.invocations.begin,
-            {
-                missionId: missionId,
-                expectedGeneration: 1,
-                taskKey: key,
-                provenance: "live",
-                nativeInput: await workbenchAdmissionInput(t, missionId),
-            },
-        );
+        const invocation = await beginFixtureInvocation(t, {
+            missionId: missionId,
+            expectedGeneration: 1,
+            taskKey: key,
+            provenance: "live",
+            nativeInput: await workbenchAdmissionInput(t, missionId),
+        });
         assert(invocation.kind === "ready");
         const row = await t.run((ctx) => ctx.db.get(invocation.invocationId));
         assert(row);
@@ -520,11 +523,11 @@ async function liveReviewFixture() {
             inputHash: sha256Hex(row.inputJson),
             corpusRevisionId: row.corpusRevisionId,
         };
-        await t.mutation(internal.providerCalls.recordAttempt, {
+        await recordFixtureAttempt(t, {
             ...identity,
             status: "started",
         });
-        await t.mutation(internal.providerCalls.recordAttempt, {
+        await recordFixtureAttempt(t, {
             ...identity,
             status: "succeeded",
             dispatchOutcome: "response_received",
@@ -645,7 +648,7 @@ test.each([
         cause: "inspect",
         input: { kind: "consult_run_state" },
     });
-    await t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(t, {
         requestId: operation,
         expectedGeneration: 1,
     });
@@ -669,7 +672,7 @@ test.each([
     });
     const requestId = turn?.responseControl?.checks[0]?.requestId;
     assert(requestId);
-    const outcome = await t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -799,7 +802,7 @@ test("unknown advisory work becomes unavailable without redispatch or refunding 
         cause: "inspect",
         input: { kind: "consult_run_state" },
     });
-    await t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(t, {
         requestId: read,
         expectedGeneration: 1,
     });
@@ -822,13 +825,13 @@ test("unknown advisory work becomes unavailable without redispatch or refunding 
     assert(review?.requestId && review.requestHash);
     expect(
         (
-            await t.mutation(internal.execution.operations.claim, {
+            await claimFixtureOperation(t, {
                 requestId: review.requestId,
                 expectedGeneration: 1,
             })
         ).kind,
     ).toBe("execute");
-    await t.mutation(internal.providerCalls.recordAttempt, {
+    await recordFixtureAttempt(t, {
         operationRequestId: review.requestId,
         missionId,
         invocationId: row._id,
@@ -844,7 +847,7 @@ test("unknown advisory work becomes unavailable without redispatch or refunding 
         status: "started",
     });
     expect(
-        await t.mutation(internal.execution.operations.claim, {
+        await claimFixtureOperation(t, {
             requestId: review.requestId,
             expectedGeneration: 1,
         }),
@@ -946,7 +949,7 @@ test.each([
         cause: "inspect",
         input: { kind: "consult_run_state" },
     });
-    await t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(t, {
         requestId: op,
         expectedGeneration: 1,
     });
@@ -961,7 +964,7 @@ test.each([
     });
     const first = await latestReview(t, missionId);
     assert(first?.requestId);
-    await t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(t, {
         requestId: first.requestId,
         expectedGeneration: 1,
     });
@@ -995,7 +998,7 @@ test.each([
     });
     const second = await latestReview(t, missionId);
     assert(second?.requestId);
-    await t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(t, {
         requestId: second.requestId,
         expectedGeneration: 1,
     });
@@ -1287,7 +1290,7 @@ async function pendingReviewFixture() {
         cause: "inspect",
         input: { kind: "consult_run_state" },
     });
-    await t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(t, {
         requestId: op,
         expectedGeneration: 1,
     });
@@ -1373,7 +1376,7 @@ test.each([
             await ctx.db.patch(policy._id, { enabled: false });
         });
     if (mode === "missing_key") vi.stubEnv("OPENROUTER_API_KEY", "");
-    const outcome = await t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -1427,7 +1430,7 @@ test("changed facts require a new bounded check and never adopt the stale score"
     const { t, client, runId, missionId, row, response, requestId } =
         await pendingReviewFixture();
     vi.stubGlobal("fetch", decisionFetch());
-    await t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -1444,7 +1447,7 @@ test("changed facts require a new bounded check and never adopt the stale score"
     const second = await latestReview(t, missionId);
     assert(second?.requestId);
     expect(second.requestId).not.toBe(requestId);
-    await t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(t, {
         requestId: second.requestId,
         expectedGeneration: 1,
     });
@@ -1498,7 +1501,7 @@ test("cancellation retains received review facts without publishing or adopting 
             return native(url);
         }),
     );
-    await t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -1571,7 +1574,7 @@ test("a residual closed-status conflict queues host review instead of completing
         cause: "inspect",
         input: { kind: "consult_run_state" },
     });
-    await t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(t, {
         requestId: op,
         expectedGeneration: 1,
     });
@@ -1622,7 +1625,7 @@ test("oversized saved operation facts cannot expand turn audit or strand publica
             },
         });
     });
-    await t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -1671,7 +1674,7 @@ test("a model cannot request the host review operation", async () => {
     );
     assert(active);
     const input = await workbenchAdmissionInput(t, active.missionId);
-    const row = await t.mutation(internal.execution.invocations.begin, {
+    const row = await beginFixtureInvocation(t, {
         missionId: active.missionId,
         expectedGeneration: 1,
         taskKey: "forged-host-operation",
@@ -1817,7 +1820,7 @@ test.each([
     );
     const { sha256Hex } = await import("@convex/domain/sourcePassages");
     const { searchAvailableMaterialResult } = await import(
-        "@convex/domain/savedMaterialOperations"
+        "@convex/domain/savedMaterialOperationResults"
     );
     const { t, runId, sourceId, captureId, start } =
         await seedWorkbenchMaterials(1, 1);
@@ -1897,7 +1900,7 @@ test.each([
                 ).length,
         ),
     ).toBeGreaterThan(32768);
-    const begun = await t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(t, {
         missionId: active.missionId,
         expectedGeneration: 1,
         taskKey: "large-status-draft",
@@ -1921,11 +1924,11 @@ test.each([
         inputHash: sha256Hex(row.inputJson),
         corpusRevisionId: row.corpusRevisionId,
     };
-    await t.mutation(internal.providerCalls.recordAttempt, {
+    await recordFixtureAttempt(t, {
         ...identity,
         status: "started",
     });
-    await t.mutation(internal.providerCalls.recordAttempt, {
+    await recordFixtureAttempt(t, {
         ...identity,
         status: "succeeded",
         dispatchOutcome: "response_received",
@@ -2012,7 +2015,7 @@ test("disabled advisory control preserves factual status correction without extr
         requests: await ctx.db.query("agentOperationRequests").collect(),
     }));
     const begin = async (taskKey: string) =>
-        f.t.mutation(internal.execution.invocations.begin, {
+        beginFixtureInvocation(f.t, {
             missionId: f.workbenchMissionId,
             expectedGeneration: 1,
             taskKey,

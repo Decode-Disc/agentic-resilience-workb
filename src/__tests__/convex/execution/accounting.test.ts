@@ -2,6 +2,7 @@ import { internal } from "@convex/_generated/api";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { expect, test } from "vitest";
+import { recordFixtureAttempt } from "@/__tests__/setup/pi-mission";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 
 async function reasoningFixture() {
@@ -68,7 +69,7 @@ test("reasoning reserves the same final dossier budget unit atomically", async (
     const second = await attempt("second");
     const outcomes = await Promise.allSettled(
         [first, second].map((input) =>
-            t.mutation(internal.providerCalls.recordAttempt, {
+            recordFixtureAttempt(t, {
                 ...input,
                 status: "started",
             }),
@@ -85,7 +86,7 @@ test("reasoning reserves the same final dossier budget unit atomically", async (
 test("a late factual reasoning receipt closes without reviving cancelled work", async () => {
     const { t, args, attempt } = await reasoningFixture();
     const input = await attempt("late-response");
-    const admitted = await t.mutation(internal.providerCalls.recordAttempt, {
+    const admitted = await recordFixtureAttempt(t, {
         ...input,
         status: "started",
     });
@@ -95,7 +96,7 @@ test("a late factual reasoning receipt closes without reviving cancelled work", 
             executionGeneration: 5,
         }),
     );
-    await t.mutation(internal.providerCalls.recordAttempt, {
+    await recordFixtureAttempt(t, {
         ...input,
         status: "succeeded",
         dispatchOutcome: "response_received",
@@ -114,7 +115,7 @@ test("a late factual reasoning receipt closes without reviving cancelled work", 
 test("unknown reasoning outcomes retain capacity and refuse a blind lease replay", async () => {
     const { t, args, attempt } = await reasoningFixture();
     const input = await attempt("unknown-response");
-    const admitted = await t.mutation(internal.providerCalls.recordAttempt, {
+    const admitted = await recordFixtureAttempt(t, {
         ...input,
         status: "started",
     });
@@ -124,7 +125,7 @@ test("unknown reasoning outcomes retain capacity and refuse a blind lease replay
         }),
     );
     expect(
-        await t.mutation(internal.providerCalls.recordAttempt, {
+        await recordFixtureAttempt(t, {
             ...input,
             status: "started",
         }),
@@ -141,7 +142,7 @@ test("unknown reasoning outcomes retain capacity and refuse a blind lease replay
             executionGeneration: 5,
         }),
     );
-    await t.mutation(internal.providerCalls.recordAttempt, {
+    await recordFixtureAttempt(t, {
         ...input,
         status: "succeeded",
         dispatchOutcome: "response_received",

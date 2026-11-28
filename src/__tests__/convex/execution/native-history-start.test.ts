@@ -1,5 +1,9 @@
 import { internal } from "@convex/_generated/api";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import {
+    beginFixtureInvocation,
+    dispatchFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 import { readConversationPageWithBodies } from "@/__tests__/setup/retained-messages";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
@@ -85,7 +89,7 @@ test.each([
         { cursor: "" },
         { cursor: "null" },
     ].entries()) {
-        const begun = await f.t.mutation(internal.execution.invocations.begin, {
+        const begun = await beginFixtureInvocation(f.t, {
             missionId: f.missionId,
             expectedGeneration: 4,
             taskKey: `history-${i}`,
@@ -112,10 +116,10 @@ test.each([
         assert(finished.kind === "waiting");
         const [requestId] = finished.requestIds;
         assert(requestId);
-        const outcome = await f.t.action(
-            internal.execution.operations.dispatch,
-            { requestId, expectedGeneration: 4 },
-        );
+        const outcome = await dispatchFixtureOperation(f.t, {
+            requestId,
+            expectedGeneration: 4,
+        });
         if (input.cursor === "null")
             expect(outcome).toMatchObject({
                 kind: "refused",

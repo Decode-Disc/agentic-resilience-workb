@@ -13,7 +13,14 @@ import {
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { originalOperationArguments } from "@/__tests__/setup/agent-harness";
 import { installModel } from "@/__tests__/setup/model-configuration";
-import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
+import {
+    claimFixturePiLease,
+    dispatchFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
+import {
+    nativePiFixtureRoute,
+    nativeToolReply,
+} from "@/__tests__/setup/pi-native";
 import { readRetainedBody } from "@/__tests__/setup/retained-history";
 import { readMessageBodies } from "@/__tests__/setup/retained-messages";
 import {
@@ -32,6 +39,7 @@ test("the compaction adoption owner refuses a retained blocked response", async 
     const begun = await f.t.mutation(internal.execution.invocations.begin, {
         missionId: f.missionId,
         expectedGeneration: 4,
+        piLease: await claimFixturePiLease(f.t, f.missionId, 4),
         taskKey: "refused-compaction",
         purpose: "compaction",
         provenance: "live",
@@ -367,7 +375,7 @@ async function fixture(reasoningEffort?: ModelRoute["reasoningEffort"]) {
     );
     expect(
         (
-            await f.t.action(internal.execution.operations.dispatch, {
+            await dispatchFixtureOperation(f.t, {
                 requestId,
                 expectedGeneration: 4,
             })
@@ -1422,7 +1430,19 @@ test.each([
         if (!call || !mission)
             throw new Error("Missing admitted native attempt");
         expect(call.leaseExpiresAt).toBe(mission.deadlineAt + 10000);
+        const active = await f.t.run((ctx) =>
+            ctx.db
+                .query("piSessions")
+                .withIndex("by_mission", (q) => q.eq("missionId", f.missionId))
+                .unique(),
+        );
+        if (!active) throw new Error("Missing active writer");
         const duplicate = f.t.mutation(internal.providerCalls.recordAttempt, {
+            piLease: {
+                sessionId: active._id,
+                writer: active.writer,
+                epoch: active.epoch,
+            },
             missionId: call.missionId,
             invocationId: call.invocationId,
             inputHash: call.inputHash,
@@ -1546,47 +1566,93 @@ test("the native HTTP request observes the shared mission-deadline abort signal"
     }
 }, 30000);
 
-test("a refused writer lease prevents native provider dispatch and retains explicit non-dispatch", async () => {
-    const { PiConvexStorage } = await import("@convex/integrations/piStorage");
-    const { executionError } = await import("@convex/execution/errors");
-    const lease = vi
-        .spyOn(PiConvexStorage.prototype, "renewLease")
-        .mockRejectedValue(executionError("pi_writer_fenced"));
-    let completion: object = {};
-    const network = vi.fn(async () => reply(completion));
-    vi.stubGlobal("fetch", network);
-    try {
-        const f = await fixture();
-        completion = { kind: "complete", captureIds: [f.captureId] };
-        await f.t.finishAllScheduledFunctions(
-            () => vi.advanceTimersByTime(10),
-            500,
-        );
-        expect(await f.t.run((ctx) => ctx.db.get(f.missionId))).toMatchObject({
-            status: "blocked",
-            blockCode: "pi_writer_fenced",
-        });
-        expect(network).not.toHaveBeenCalled();
+test("a stale Pi writer cannot reserve provider spend and a late generation receipt can still be retained", async () => {
+    const { t, missionId } = await fixture();
+    const expectedGeneration = 4;
+    const scope = { missionId, expectedGeneration };
+    const piLease = await claimFixturePiLease(t, missionId, expectedGeneration);
+    const begun = await t.mutation(internal.execution.invocations.begin, {
+        ...scope,
+        piLease,
+        taskKey: "provider-fence",
+        purpose: "compaction",
+        provenance: "live",
+        returnInputReference: true,
+    });
+    assert(begun.kind === "ready_reference");
+    await t.mutation(internal.execution.invocations.retainRequest, {
+        invocationId: begun.invocationId,
+        expectedGeneration,
+        piLease,
+        requestJson: '{"messages":[]}',
+    });
+    const invocation = await t.run((ctx) => ctx.db.get(begun.invocationId));
+    assert(invocation);
+    const attempt = {
+        missionId,
+        invocationId: begun.invocationId,
+        runId: invocation.runId,
+        corpusRevisionId: invocation.corpusRevisionId,
+        executionGeneration: expectedGeneration,
+        workflowVersion: invocation.definitionVersion,
+        stepKey: "agent_compaction",
+        service: "model" as const,
+        operation: "agent_compaction",
+        operationKey: `mission:${missionId}:invocation:${begun.invocationId}:attempt:1`,
+        attempt: 1,
+        inputHash: begun.inputHash,
+        status: "started" as const,
+    };
+    await t.run((ctx) =>
+        ctx.db.patch(piLease.sessionId, { leaseUntil: Date.now() }),
+    );
+    const expectNoReservation = async () => {
+        for (const receipt of [
+            internal.execution.providerCallReceipts.recordMissionModelAttempt,
+            internal.providerCalls.recordAttempt,
+        ]) {
+            await expect(
+                t.mutation(receipt, { ...attempt, piLease }),
+            ).rejects.toThrow("pi_writer_fenced");
+        }
         expect(
-            await f.t.run((ctx) => ctx.db.query("providerCalls").collect()),
-        ).toEqual([]);
-        expect(
-            await f.t.run((ctx) =>
-                ctx.db.query("agentInvocationPayloads").collect(),
-            ),
-        ).toEqual(
-            expect.arrayContaining([
-                expect.objectContaining({
-                    part: "reply",
-                    state: "incomplete",
-                    code: "not_dispatched",
-                }),
-            ]),
-        );
-    } finally {
-        lease.mockRestore();
-    }
-}, 30000);
+            await t.run((ctx) => ctx.db.query("providerCalls").first()),
+        ).toBeNull();
+    };
+    await expectNoReservation();
+    const { sessionId, writer, epoch } = await t.mutation(
+        internal.execution.piStore.claim,
+        {
+            ...scope,
+            writer: piLease.writer,
+        },
+    );
+    expect(epoch).toBe(piLease.epoch + 1);
+    await expectNoReservation();
+
+    const granted = await t.mutation(
+        internal.execution.providerCallReceipts.recordMissionModelAttempt,
+        {
+            ...attempt,
+            piLease: { sessionId, writer, epoch },
+        },
+    );
+    expect(granted.shouldExecute).toBe(true);
+    await t.run((ctx) => ctx.db.patch(sessionId, { leaseUntil: Date.now() }));
+    await t.mutation(
+        internal.execution.providerCallReceipts.observeGeneration,
+        {
+            invocationId: begun.invocationId,
+            generationId: "generation-receipt",
+        },
+    );
+    expect(
+        await t.run((ctx) => ctx.db.get(granted.providerCallId)),
+    ).toMatchObject({
+        invocationId: begun.invocationId,
+        providerObservation: { generationId: "generation-receipt" },
+    });
+});
 
 test("an interrupted native compaction retains an unknown attempt and cannot redispatch on Resume", async () => {
     const network = vi.fn(async () => {
@@ -1873,11 +1939,12 @@ test("a context-reduced native output cap and a fragmented request are retained 
     });
 }, 30000);
 
-test("a confirmed native provider context overflow returns to native compaction with its original receipt retained", async () => {
+test("a confirmed context overflow after a native tool round compacts and refreshes execution with the original receipts retained", async () => {
     let count = 0;
     let completion: object = {};
     const network = vi.fn(async () => {
-        if (++count === 1)
+        if (++count === 1) return nativeToolReply("consult_run_state", {});
+        if (count === 2)
             return new Response(
                 JSON.stringify({
                     error: { message: "maximum context length exceeded" },
@@ -1888,7 +1955,7 @@ test("a confirmed native provider context overflow returns to native compaction 
                 },
             );
         return reply(
-            count === 2
+            count === 3
                 ? "A complete qualitative summary with its limitations."
                 : completion,
         );
@@ -1910,16 +1977,28 @@ test("a confirmed native provider context overflow returns to native compaction 
     expect(await f.t.run((ctx) => ctx.db.get(f.missionId))).toMatchObject({
         status: "completed",
     });
-    expect(network).toHaveBeenCalledTimes(3);
+    expect(network).toHaveBeenCalledTimes(4);
+    const read = await f.t.run((ctx) =>
+        ctx.db
+            .query("agentOperationRequests")
+            .withIndex("by_mission", (q) => q.eq("missionId", f.missionId))
+            .filter((q) => q.eq(q.field("input.kind"), "consult_run_state"))
+            .first(),
+    );
+    expect(read).toMatchObject({
+        input: { kind: "consult_run_state" },
+        status: "completed",
+        outcome: { kind: "success" },
+    });
     const receipts = await f.t.run((ctx) =>
         ctx.db.query("providerCalls").collect(),
     );
-    expect(receipts[0]).toMatchObject({
+    expect(receipts[1]).toMatchObject({
         status: "failed",
         errorCode: "context_capacity",
         dispatchOutcome: "response_received",
     });
-    expect(receipts[1]).toMatchObject({
+    expect(receipts[2]).toMatchObject({
         operation: "agent_compaction",
         status: "succeeded",
     });
@@ -2201,7 +2280,10 @@ test("native Pi tool execution delivers >50 KiB and exact 64 KiB + wrapper histo
     const { modelOperationOutcome } = await import(
         "@convex/execution/agentDefinition"
     );
-    const { PI_MISSION_EXTENSION, piToolMetadata } = await import(
+    const { piToolMetadata } = await import(
+        "@convex/integrations/piModelAdapter"
+    );
+    const { PI_MISSION_EXTENSION } = await import(
         "@convex/integrations/modelInput"
     );
     const { MAX_OPERATION_RESULT_BYTES } = await import(
@@ -2462,7 +2544,7 @@ test("native_tool completion exposes submit_completion, accepts sole call with s
     );
     expect(
         (
-            await f.t.action(internal.execution.operations.dispatch, {
+            await dispatchFixtureOperation(f.t, {
                 requestId,
                 expectedGeneration: 4,
             })
@@ -2654,7 +2736,7 @@ test("retained v3 does not expose submit_completion and refuses calling it witho
     );
     expect(
         (
-            await f.t.action(internal.execution.operations.dispatch, {
+            await dispatchFixtureOperation(f.t, {
                 requestId,
                 expectedGeneration: 4,
             })
@@ -2827,7 +2909,7 @@ test("native completion corrects a missing call, malformed wire JSON and schema 
     });
     expect(
         (
-            await f.t.action(internal.execution.operations.dispatch, {
+            await dispatchFixtureOperation(f.t, {
                 requestId: preRead,
                 expectedGeneration: 4,
             })
@@ -3302,15 +3384,15 @@ test("nonterminal native tool turns avoid terminal invocation lookups", async ()
 
 test.each([
     "stale_instructions",
+    "after_tools_steering",
     "invalid_arguments",
     "pending_operations",
 ] as const)("native conversation completion recovers from %s through the real tool loop", async (scenario) => {
     const { seedConversation } = await import(
         "@/__tests__/setup/agent-harness"
     );
-    const { nodeActionGenerationDeadline } = await import(
-        "@convex/resourcePolicy"
-    );
+    const { nodeActionGenerationDeadline, PI_SLICE_YIELD_SAFETY_MS } =
+        await import("@convex/resourcePolicy");
     const { conversationValidationV3Definition } = await import(
         "@convex/domain/conversationValidation"
     );
@@ -3359,6 +3441,17 @@ test.each([
             turn = ++turns;
             observedInputs.set(key, turn);
         }
+        if (scenario === "after_tools_steering" && turn === 1)
+            return {
+                kind: "operations",
+                requests: [
+                    {
+                        callId: "consult-before-steering",
+                        name: "consult_run_state",
+                        inputJson: "{}",
+                    },
+                ],
+            };
         return {
             kind: "operations",
             requests: [
@@ -3377,6 +3470,7 @@ test.each([
         };
     };
     let injected = false;
+    let localReadSettled = false;
     let stagedSimulation = false;
     let adoptedSimulationByReference = false;
     const run = () =>
@@ -3385,6 +3479,46 @@ test.each([
                 {
                     ...ctx,
                     runMutation: async (reference, ...args) => {
+                        const name = getFunctionName(reference);
+                        if (scenario === "after_tools_steering") {
+                            if (
+                                name ===
+                                getFunctionName(
+                                    internal.execution.operations.executeLocal,
+                                )
+                            ) {
+                                const outcome = await ctx.runMutation(
+                                    reference,
+                                    ...args,
+                                );
+                                expect(outcome).toMatchObject({
+                                    kind: "success",
+                                });
+                                localReadSettled = true;
+                                return outcome;
+                            }
+                            if (
+                                !injected &&
+                                localReadSettled &&
+                                name ===
+                                    getFunctionName(
+                                        internal.execution.piStore
+                                            .inputSnapshot,
+                                    )
+                            ) {
+                                injected = true;
+                                await f.client.mutation(
+                                    api.execution.conversations.submit,
+                                    {
+                                        runId: f.runId,
+                                        requestKey: "steer-during-after-tools",
+                                        text: "Use the updated request",
+                                        delivery: "steer",
+                                        turnId,
+                                    },
+                                );
+                            }
+                        }
                         if (
                             scenario === "pending_operations" &&
                             getFunctionName(reference) ===
@@ -3410,7 +3544,8 @@ test.each([
                             getFunctionName(reference) ===
                                 "execution/invocations:finish" &&
                             !injected &&
-                            scenario !== "invalid_arguments"
+                            (scenario === "pending_operations" ||
+                                scenario === "stale_instructions")
                         ) {
                             if (scenario === "pending_operations") {
                                 const finish = args[0] as FunctionArgs<
@@ -3447,13 +3582,10 @@ test.each([
                                     },
                                 );
                                 expect(
-                                    await f.t.action(
-                                        internal.execution.operations.dispatch,
-                                        {
-                                            requestId: waitingId,
-                                            expectedGeneration: 1,
-                                        },
-                                    ),
+                                    await dispatchFixtureOperation(f.t, {
+                                        requestId: waitingId,
+                                        expectedGeneration: 1,
+                                    }),
                                 ).toMatchObject({ kind: "waiting" });
                             }
                         }
@@ -3462,7 +3594,9 @@ test.each([
                 },
                 { missionId, expectedGeneration: 1 },
                 "validation-worker",
-                nodeActionGenerationDeadline(Date.now()),
+                scenario === "pending_operations"
+                    ? Date.now() + PI_SLICE_YIELD_SAFETY_MS
+                    : nodeActionGenerationDeadline(Date.now()),
             ),
         );
     try {
@@ -3517,7 +3651,14 @@ test.each([
                 .filter((entry) => entry.role === "assistant")
                 .map((entry) => entry.text),
         ).toEqual([replyText]);
-        if (scenario !== "invalid_arguments")
+        if (scenario === "after_tools_steering") {
+            expect(localReadSettled && injected).toBe(true);
+            expect(
+                (await readMessageBodies(f.client, history.page))
+                    .filter((entry) => entry.role === "user")
+                    .map((entry) => entry.text),
+            ).toContain("Use the updated request");
+        } else if (scenario !== "invalid_arguments")
             expect(state.events.some((event) => event.code === scenario)).toBe(
                 true,
             );

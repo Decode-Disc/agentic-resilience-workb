@@ -1,7 +1,6 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { documentDatesValidator } from "@convex/domain/documentDates";
 import { approvalActionValidator } from "@convex/execution/approvalContracts";
-import { operationResultValidator } from "@convex/execution/operationResults";
 import { type Infer, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import {
@@ -17,12 +16,16 @@ import {
     WORKBENCH_SCOPED_DOCUMENTARY_VERSION,
 } from "./framingContracts";
 import { savedMaterialBinding } from "./savedMaterialOperations";
-import { coverageRoleValidator } from "./sourceDiscoveryRecovery";
+import { sourceCoverageRoleValidator as coverageRoleValidator } from "./sourceCoverageRole";
 import { discoveryFocus } from "./sourcesContracts";
 import {
     responseReviewInput,
     responseReviewPin,
 } from "./workbenchResponseControlContracts";
+import {
+    workbenchScopeValidator,
+    workbenchStateValidator,
+} from "./workbenchScope";
 
 export const workbenchOperationAdmission = v.object({
     toolAvailability: v.union(
@@ -307,18 +310,6 @@ export const publicSearchOutcomeValidator = v.union(
     referencedPublicSearchResultValidator,
     publicSearchResultValidator,
 );
-const legacyPublicSearchResult = operationResultValidator(
-    publicSearchResultValidator,
-);
-const referencedPublicSearchResult = operationResultValidator(
-    referencedPublicSearchResultValidator,
-);
-
-export function publicSearchWireResult(version: number) {
-    return savedMaterialBinding("workbench_v1", version) === "referenced"
-        ? referencedPublicSearchResult
-        : legacyPublicSearchResult;
-}
 export const publicContextResultValidator = v.object({
     status: v.union(v.literal("observed"), v.literal("inconclusive")),
     references: v.array(
@@ -432,8 +423,8 @@ export const retainedPublicReadPage = v.object({
 
 export const workbenchSchemas = {
     id: v.literal("workbench_v1"),
-    scope: v.object({ kind: v.literal("workbench_v1") }),
-    state: v.object({ kind: v.literal("workbench_v1") }),
+    scope: workbenchScopeValidator,
+    state: workbenchStateValidator,
     result: v.object({ kind: v.literal("workbench_v1"), text: v.string() }),
     completion: v.object({
         kind: v.literal("complete"),

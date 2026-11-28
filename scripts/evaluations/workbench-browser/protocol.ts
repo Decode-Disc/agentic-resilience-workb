@@ -1,8 +1,20 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { createHash, randomUUID } from "node:crypto";
+import {
+    existsSync,
+    lstatSync,
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    readlinkSync,
+    renameSync,
+    rmSync,
+    statSync,
+    writeFileSync,
+} from "node:fs";
+import { homedir } from "node:os";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import { reasoningPreferenceValues } from "../../../convex/modelConfigurationValues.ts";
 import {
@@ -170,44 +182,74 @@ export function planQualification(
     };
 }
 
-/** Canonical source and configuration scope shared by both browser runners and campaigns. */
-export function qualificationFingerprints() {
-    const result = spawnSync(
-        "git",
-        [
-            "ls-files",
-            "-z",
-            "--cached",
-            "--others",
-            "--exclude-standard",
-            "convex",
-            "src",
-            "e2e",
-            "scripts/evaluations/workbench-browser",
-            "scripts/evaluations/workbench/continuity-cases.json",
-            "scripts/check-imports.ts",
-            "scripts/check-execution-boundaries.ts",
-            "scripts/check-resource-policy.ts",
-            "scripts/sync-resource-policy.ts",
-            "services/playwright-browser/src/resource-policy.generated.json",
-            "scripts/archive-evaluation.ts",
-            "scripts/local-runtime.ts",
-            "package.json",
-            "pnpm-lock.yaml",
-            "tsconfig.json",
-            "biome.json",
-            "vitest.config.ts",
-            "vite.config.ts",
-        ],
-        { encoding: "utf8" },
-    );
-    assert.equal(result.status, 0, "Candidate listing failed");
+function checkoutFingerprints(
+    paths: readonly string[] = [],
+    cacheRoot?: string,
+) {
+    const list = (flags: string[], excludedPaths: string[] = []) => {
+        const result = spawnSync(
+            "git",
+            ["ls-files", "-z", ...flags, "--", ...paths, ...excludedPaths],
+            { encoding: "utf8" },
+        );
+        assert.equal(result.status, 0, "Candidate listing failed");
+        return result.stdout.split("\0");
+    };
+    const cache = cacheRoot && relative(process.cwd(), resolve(cacheRoot));
+    const localCache =
+        cache &&
+        !isAbsolute(cache) &&
+        cache !== ".." &&
+        !cache.startsWith(`..${sep}`);
+    const inputs = localCache
+        ? [
+              ...list(["--cached"]),
+              ...list(
+                  ["--others", "--exclude-standard"],
+                  [`:(exclude,literal)${cache}`],
+              ),
+          ]
+        : list(["--cached", "--others", "--exclude-standard"]);
     return Object.fromEntries(
-        result.stdout
-            .split("\0")
-            .filter((path) => path && existsSync(path))
-            .map((path) => [path, sha256(readFileSync(path))]),
+        [...new Set(inputs)].flatMap((path) => {
+            if (!path) return [];
+            const entry = lstatSync(path, { throwIfNoEntry: false });
+            if (!entry) return [];
+            if (
+                entry.isFile() ||
+                (entry.isSymbolicLink() &&
+                    statSync(path, { throwIfNoEntry: false })?.isFile())
+            )
+                return [[path, sha256(readFileSync(path))]];
+            return entry.isSymbolicLink()
+                ? [[path, sha256(readlinkSync(path))]]
+                : [];
+        }),
     );
+}
+
+/** Canonical archive scope shared by both browser runners and campaigns. */
+export function qualificationFingerprints() {
+    return checkoutFingerprints([
+        "convex",
+        "src",
+        "e2e",
+        "scripts/evaluations/workbench-browser",
+        "scripts/evaluations/workbench/continuity-cases.json",
+        "scripts/check-imports.ts",
+        "scripts/check-execution-boundaries.ts",
+        "scripts/check-resource-policy.ts",
+        "scripts/sync-resource-policy.ts",
+        "services/playwright-browser/src/resource-policy.generated.json",
+        "scripts/archive-evaluation.ts",
+        "scripts/local-runtime.ts",
+        "package.json",
+        "pnpm-lock.yaml",
+        "tsconfig.json",
+        "biome.json",
+        "vitest.config.ts",
+        "vite.config.ts",
+    ]);
 }
 /** Retains the real modules rather than reconstructing their behavior in an evaluation script. */
 export function preserveQualificationCandidate(root: string) {
@@ -294,7 +336,7 @@ const checks = [
             "convex/domain/sourceUsage.ts",
             "convex/domain/sources.ts",
             "convex/domain/sourcesAgent.ts",
-            "convex/execution/schema.ts",
+            "convex/execution/tableValidators.ts",
             "convex/runWorkspace.ts",
             "src/__tests__/setup/qualification-v2.ts",
             "convex/sourcesSimulation.ts",
@@ -327,12 +369,13 @@ type CheckResult = {
     stderr?: string | null;
     error?: Error | undefined;
 };
-type CheckExecutor = (
+export type CheckExecutor = (
     binary: string,
     args: string[],
-    signal?: AbortSignal,
+    signal: AbortSignal,
+    env?: Record<string, string>,
 ) => CheckResult | Promise<CheckResult>;
-const executeCheck: CheckExecutor = (binary, args, signal) =>
+const executeCheck: CheckExecutor = (binary, args, signal, env) =>
     new Promise((resolve) => {
         const timeout = AbortSignal.timeout(
             TOOLING_POLICY.candidateValidationTimeoutMs,
@@ -343,6 +386,7 @@ const executeCheck: CheckExecutor = (binary, args, signal) =>
         const child = spawn(binary, args, {
             stdio: ["ignore", "pipe", "pipe"],
             signal: effectiveSignal,
+            env,
         });
         let stdout = "";
         let stderr = "";
@@ -366,11 +410,144 @@ const executeCheck: CheckExecutor = (binary, args, signal) =>
         child.on("close", (status) => finish({ status, stdout, stderr }));
     });
 
+export const PREFLIGHT_ENV_ALLOWLIST = [
+    "PATH",
+    "HOME",
+    "TMPDIR",
+    "TMP",
+    "TEMP",
+    "USER",
+    "SHELL",
+    "XDG_CACHE_HOME",
+    "XDG_DATA_HOME",
+    "XDG_STATE_HOME",
+    "XDG_CONFIG_HOME",
+    "NODE_ENV",
+    "NODE_OPTIONS",
+    "TZ",
+    "LC_ALL",
+    "LANG",
+    "CI",
+    "SOURCES_PREPARATION_WINDOW_MINUTES",
+    "SOURCES_MISSION_ENABLED",
+    "SOURCES_REPLAY_INPUT",
+    "SOURCES_REPLAY_METRICS",
+    "WORKBENCH_REVIEW_REASONING",
+    "PI_CODING_AGENT_DIR",
+] as const;
+const preflightEnvKeys = new Set<string>(PREFLIGHT_ENV_ALLOWLIST);
+const preflightEnvPrefixes = ["VITEST_", "PNPM_", "npm_config_"];
+
+export function buildPreflightChildEnv(
+    source = process.env,
+): Record<string, string> {
+    const selected: [string, string][] = [];
+    for (const [key, value] of Object.entries(source)) {
+        if (
+            value !== undefined &&
+            (preflightEnvKeys.has(key) ||
+                preflightEnvPrefixes.some((prefix) => key.startsWith(prefix)))
+        )
+            selected.push([key, value]);
+    }
+    return Object.fromEntries(
+        selected.sort(([left], [right]) => left.localeCompare(right)),
+    );
+}
+
+export function defaultPreflightCacheRoot(env = process.env): string {
+    return join(
+        env.XDG_CACHE_HOME || join(env.HOME || homedir(), ".cache"),
+        "agentic-resilience-workbench",
+        "qualification-preflight",
+    );
+}
+
+type ValidationRecord = {
+    status: "running" | "passed" | "failed";
+    candidateHash: string;
+    fingerprintsSha256: string;
+    validationIdentity: string;
+    checks: Array<{ id: string; status: "passed" | "failed" }>;
+};
+
+function isDirectory(path: string) {
+    return lstatSync(path, { throwIfNoEntry: false })?.isDirectory() === true;
+}
+
+function readVerifiedCacheHit(directory: string, expected: ValidationRecord) {
+    try {
+        const logs = join(directory, "checks");
+        const manifest = join(directory, "validation.json");
+        if (
+            !isDirectory(directory) ||
+            !isDirectory(logs) ||
+            !lstatSync(manifest).isFile()
+        )
+            return undefined;
+        const record: ValidationRecord = JSON.parse(
+            readFileSync(manifest, "utf8"),
+        );
+        if (
+            record.status !== "passed" ||
+            record.candidateHash !== expected.candidateHash ||
+            record.fingerprintsSha256 !== expected.fingerprintsSha256 ||
+            record.validationIdentity !== expected.validationIdentity ||
+            !Array.isArray(record.checks) ||
+            record.checks.length !== checks.length ||
+            !checks.every(
+                ({ id }) =>
+                    record.checks.some(
+                        (check) => check.id === id && check.status === "passed",
+                    ) && lstatSync(join(logs, `${id}.log`)).isFile(),
+            )
+        )
+            return undefined;
+        return record;
+    } catch {
+        return undefined;
+    }
+}
+
+function writeValidationArtifacts(
+    root: string,
+    record: ValidationRecord,
+    source: string,
+) {
+    const logDirectory = join(root, "checks");
+    if (lstatSync(logDirectory, { throwIfNoEntry: false })?.isSymbolicLink())
+        rmSync(logDirectory);
+    mkdirSync(logDirectory, { recursive: true, mode: 0o700 });
+    const replace = (path: string, body: string | Buffer) => {
+        const temporary = join(
+            dirname(path),
+            `.tmp-${process.pid}-${randomUUID()}`,
+        );
+        try {
+            writeFileSync(temporary, body, { flag: "wx", mode: 0o600 });
+            renameSync(temporary, path);
+        } finally {
+            rmSync(temporary, { force: true });
+        }
+    };
+    for (const check of record.checks) {
+        const name = `${check.id}.log`;
+        const path = join(source, "checks", name);
+        if (existsSync(path))
+            replace(join(logDirectory, name), readFileSync(path));
+    }
+    replace(
+        join(root, "validation.json"),
+        `${JSON.stringify(record, null, 2)}\n`,
+    );
+}
+
 /** No setup or paid admission may follow unless every read-only check passed on these exact source bytes. */
 export async function verifyQualificationCandidate(
     root: string,
     fingerprints: Record<string, string>,
     execute: CheckExecutor = executeCheck,
+    { sharedCacheRoot }: { sharedCacheRoot?: string } = {},
 ) {
     const verify = () => {
         for (const [file, hash] of Object.entries(fingerprints))
@@ -380,66 +557,83 @@ export async function verifyQualificationCandidate(
                 "Candidate changed during validation",
             );
     };
-    const path = join(root, "validation.json");
-    const record = {
+    verify();
+    // Project-wide prerequisites may read authored files outside the retained campaign archive.
+    const checkoutHash = () =>
+        candidateHash(checkoutFingerprints([], sharedCacheRoot));
+    const validationInputs = checkoutHash();
+    const verifyInputs = () => {
+        verify();
+        assert.equal(
+            checkoutHash(),
+            validationInputs,
+            "Candidate changed during validation",
+        );
+    };
+    const childEnv = buildPreflightChildEnv();
+    const candidate = candidateHash(fingerprints);
+    const fingerprintsSha256 = sha256(
+        readFileSync(join(root, "fingerprints.json")),
+    );
+    const record: ValidationRecord = {
         status: "running",
-        candidateHash: candidateHash(fingerprints),
-        fingerprintsSha256: sha256(
-            readFileSync(join(root, "fingerprints.json")),
-        ),
+        candidateHash: candidate,
+        fingerprintsSha256,
+        checks: [],
         validationIdentity: sha256(
             JSON.stringify({
-                candidate: candidateHash(fingerprints),
+                candidate,
+                fingerprintsSha256,
+                validationInputs,
                 checks,
                 node: process.version,
                 executable: process.execPath,
-                environment: sha256(
-                    JSON.stringify(
-                        Object.entries(process.env).sort(([left], [right]) =>
-                            left.localeCompare(right),
-                        ),
-                    ),
-                ),
+                childEnv,
                 tools: [
-                    "typescript",
-                    "@biomejs/biome",
-                    "vitest",
-                    "convex",
-                    ".modules.yaml",
-                ].map((name) => {
-                    const path =
-                        name === ".modules.yaml"
-                            ? "node_modules/.modules.yaml"
-                            : `node_modules/${name}/package.json`;
-                    return [
-                        path,
-                        existsSync(path) ? sha256(readFileSync(path)) : null,
-                    ];
-                }),
+                    "node_modules/typescript/package.json",
+                    "node_modules/@biomejs/biome/package.json",
+                    "node_modules/vitest/package.json",
+                    "node_modules/convex/package.json",
+                    "node_modules/.modules.yaml",
+                    "package.json",
+                ].map((path) => [
+                    path,
+                    existsSync(path) ? sha256(readFileSync(path)) : null,
+                ]),
             }),
         ),
-        checks: [] as Array<{ id: string; status: "passed" | "failed" }>,
     };
-    const persist = () =>
-        writeFileSync(path, `${JSON.stringify(record, null, 2)}\n`, {
-            mode: 0o600,
-        });
-    mkdirSync(join(root, "checks"), { recursive: true, mode: 0o700 });
-    try {
-        verify();
-        if (existsSync(path)) {
-            const cached = JSON.parse(readFileSync(path, "utf8"));
-            if (
-                cached.status === "passed" &&
-                cached.validationIdentity === record.validationIdentity &&
-                cached.checks?.length === checks.length &&
-                cached.checks.every(
-                    (c: { status: string }) => c.status === "passed",
-                )
-            )
-                return cached as typeof record;
+    const local = readVerifiedCacheHit(root, record);
+    if (local) {
+        verifyInputs();
+        return local;
+    }
+
+    let candidateDir: string | undefined;
+    if (sharedCacheRoot) {
+        if (!lstatSync(sharedCacheRoot, { throwIfNoEntry: false }))
+            mkdirSync(sharedCacheRoot, { recursive: true, mode: 0o700 });
+        if (isDirectory(sharedCacheRoot)) {
+            const path = join(sharedCacheRoot, candidate);
+            if (!lstatSync(path, { throwIfNoEntry: false }))
+                mkdirSync(path, { recursive: true, mode: 0o700 });
+            if (isDirectory(path)) candidateDir = path;
         }
-        persist();
+    }
+    const cache = candidateDir && join(candidateDir, record.validationIdentity);
+    const hit = cache ? readVerifiedCacheHit(cache, record) : undefined;
+    if (hit && cache) {
+        verifyInputs();
+        writeValidationArtifacts(root, hit, cache);
+        return hit;
+    }
+
+    const staging = mkdtempSync(
+        join(candidateDir ?? root, `.tmp-${process.pid}-`),
+    );
+    try {
+        const logs = join(staging, "checks");
+        mkdirSync(logs, { mode: 0o700 });
         const controller = new AbortController();
         const outcomes = new Map<string, "passed" | "failed">();
         let firstError: unknown;
@@ -450,23 +644,19 @@ export async function verifyQualificationCandidate(
                         "pnpm",
                         check.args,
                         controller.signal,
+                        childEnv,
                     );
                     writeFileSync(
-                        join(root, "checks", `${check.id}.log`),
+                        join(logs, `${check.id}.log`),
                         `${result.stdout ?? ""}\n${result.stderr ?? ""}`,
                         { mode: 0o600 },
                     );
-                    const passed = result.status === 0 && !result.error;
-                    outcomes.set(check.id, passed ? "passed" : "failed");
-                    if (!passed) {
-                        if (!firstError)
-                            firstError = new assert.AssertionError({
-                                message: `Qualification prerequisite failed: ${check.id}`,
-                            });
-                        controller.abort();
-                        return;
-                    }
+                    if (result.status !== 0 || result.error)
+                        throw new assert.AssertionError({
+                            message: `Qualification prerequisite failed: ${check.id}`,
+                        });
                     verify();
+                    outcomes.set(check.id, "passed");
                 } catch (error) {
                     outcomes.set(check.id, "failed");
                     if (!firstError) firstError = error;
@@ -474,19 +664,50 @@ export async function verifyQualificationCandidate(
                 }
             }),
         );
-        for (const check of checks) {
-            const status = outcomes.get(check.id);
-            if (status) record.checks.push({ id: check.id, status });
+        for (const { id } of checks) {
+            const status = outcomes.get(id);
+            if (status) record.checks.push({ id, status });
         }
-        if (firstError) throw firstError;
-        verify();
+        try {
+            if (firstError) throw firstError;
+            verifyInputs();
+        } catch (error) {
+            record.status = "failed";
+            writeValidationArtifacts(root, record, staging);
+            throw error;
+        }
         record.status = "passed";
-        persist();
+        let source = staging;
+        if (cache) {
+            writeFileSync(
+                join(staging, "validation.json"),
+                `${JSON.stringify(record, null, 2)}\n`,
+                { mode: 0o600 },
+            );
+            try {
+                renameSync(staging, cache);
+                source = cache;
+            } catch (error) {
+                const collision = (error as NodeJS.ErrnoException).code;
+                if (
+                    collision !== "EEXIST" &&
+                    collision !== "ENOTEMPTY" &&
+                    collision !== "ENOTDIR"
+                )
+                    throw error;
+                if (
+                    candidateDir &&
+                    isDirectory(candidateDir) &&
+                    readVerifiedCacheHit(cache, record)
+                )
+                    source = cache;
+            }
+        }
+        writeValidationArtifacts(root, record, source);
+        verifyInputs();
         return record;
-    } catch (error) {
-        record.status = "failed";
-        persist();
-        throw error;
+    } finally {
+        rmSync(staging, { recursive: true, force: true });
     }
 }
 

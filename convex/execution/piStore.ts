@@ -15,21 +15,34 @@ import {
     PI_COMMIT_MAX_BYTES,
     PI_SESSION_MAX_BYTES,
 } from "@convex/resourcePolicy";
-import schema from "@convex/schema";
 import {
     paginationOptsValidator,
     paginationResultValidator,
 } from "convex/server";
 import { type Infer, v } from "convex/values";
-import { getAgentDefinition } from "./agentCatalog";
+import { getAgentAuthority } from "./agentAuthorityCatalog";
 import {
     executionError,
     requireDossierAuthority,
     requireMissionAuthority,
-    requireMissionObservationAuthority,
 } from "./authority";
-import { buildMissionContext } from "./context";
-import { contextObservationSequence, latestNativeControl } from "./journal";
+import {
+    contextObservationSequence,
+    latestNativeControl,
+} from "./journalReads";
+import {
+    needsNativeSettlement,
+    piLeaseValidator,
+    requirePiWriter,
+    sessionForMission,
+} from "./piSession";
+import {
+    executionEventActorValidator,
+    nativeContextObservationValidator,
+    nativeInputBodyValidator,
+    nativeInputsValidator,
+    piCommitDocument,
+} from "./piStorageValidators";
 import {
     completeRetainedText,
     retainedTextFragment,
@@ -37,65 +50,14 @@ import {
     textFragmentValidator,
     textManifestValidator,
 } from "./retainedText";
-import { nativeInputBodyValidator, nativeInputsValidator } from "./schema";
-
-/** Resolves the pinned storage owner without moving historical mission journals. */
-export async function sessionForMission(
-    ctx: QueryCtx,
-    mission: Doc<"agentMissions">,
-) {
-    const owned = await ctx.db
-        .query("piSessions")
-        .withIndex("by_mission", (q) => q.eq("missionId", mission._id))
-        .unique();
-    if (owned || !mission.conversationTurnId) return owned;
-    const turn = await ctx.db.get(mission.conversationTurnId);
-    return turn
-        ? ctx.db
-              .query("piSessions")
-              .withIndex("by_conversation", (q) =>
-                  q.eq("conversationId", turn.conversationId),
-              )
-              .unique()
-        : null;
-}
-
-export function tracksNativeSettlement(
-    mission: Doc<"agentMissions">,
-    session: Doc<"piSessions"> | null,
-) {
-    if (!session || session.missionId !== mission._id) return false;
-    if (session.conversationId) return true;
-    return (
-        getAgentDefinition(mission.definitionId, mission.definitionVersion)
-            .completionTransport === "native_tool"
-    );
-}
-
-export function needsNativeSettlement(
-    mission: Doc<"agentMissions">,
-    session: Doc<"piSessions"> | null,
-) {
-    if (!session || !tracksNativeSettlement(mission, session)) return false;
-    if (session.settledSequence === session.sequence) return false;
-    return session.conversationId
-        ? ["completed", "cancelled"].includes(mission.status)
-        : mission.status === "completed";
-}
 
 const claimArgs = {
     missionId: v.id("agentMissions"),
     expectedGeneration: v.number(),
     writer: v.string(),
 };
-export const piLeaseValidator = v.object({
-    missionId: v.id("agentMissions"),
-    sessionId: v.id("piSessions"),
-    epoch: v.number(),
-    writer: v.string(),
-    generation: v.number(),
-});
 const leaseValidator = piLeaseValidator;
+
 export const claim = internalMutation({
     args: claimArgs,
     returns: leaseValidator,
@@ -144,7 +106,7 @@ export const claim = internalMutation({
                   ? 1
                   : 0)
             : 1;
-        const definition = getAgentDefinition(
+        const definition = getAgentAuthority(
             mission.definitionId,
             mission.definitionVersion,
         );
@@ -207,47 +169,6 @@ export const claim = internalMutation({
     },
 });
 
-export async function requirePiWriter(
-    ctx: QueryCtx,
-    lease: Infer<typeof leaseValidator>,
-    now?: number,
-) {
-    return writer(ctx, lease, now);
-}
-
-async function writer(
-    ctx: QueryCtx,
-    lease: Infer<typeof leaseValidator>,
-    now?: number,
-) {
-    const session = await ctx.db.get(lease.sessionId);
-    const mission = session ? await ctx.db.get(session.missionId) : null;
-    if (
-        !session ||
-        !mission ||
-        session.missionId !== lease.missionId ||
-        session.writer !== lease.writer ||
-        session.epoch !== lease.epoch ||
-        session.generation !== lease.generation ||
-        mission.generation !== lease.generation ||
-        (now !== undefined && session.leaseUntil <= now) ||
-        (mission.status === "cancelled" && !session.conversationId)
-    )
-        throw executionError("pi_writer_fenced");
-    if (
-        mission.status === "completed" ||
-        (mission.status === "cancelled" && session.conversationId)
-    )
-        await requireDossierAuthority(ctx, mission.runId);
-    else
-        await requireMissionObservationAuthority(
-            ctx,
-            session.missionId,
-            lease.generation,
-        );
-    return session;
-}
-
 async function controlConfirmation(
     ctx: QueryCtx,
     conversationId: Id<"agentConversations">,
@@ -295,7 +216,7 @@ export const pendingControlInputs = internalQuery({
         ),
     }),
     handler: async (ctx, lease) => {
-        const session = await writer(ctx, lease, Date.now());
+        const session = await requirePiWriter(ctx, lease, Date.now());
         if (!session.conversationId)
             throw executionError("native_conversation_required");
         const conversation = await ctx.db.get(session.conversationId);
@@ -343,7 +264,7 @@ export const recordControlInputs = internalMutation({
     },
     returns: v.null(),
     handler: async (ctx, args) => {
-        const session = await writer(ctx, args, Date.now());
+        const session = await requirePiWriter(ctx, args, Date.now());
         if (args.messageIds.length > 20)
             throw executionError("native_control_capacity");
         for (const id of args.messageIds) {
@@ -365,7 +286,7 @@ export const renew = internalMutation({
     args: leaseValidator.fields,
     returns: v.null(),
     handler: async (ctx, lease) => {
-        const session = await writer(ctx, lease, Date.now());
+        const session = await requirePiWriter(ctx, lease, Date.now());
         const mission = await ctx.db.get(session.missionId);
         if (!mission || !needsNativeSettlement(mission, session))
             await requireMissionAuthority(
@@ -395,7 +316,7 @@ export const publishPreview = internalMutation({
     },
     returns: v.boolean(),
     handler: async (ctx, args) => {
-        const session = await writer(ctx, args, Date.now());
+        const session = await requirePiWriter(ctx, args, Date.now());
         const invocation = await ctx.db.get(args.invocationId);
         const mission = await ctx.db.get(args.missionId);
         const turn = mission?.conversationTurnId
@@ -436,7 +357,7 @@ export const append = internalMutation({
     args: appendArgs,
     returns: v.number(),
     handler: async (ctx, args) => {
-        const session = await writer(ctx, args, Date.now());
+        const session = await requirePiWriter(ctx, args, Date.now());
         const previous = await ctx.db
             .query("piCommits")
             .withIndex("by_session_and_key", (q) =>
@@ -509,7 +430,7 @@ export const stageCommit = internalMutation({
     },
     returns: v.id("retainedTexts"),
     handler: async (ctx, args) => {
-        const session = await writer(ctx, args, Date.now());
+        const session = await requirePiWriter(ctx, args, Date.now());
         const key = `${session._id}:${args.key}`;
         const previous = await ctx.db
             .query("retainedTexts")
@@ -541,7 +462,7 @@ export const publishCommit = internalMutation({
     },
     returns: v.number(),
     handler: async (ctx, args) => {
-        const session = await writer(ctx, args, Date.now());
+        const session = await requirePiWriter(ctx, args, Date.now());
         const text = await completeRetainedText(ctx, args.textId);
         if (
             text.key !== `${session._id}:${args.key}` ||
@@ -594,7 +515,7 @@ export const readCommitFragment = internalQuery({
     },
     returns: v.object({ content: v.string(), manifest: textManifestValidator }),
     handler: async (ctx, args) => {
-        await writer(ctx, args);
+        await requirePiWriter(ctx, args);
         const text = await completeRetainedText(ctx, args.textId);
         if (!text.key.startsWith(`${args.sessionId}:`))
             throw executionError("pi_commit_invalid");
@@ -614,7 +535,7 @@ export const mint = internalMutation({
     args: leaseValidator.fields,
     returns: v.number(),
     handler: async (ctx, args) => {
-        const session = await writer(ctx, args, Date.now());
+        const session = await requirePiWriter(ctx, args, Date.now());
         if (!Number.isSafeInteger(session.nextId))
             throw executionError("pi_id_exhausted");
         await ctx.db.patch(session._id, { nextId: session.nextId + 1 });
@@ -625,9 +546,9 @@ export const mint = internalMutation({
 const findArgs = { ...leaseValidator.fields, key: v.string() };
 export const find = internalQuery({
     args: findArgs,
-    returns: v.union(schema.doc("piCommits"), v.null()),
+    returns: v.union(piCommitDocument, v.null()),
     handler: async (ctx, args) => {
-        await writer(ctx, args);
+        await requirePiWriter(ctx, args);
         return ctx.db
             .query("piCommits")
             .withIndex("by_session_and_key", (q) =>
@@ -639,9 +560,9 @@ export const find = internalQuery({
 
 export const scan = internalQuery({
     args: { ...leaseValidator.fields, paginationOpts: paginationOptsValidator },
-    returns: paginationResultValidator(schema.doc("piCommits")),
+    returns: paginationResultValidator(piCommitDocument),
     handler: async (ctx, args) => {
-        await writer(ctx, args);
+        await requirePiWriter(ctx, args);
         return ctx.db
             .query("piCommits")
             .withIndex("by_session_and_sequence", (q) =>
@@ -667,7 +588,7 @@ export const nativeInputFragment = internalQuery({
         sizeBytes: v.number(),
     }),
     handler: async (ctx, args) => {
-        const session = await writer(ctx, args, Date.now());
+        const session = await requirePiWriter(ctx, args, Date.now());
         const mission = await ctx.db.get(session.missionId);
         const delivery = await ctx.db.get(args.messageId);
         if (
@@ -728,7 +649,7 @@ export const inputSnapshot = internalMutation({
         anchor: v.union(v.string(), v.null()),
     }),
     handler: async (ctx, args) => {
-        const session = await writer(ctx, args, Date.now());
+        const session = await requirePiWriter(ctx, args, Date.now());
         const mission = await ctx.db.get(session.missionId);
         if (!mission) throw executionError("mission_unavailable");
         const inputs: Infer<typeof nativeInputsValidator> =
@@ -761,11 +682,13 @@ export const inputSnapshot = internalMutation({
             session.observationSequence === undefined &&
             !["completed", "cancelled"].includes(mission.status)
         ) {
-            const current = await buildMissionContext(
-                ctx,
-                mission._id,
-                args.generation,
-                true,
+            const current = await ctx.runQuery(
+                internal.execution.context.build,
+                {
+                    missionId: mission._id,
+                    expectedGeneration: args.generation,
+                    correctionAdmission: true,
+                },
             );
             if (current.kind !== "ready") throw executionError(current.code);
             const input = JSON.parse(current.inputJson);
@@ -802,10 +725,8 @@ export const pendingObservations = internalQuery({
             v.object({
                 eventId: v.id("agentExecutionEvents"),
                 sequence: v.number(),
-                topic: schema.tables.agentExecutionEvents.validator.fields
-                    .contextObservation.fields.topic,
-                actor: schema.tables.agentExecutionEvents.validator.fields
-                    .actor,
+                topic: nativeContextObservationValidator.fields.topic,
+                actor: executionEventActorValidator,
                 contentHash: v.string(),
                 sizeBytes: v.number(),
                 characters: v.number(),
@@ -815,7 +736,7 @@ export const pendingObservations = internalQuery({
         ),
     }),
     handler: async (ctx, args) => {
-        const session = await writer(ctx, args, Date.now());
+        const session = await requirePiWriter(ctx, args, Date.now());
         const mission = await ctx.db.get(session.missionId);
         if (!mission) throw executionError("mission_unavailable");
         const latest = await contextObservationSequence(ctx, mission.runId);
@@ -883,7 +804,7 @@ export const readObservationFragment = internalQuery({
     },
     returns: v.string(),
     handler: async (ctx, args) => {
-        const session = await writer(ctx, args, Date.now());
+        const session = await requirePiWriter(ctx, args, Date.now());
         const mission = await ctx.db.get(session.missionId);
         const event = await ctx.db.get(args.eventId);
         if (
@@ -912,7 +833,7 @@ export const recordObservationInput = internalMutation({
     },
     returns: v.null(),
     handler: async (ctx, args) => {
-        const session = await writer(ctx, args, Date.now());
+        const session = await requirePiWriter(ctx, args, Date.now());
         if (
             !Number.isSafeInteger(args.sequence) ||
             args.sequence < 0 ||
@@ -963,7 +884,7 @@ export const controlFrontier = internalQuery({
         v.null(),
     ),
     handler: async (ctx, args) => {
-        const session = await writer(ctx, args, Date.now());
+        const session = await requirePiWriter(ctx, args, Date.now());
         const mission = await ctx.db.get(session.missionId);
         if (!mission) throw executionError("mission_unavailable");
         const command = await latestNativeControl(ctx, mission.runId);

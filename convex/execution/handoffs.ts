@@ -1,21 +1,21 @@
 import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { internalMutation } from "@convex/_generated/server";
+import { requireInstructionVersion } from "@convex/execution/conversationCore";
+import {
+    suspendInterruptedResearch,
+    suspendResearchAtTimeLimit,
+} from "@convex/execution/researchControlCore";
 import { workflow } from "@convex/workflow";
 import { v } from "convex/values";
 import { getAgentDefinition } from "./agentCatalog";
 import { recordMissionEvent, requireMissionAuthority } from "./authority";
-import { requireInstructionVersion } from "./conversations";
 import { executionError, executionFailureCode } from "./errors";
 import {
     operationOutcomeValidator,
     requireSupportedMissionBackend,
 } from "./executionProtocol";
 import { isRecoverableInterruption } from "./missionData";
-import {
-    suspendInterruptedResearch,
-    suspendResearchAtTimeLimit,
-} from "./researchControl";
 
 /** Only an admitted business operation can grant a child mission; models never select a runtime. */
 export const startChild = internalMutation({

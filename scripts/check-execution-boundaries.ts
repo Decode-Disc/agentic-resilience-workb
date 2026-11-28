@@ -4,6 +4,141 @@ import { fileURLToPath } from "node:url";
 import * as ts from "typescript/unstable/ast";
 import { API } from "typescript/unstable/sync";
 
+const TIER1_MODULES = [
+    "convex/execution/piStore.ts",
+    "convex/execution/piControl.ts",
+    "convex/execution/providerCallReceipts.ts",
+];
+const TIER2_MODULES = [
+    "convex/execution/operations.ts",
+    "convex/execution/invocationLifecycle.ts",
+];
+const HEAVY_RUNTIME = [
+    "typebox",
+    "@sinclair/typebox",
+    "@earendil-works/pi-ai",
+    "@convex-dev/auth",
+];
+const TIER1_FORBIDDEN = [
+    ...HEAVY_RUNTIME,
+    "ai",
+    "zod",
+    "convex-helpers/server/zod4",
+];
+
+function valueDependency(node: ts.Node): string | undefined {
+    if (ts.isImportDeclaration(node)) {
+        const clause = node.importClause;
+        if (clause?.phaseModifier === ts.SyntaxKind.TypeKeyword) return;
+        const bindings = clause?.namedBindings;
+        if (
+            clause &&
+            !clause.name &&
+            bindings &&
+            ts.isNamedImports(bindings) &&
+            bindings.elements.length &&
+            bindings.elements.every((element) => element.isTypeOnly)
+        )
+            return;
+        if (ts.isStringLiteral(node.moduleSpecifier))
+            return node.moduleSpecifier.text;
+    }
+    if (
+        ts.isExportDeclaration(node) &&
+        !node.isTypeOnly &&
+        node.moduleSpecifier &&
+        ts.isStringLiteral(node.moduleSpecifier)
+    ) {
+        const clause = node.exportClause;
+        if (
+            clause &&
+            ts.isNamedExports(clause) &&
+            clause.elements.length &&
+            clause.elements.every((element) => element.isTypeOnly)
+        )
+            return;
+        return node.moduleSpecifier.text;
+    }
+    if (
+        ts.isCallExpression(node) &&
+        (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+            (ts.isIdentifier(node.expression) &&
+                node.expression.text === "require"))
+    ) {
+        const [specifier] = node.arguments;
+        if (specifier && ts.isStringLiteral(specifier)) return specifier.text;
+    }
+}
+
+type BoundaryFinding = {
+    file: string;
+    line: number;
+    rule: string;
+    message: string;
+};
+
+type ValueImport = { specifier: string; line: number };
+
+function checkTierImports(
+    root: string,
+    imports: ReadonlyMap<string, ValueImport[]>,
+) {
+    const findings: BoundaryFinding[] = [];
+    const tiers = [
+        { name: "Tier 1", modules: TIER1_MODULES, forbidden: TIER1_FORBIDDEN },
+        { name: "Tier 2", modules: TIER2_MODULES, forbidden: HEAVY_RUNTIME },
+    ];
+    for (const { name, modules, forbidden } of tiers)
+        for (const entry of modules) {
+            const visited = new Set<string>();
+            const walk = (
+                file: string,
+                chain: string[],
+                entryLine?: number,
+            ) => {
+                if (visited.has(file)) return;
+                visited.add(file);
+                for (const { specifier, line } of imports.get(file) ?? []) {
+                    const local = specifier.startsWith("@convex/")
+                        ? `convex/${specifier.slice(8)}`
+                        : specifier.startsWith(".")
+                          ? relative(
+                                root,
+                                resolve(root, dirname(file), specifier),
+                            ).replaceAll("\\", "/")
+                          : undefined;
+                    const target = local?.replace(/\.[cm]?js$/, ".ts");
+                    const path = target?.endsWith(".ts")
+                        ? target
+                        : target && `${target}.ts`;
+                    const next = [...chain, specifier];
+                    if (
+                        path === "convex/schema.ts" ||
+                        forbidden.some(
+                            (dependency) =>
+                                specifier === dependency ||
+                                specifier.startsWith(`${dependency}/`),
+                        )
+                    ) {
+                        findings.push({
+                            file: entry,
+                            line: entryLine ?? line,
+                            rule: "execution-import",
+                            message: `${name} runtime dependency: ${next.join(" -> ")}`,
+                        });
+                    } else if (path) {
+                        const resolved = imports.has(path)
+                            ? path
+                            : `${target}/index.ts`;
+                        walk(resolved, next, entryLine ?? line);
+                    }
+                }
+            };
+            walk(entry, []);
+        }
+    return findings;
+}
+
 const FIELD_OWNERS: Record<string, readonly string[]> = {
     progressKeys: ["operations", "missions"],
     noProgressTurns: ["missions", "invocationLifecycle"],
@@ -19,8 +154,8 @@ const TABLE_OWNERS: Record<string, readonly string[]> = {
     agentInvocationPayloads: ["journal"],
     retainedTexts: ["retainedText"],
     retainedTextFragments: ["retainedText"],
-    approvalRequests: ["approvals"],
-    approvalGrants: ["approvals"],
+    approvalRequests: ["approvals", "approvalCore"],
+    approvalGrants: ["approvals", "approvalCore"],
 };
 // These are the existing driver/transaction boundaries, not an exemption for all execution modules.
 const FUNCTION_OWNERS: Record<string, readonly string[]> = {
@@ -28,6 +163,7 @@ const FUNCTION_OWNERS: Record<string, readonly string[]> = {
     "execution.retainedText.stageRetainedText": [
         "missionData",
         "conversations",
+        "conversationCore",
         "journal",
         "piStore",
         "invocationLifecycle",
@@ -36,6 +172,9 @@ const FUNCTION_OWNERS: Record<string, readonly string[]> = {
     "execution.operations.persistOperationRequest": [
         "operations",
         "invocationLifecycle",
+    ],
+    "execution.operations.settleLocalRollback": [
+        "convex/integrations/piMission.ts",
     ],
     "execution.operations.settleDispatchFailure": ["operations"],
     "execution.progress.adoptProgress": ["operations"],
@@ -88,15 +227,11 @@ function enclosingBinding(
 /** Enforce supported AST write/reference patterns; runtime contracts remain mandatory for arbitrary JavaScript. */
 export function checkExecutionBoundaries(
     root: string,
-): readonly { file: string; line: number; rule: string; message: string }[] {
+): readonly BoundaryFinding[] {
     const files = [...sources(resolve(root, "convex"))];
     const api = new API({ cwd: root });
-    const findings: {
-        file: string;
-        line: number;
-        rule: string;
-        message: string;
-    }[] = [];
+    const findings: BoundaryFinding[] = [];
+    const imports = new Map<string, ValueImport[]>();
     try {
         const snapshot = api.updateSnapshot({ openFiles: files });
         for (const path of files) {
@@ -104,9 +239,20 @@ export function checkExecutionBoundaries(
             const source = project?.program.getSourceFile(path);
             if (!source || !project) throw new Error(`Cannot parse ${path}`);
             const file = relative(root, path).replaceAll("\\", "/");
+            const currentImports: ValueImport[] = [];
+            imports.set(file, currentImports);
             const identifiers: ts.Identifier[] = [];
             const collectIdentifiers = (node: ts.Node) => {
                 if (ts.isIdentifier(node)) identifiers.push(node);
+                const specifier = valueDependency(node);
+                if (specifier)
+                    currentImports.push({
+                        specifier,
+                        line:
+                            source.getLineAndCharacterOfPosition(
+                                node.getStart(source),
+                            ).line + 1,
+                    });
                 node.forEachChild(collectIdentifiers);
             };
             collectIdentifiers(source);
@@ -256,7 +402,13 @@ export function checkExecutionBoundaries(
             };
             register(source);
             const permitted = (owners: readonly string[] | undefined) =>
-                owners?.some((name) => file === executionFile(name)) ?? false;
+                owners?.some(
+                    (name) =>
+                        file ===
+                        (name.startsWith("convex/")
+                            ? name
+                            : executionFile(name)),
+                ) ?? false;
             const visit = (node: ts.Node) => {
                 const name = chain(node)
                     ?.replace(/^internal\./, "")
@@ -284,7 +436,7 @@ export function checkExecutionBoundaries(
                     !permitted([
                         "operations",
                         "history",
-                        "schema",
+                        "tableValidators",
                         "executionProtocol",
                     ])
                 )
@@ -405,7 +557,7 @@ export function checkExecutionBoundaries(
                                     typeText.includes(
                                         '"agentExecutionEvents"',
                                     ) &&
-                                    !permitted(["journal"])
+                                    !permitted(["journal", "journalPayloads"])
                                 )
                                     report(
                                         property,
@@ -422,7 +574,7 @@ export function checkExecutionBoundaries(
     } finally {
         api.close();
     }
-    return findings;
+    return [...findings, ...checkTierImports(root, imports)];
 }
 if (
     process.argv[1] &&

@@ -5,7 +5,7 @@ import { type ActionCtx, internalAction } from "@convex/_generated/server";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import { preparationFailureCode } from "@convex/domain/sourcePreparationAuthority";
 import { SOURCES_RESOURCE_LIMIT_CODES } from "@convex/domain/sources";
-import { consultableSourceResult } from "@convex/domain/sourcesContracts";
+import { consultableSourceResult } from "@convex/domain/sourcesOperationResults";
 import {
     executionFailureCode,
     executionFailureValidation,

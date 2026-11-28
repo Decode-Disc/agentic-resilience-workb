@@ -132,3 +132,17 @@ export async function requireBrowserTestRunOwner(
         throw new Error("Admitted anonymous browser test visitor required");
     return verified;
 }
+
+/** Namespace membership is shared by projections and authorization, never inferred in React. */
+export function runMatchesWorkspace(
+    run: Doc<"researchRuns">,
+    workspace: Awaited<ReturnType<typeof workspaceForVisitor>>,
+) {
+    const purpose = run.purpose;
+    return (
+        purpose === workspace.purpose &&
+        (purpose !== "browser_test" ||
+            (!!workspace.contextId &&
+                run.browserTestContextId === workspace.contextId))
+    );
+}

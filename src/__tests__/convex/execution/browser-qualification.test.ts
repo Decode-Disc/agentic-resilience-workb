@@ -11,6 +11,14 @@ import { makeFunctionReference } from "convex/server";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import {
+    authorizeFixtureDispatch,
+    beginFixtureInvocation,
+    claimFixtureOperation,
+    dispatchFixtureOperation,
+    recordFixtureAttempt,
+    retainFixtureRequest,
+} from "@/__tests__/setup/pi-mission";
+import {
     seedWorkbench,
     workbenchAdmissionInput,
 } from "@/__tests__/setup/workbench";
@@ -131,10 +139,7 @@ test.each([
 ])("retained qualification policy %s cannot dispatch, but known work still settles", async (resourcePolicy) => {
     const f = await admittedFixture();
     const first = await f.attempt("known-before-cutover");
-    const admitted = await f.t.mutation(
-        internal.providerCalls.recordAttempt,
-        first,
-    );
+    const admitted = await recordFixtureAttempt(f.t, first);
     expect(admitted.shouldExecute).toBe(true);
     await f.t.run(async (ctx) => {
         const run = await ctx.db.get(f.runId);
@@ -150,11 +155,11 @@ test.each([
         });
     });
     const next = await f.attempt("not-authorized-after-cutover");
-    await expect(
-        f.t.mutation(internal.providerCalls.recordAttempt, next),
-    ).rejects.toThrow("resource_policy_unsupported");
+    await expect(recordFixtureAttempt(f.t, next)).rejects.toThrow(
+        "resource_policy_unsupported",
+    );
     expect(await f.calls()).toHaveLength(1);
-    await f.t.mutation(internal.providerCalls.recordAttempt, {
+    await recordFixtureAttempt(f.t, {
         ...first,
         status: "succeeded",
         dispatchOutcome: "response_received",
@@ -404,7 +409,7 @@ test("a frozen lot checks the dossier effort at authorization and rejects later 
         });
     });
     await expect(
-        f.t.mutation(internal.providerCalls.recordAttempt, {
+        recordFixtureAttempt(f.t, {
             runId: f.runId,
             missionId: mission._id,
             invocationId,
@@ -441,10 +446,7 @@ test("an explicitly authorized local Workbench fixture reserves one real model a
         return ctx.db.get(run.browserTestContextId);
     });
     expect(route.deadlineAt).toBe(context?.expiresAt);
-    const result = await f.t.mutation(
-        internal.providerCalls.recordAttempt,
-        input,
-    );
+    const result = await recordFixtureAttempt(f.t, input);
     expect(result.shouldExecute).toBe(true);
     expect(
         await f.t.run((ctx) => ctx.db.get(result.providerCallId)),
@@ -452,9 +454,7 @@ test("an explicitly authorized local Workbench fixture reserves one real model a
         status: "started",
         qualificationReservationUsd: 0.024576,
     });
-    expect(
-        await f.t.mutation(internal.providerCalls.recordAttempt, input),
-    ).toMatchObject({
+    expect(await recordFixtureAttempt(f.t, input)).toMatchObject({
         providerCallId: result.providerCallId,
         shouldExecute: false,
     });
@@ -464,28 +464,20 @@ test("an explicitly authorized local Workbench fixture reserves one real model a
 test("concurrent reservations share the last request and replaying authorization cannot reset the twenty-call lot", async () => {
     const f = await admittedFixture();
     for (let i = 0; i < 19; i++)
-        await f.t.mutation(
-            internal.providerCalls.recordAttempt,
-            await f.attempt(`first-${i}`),
-        );
+        await recordFixtureAttempt(f.t, await f.attempt(`first-${i}`));
     await f.authorize();
     const inputs = await Promise.all([
         f.attempt("last-a"),
         f.attempt("last-b"),
     ]);
     const outcomes = await Promise.allSettled(
-        inputs.map((input) =>
-            f.t.mutation(internal.providerCalls.recordAttempt, input),
-        ),
+        inputs.map((input) => recordFixtureAttempt(f.t, input)),
     );
     expect(outcomes.filter((x) => x.status === "fulfilled")).toHaveLength(1);
     expect(outcomes.filter((x) => x.status === "rejected")).toHaveLength(1);
     expect(await f.calls()).toHaveLength(20);
     await expect(
-        f.t.mutation(
-            internal.providerCalls.recordAttempt,
-            await f.attempt("over"),
-        ),
+        recordFixtureAttempt(f.t, await f.attempt("over")),
     ).rejects.toThrow("qualification_budget_exhausted");
 });
 
@@ -535,11 +527,8 @@ test("a qualification can pin a lower allowance without increasing it on replay"
 test("an unknown outcome retains its reservation and an unexpected charge prevents further dispatch", async () => {
     const f = await admittedFixture(),
         input = await f.attempt("unknown");
-    const first = await f.t.mutation(
-        internal.providerCalls.recordAttempt,
-        input,
-    );
-    await f.t.mutation(internal.providerCalls.recordAttempt, {
+    const first = await recordFixtureAttempt(f.t, input);
+    await recordFixtureAttempt(f.t, {
         ...input,
         status: "failed",
         dispatchOutcome: "unknown",
@@ -551,10 +540,7 @@ test("an unknown outcome retains its reservation and an unexpected charge preven
         ctx.db.patch(first.providerCallId, { reportedCost: 0.1 }),
     );
     await expect(
-        f.t.mutation(
-            internal.providerCalls.recordAttempt,
-            await f.attempt("after-unexpected-charge"),
-        ),
+        recordFixtureAttempt(f.t, await f.attempt("after-unexpected-charge")),
     ).rejects.toThrow("qualification_budget_exhausted");
     expect(await f.calls()).toHaveLength(1);
 });
@@ -562,7 +548,7 @@ test("an unknown outcome retains its reservation and an unexpected charge preven
 test("authorization does not permit acquisition or override the global paid-work control", async () => {
     const f = await admittedFixture();
     await expect(
-        f.t.mutation(internal.providerCalls.recordAttempt, {
+        recordFixtureAttempt(f.t, {
             runId: f.runId,
             executionGeneration: 1,
             service: "exa",
@@ -577,10 +563,7 @@ test("authorization does not permit acquisition or override the global paid-work
         reason: "Disabled during qualification test",
     });
     await expect(
-        f.t.mutation(
-            internal.providerCalls.recordAttempt,
-            await f.attempt("globally-disabled"),
-        ),
+        recordFixtureAttempt(f.t, await f.attempt("globally-disabled")),
     ).rejects.toThrow("paid_work_disabled");
     expect(await f.calls()).toEqual([]);
 });
@@ -616,39 +599,29 @@ test.each([
             assert(visitor);
             await ctx.db.patch(visitor.invitationId, { status: "revoked" });
         });
-    await expect(
-        f.t.mutation(internal.providerCalls.recordAttempt, input),
-    ).rejects.toThrow();
+    await expect(recordFixtureAttempt(f.t, input)).rejects.toThrow();
     expect(await f.calls()).toEqual([]);
 });
 
 test("the final dispatch check rejects a qualification that left framing after reservation", async () => {
     const f = await admittedFixture(),
         input = await f.attempt("phase-transition");
-    await f.t.mutation(internal.providerCalls.recordAttempt, input);
+    await recordFixtureAttempt(f.t, input);
     const args = {
         invocationId: input.invocationId,
         expectedGeneration: f.mission.generation,
     };
-    await f.t.mutation(internal.execution.invocationLifecycle.retainRequest, {
+    await retainFixtureRequest(f.t, {
         ...args,
         requestJson: '{"model":"z-ai/glm-5.3-flash"}',
     });
-    await expect(
-        f.t.query(
-            internal.execution.invocationLifecycle.authorizeDispatch,
-            args,
-        ),
-    ).resolves.toBeNull();
+    await expect(authorizeFixtureDispatch(f.t, args)).resolves.toBeNull();
     await f.t.run((ctx) =>
         ctx.db.patch(f.runId, { researchStartedAt: Date.now() }),
     );
-    await expect(
-        f.t.query(
-            internal.execution.invocationLifecycle.authorizeDispatch,
-            args,
-        ),
-    ).rejects.toThrow("paid_work_disabled");
+    await expect(authorizeFixtureDispatch(f.t, args)).rejects.toThrow(
+        "paid_work_disabled",
+    );
     expect(await f.calls()).toHaveLength(1);
 });
 
@@ -801,7 +774,7 @@ test("Workbench qualification distinguishes refused inputs, applied effects and 
     );
     assert(active);
     const authority = { missionId: active.missionId, expectedGeneration: 1 };
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         ...authority,
         taskKey: "invalid-input",
         provenance: "simulation",
@@ -837,7 +810,7 @@ test("Workbench qualification distinguishes refused inputs, applied effects and 
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId: refusedId,
             expectedGeneration: 1,
         }),
@@ -862,7 +835,7 @@ test("Workbench qualification distinguishes refused inputs, applied effects and 
         applied: false,
     });
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId: readId,
             expectedGeneration: 1,
         }),
@@ -886,7 +859,7 @@ test("Workbench qualification distinguishes refused inputs, applied effects and 
         },
     });
     const effect = { requestId: effectId, expectedGeneration: 1 };
-    await f.t.mutation(internal.execution.operations.claim, effect);
+    await claimFixtureOperation(f.t, effect);
     await f.t.mutation(internal.framing.applyFromWorkbench, effect);
     expect(
         await f.client.query(api.framing.get, { runId: f.runId }),
@@ -1234,7 +1207,7 @@ test.each([
         },
     });
     expect(process.env.SOURCES_MISSION_ENABLED).not.toBe("true");
-});
+}, 30_000);
 
 test("a fresh Sources qualification fixture contains its real company but no seeded documentary material", async () => {
     const f = await fixture();

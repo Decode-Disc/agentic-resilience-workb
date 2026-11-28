@@ -10,6 +10,10 @@ import {
 } from "convex/server";
 import { convexTest } from "convex-test";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import {
+    claimFixtureOperation,
+    dispatchFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 import rateLimiterTest from "./rate-limiter-test-register.js";
@@ -1239,7 +1243,7 @@ test.each([
             },
         });
         expect(
-            await t.action(internal.execution.operations.dispatch, {
+            await dispatchFixtureOperation(t, {
                 requestId: searchId,
                 expectedGeneration: 1,
             }),
@@ -1264,9 +1268,9 @@ test.each([
         input,
     });
     const args = { requestId, expectedGeneration: 1 };
-    expect(
-        await t.mutation(internal.execution.operations.claim, args),
-    ).toMatchObject({ kind: "execute" });
+    expect(await claimFixtureOperation(t, args)).toMatchObject({
+        kind: "execute",
+    });
 
     const registered = executePublicContext as typeof executePublicContext & {
         _handler(

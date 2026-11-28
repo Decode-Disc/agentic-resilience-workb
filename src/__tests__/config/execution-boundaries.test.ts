@@ -102,3 +102,46 @@ test("the real architecture checker rejects aliases, protected writes and privat
         rmSync(root, { recursive: true, force: true });
     }
 });
+
+test("execution import tiers distinguish heavy dependencies, runtime Zod, and type imports", async () => {
+    const { checkExecutionBoundaries } = await import(
+        /* @vite-ignore */ pathToFileURL(
+            resolve("scripts/check-execution-boundaries.ts"),
+        ).href
+    );
+    const root = mkdtempSync(join(tmpdir(), "execution-imports-"));
+    try {
+        mkdirSync(join(root, "convex/execution"), { recursive: true });
+        writeFileSync(join(root, "tsconfig.json"), "{}");
+        writeFileSync(
+            join(root, "convex/execution/piStore.ts"),
+            'export { value } from "./bridge"; import type { ZodType } from "zod";',
+        );
+        writeFileSync(
+            join(root, "convex/execution/bridge.ts"),
+            'export { type ZodType, z as value } from "zod";',
+        );
+        writeFileSync(
+            join(root, "convex/execution/operations.ts"),
+            'import "./tier2"; import { z } from "zod"; export const runtime = z;',
+        );
+        writeFileSync(
+            join(root, "convex/execution/tier2.ts"),
+            'export { Type } from "@earendil-works/pi-ai"; import type { Doc } from "@convex/schema";',
+        );
+        expect(checkExecutionBoundaries(root)).toEqual([
+            expect.objectContaining({
+                file: "convex/execution/piStore.ts",
+                rule: "execution-import",
+                message: expect.stringMatching(/bridge.*zod/),
+            }),
+            expect.objectContaining({
+                file: "convex/execution/operations.ts",
+                rule: "execution-import",
+                message: expect.stringMatching(/tier2.*pi-ai/),
+            }),
+        ]);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});

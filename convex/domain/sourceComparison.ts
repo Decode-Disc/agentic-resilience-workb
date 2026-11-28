@@ -1,4 +1,5 @@
 import { sha256Hex } from "@convex/domain/sourcePassages";
+import { retrievalMetadataSchema } from "@convex/domain/sourceRetrievalResult";
 import {
     SOURCE_COMPARISON_MAX_AGGREGATE_CAPTURE_BYTES as MAX_AGGREGATE_CAPTURE_BYTES,
     MAX_NORMALIZED_ARTIFACT_BYTES,
@@ -22,7 +23,6 @@ import {
 import {
     compareSourcePassageRanks,
     fuseRetrievalRanks,
-    retrievalMetadataSchema,
     type retrievalMetadataValidator,
     type SourcePassageRankIdentity,
 } from "./sourceRetrievalPolicy";

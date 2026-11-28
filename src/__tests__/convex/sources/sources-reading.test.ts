@@ -6,6 +6,7 @@ import {
 import { extractObservedDestinations } from "@convex/integrations/evidenceNormalization";
 import { approvedPassagesForMission } from "@convex/sourceRetrieval";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import { dispatchFixtureOperation } from "@/__tests__/setup/pi-mission";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 
 afterEach(() => vi.restoreAllMocks());
@@ -105,7 +106,7 @@ test("a retained operation result without capture omission metadata remains usab
             },
         },
     );
-    const current = await f.t.action(internal.execution.operations.dispatch, {
+    const current = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -126,7 +127,7 @@ test("a retained operation result without capture omission metadata remains usab
         }),
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         }),
@@ -162,7 +163,7 @@ test.each([
               });
     const reads = vi.spyOn(Blob.prototype, "text");
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         }),
@@ -202,7 +203,7 @@ test("a historical successful blank search cannot establish an examined gap", as
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         }),
@@ -363,7 +364,7 @@ test("shared reading stays usable when the capture contains large observed desti
             },
         },
     );
-    const outcome = await f.t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });

@@ -1,6 +1,7 @@
 import { api, internal } from "@convex/_generated/api";
 import { afterEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
+import { dispatchFixtureOperation } from "@/__tests__/setup/pi-mission";
 import { seedSourcePreparation } from "@/__tests__/setup/source-preparation";
 
 afterEach(() => {
@@ -99,7 +100,7 @@ test("Workbench cannot start documentary preparation while qualification is disa
         },
     });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 1,
         }),

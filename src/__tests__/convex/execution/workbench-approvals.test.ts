@@ -11,6 +11,12 @@ import { buildMissionContext } from "@convex/execution/context";
 import { BROWSER_TEST_SLOT } from "@convex/runWorkspace";
 import { afterEach, assert, beforeEach, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
+import {
+    beginFixtureInvocation,
+    claimFixtureOperation,
+    dispatchFixtureOperation,
+    recordFixtureAttempt,
+} from "@/__tests__/setup/pi-mission";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 import {
     readConversationPageWithBodies,
@@ -118,7 +124,7 @@ test("an exact command applies the action and records an approved request", asyn
             messageId,
         },
     });
-    const outcome = await t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -174,7 +180,7 @@ test("an exact command applies the action and records an approved request", asyn
             ).nativeObservations?.controlSequence ?? 0
         );
     });
-    const invocation = await t.mutation(internal.execution.invocations.begin, {
+    const invocation = await beginFixtureInvocation(t, {
         missionId: active.missionId,
         expectedGeneration: 1,
         taskKey: "confirm-pause",
@@ -201,11 +207,11 @@ test("an exact command applies the action and records an approved request", asyn
         attempt: 1,
         inputHash: sha256Hex(invocation.inputJson),
     };
-    await t.mutation(internal.providerCalls.recordAttempt, {
+    await recordFixtureAttempt(t, {
         ...attempt,
         status: "started",
     });
-    await t.mutation(internal.providerCalls.recordAttempt, {
+    await recordFixtureAttempt(t, {
         ...attempt,
         status: "succeeded",
         dispatchOutcome: "response_received",
@@ -245,7 +251,7 @@ test("an interpreted request creates a pending approval instead of acting", asyn
             messageId,
         },
     });
-    const outcome = await t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -331,7 +337,7 @@ test("asking about a pending system decision shows the same request again", asyn
             },
         },
     );
-    const outcome = await f.t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -441,7 +447,7 @@ test("an active grant applies the interpreted request", async () => {
             messageId,
         },
     });
-    const outcome = await t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -482,7 +488,7 @@ test("an unavailable action creates no request", async () => {
             messageId,
         },
     });
-    const outcome = await t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -627,7 +633,7 @@ test.each([
             messageId,
         },
     });
-    await t.mutation(internal.execution.operations.claim, {
+    await claimFixtureOperation(t, {
         requestId: pauseReqId,
         expectedGeneration: 1,
     });
@@ -637,7 +643,7 @@ test.each([
     });
     await t.mutation(internal.execution.researchControl.checkpoint, { runId });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId: pauseReqId,
             expectedGeneration: 1,
         }),
@@ -671,7 +677,7 @@ test.each([
             },
         },
     );
-    await t.mutation(internal.execution.operations.claim, {
+    await claimFixtureOperation(t, {
         requestId: resumeReqId,
         expectedGeneration: 1,
     });
@@ -685,7 +691,7 @@ test.each([
         expectedGeneration: 1,
     });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId: resumeReqId,
             expectedGeneration: 1,
         }),
@@ -720,7 +726,7 @@ test("an undispatched approval operation is refused after a later analyst checkp
     });
     await t.mutation(internal.execution.researchControl.checkpoint, { runId });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId: staleReqId,
             expectedGeneration: 1,
         }),

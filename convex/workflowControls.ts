@@ -1,5 +1,5 @@
 import { recordContextObservation } from "@convex/execution/journal";
-import { recordResearchObservation } from "@convex/execution/researchControl";
+import { recordResearchObservation } from "@convex/execution/researchControlCore";
 import type { WorkflowId } from "@convex-dev/workflow";
 import { v } from "convex/values";
 import { internalMutation, mutation } from "./_generated/server";

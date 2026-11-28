@@ -8,6 +8,12 @@ import { commonOperations } from "@convex/execution/commonOperations";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedHistoryMission } from "@/__tests__/setup/execution-history";
 import {
+    beginFixtureInvocation,
+    claimFixtureOperation,
+    claimFixturePiLease,
+    dispatchFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
+import {
     seedInspectedEvidence,
     startRetainedInspection,
 } from "@/__tests__/setup/source-preparation";
@@ -44,7 +50,7 @@ test("a pure read failure is retained as an incident without stranding the reque
             input: { kind: "consult_run_state" },
         },
     );
-    const outcome = await f.t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -141,7 +147,7 @@ test("a confirmed framing effect survives a lost action acknowledgement without 
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -150,7 +156,7 @@ test("a confirmed framing effect survives a lost action acknowledgement without 
         await f.client.query(api.framing.get, { runId: f.runId }),
     ).toMatchObject({ revision: 2, content: { scope: "Payments workflow" } });
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -173,6 +179,7 @@ test("an unconfirmed durable action is unknown immediately and is never blindly 
         requestKey: "uncertain",
         expectedGeneration: 4,
     });
+    const piLease = await claimFixturePiLease(t, missionId, 4);
     const operation = getAgentDefinition("saved_material_inspection_v1")
         .operations.read_in_context;
     assert(operation?.effectKind === "durable_effect" && operation.execute);
@@ -195,7 +202,8 @@ test("an unconfirmed durable action is unknown immediately and is never blindly 
         input: { kind: "read_in_context", sourceId, passageOrder: 0 },
     });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
+            piLease,
             requestId,
             expectedGeneration: 4,
         }),
@@ -209,7 +217,8 @@ test("an unconfirmed durable action is unknown immediately and is never blindly 
         progressKeys: [],
     });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
+            piLease,
             requestId,
             expectedGeneration: 4,
         }),
@@ -236,7 +245,7 @@ test("authority lost during a read refuses adoption and preserves a recorded obs
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -264,7 +273,7 @@ test("expiry still recovers an unacknowledged settlement and retains a late obse
         },
     );
     expect(
-        await f.t.mutation(internal.execution.operations.claim, {
+        await claimFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -355,7 +364,7 @@ test("expiry retains a confirmed effect after a crash instead of labelling its o
             },
         },
     );
-    await f.t.mutation(internal.execution.operations.claim, {
+    await claimFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -417,7 +426,7 @@ test("native dispatch persists exact retained reading once and continuation rece
         status: "pending",
         actor: "system",
     });
-    const outcome = await t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -432,12 +441,12 @@ test("native dispatch persists exact retained reading once and continuation rece
         await t.mutation(internal.execution.operations.enqueue, request),
     ).toBe(requestId);
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 4,
         }),
     ).toEqual(outcome);
-    const next = await t.mutation(internal.execution.invocations.begin, {
+    const next = await beginFixtureInvocation(t, {
         missionId,
         expectedGeneration: 4,
         taskKey: "after-reading",
@@ -492,7 +501,7 @@ test("a source refusal after admission is retained and prevents cached result re
         input: { kind: "read_in_context", sourceId, passageOrder: 0 },
     });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 4,
         }),
@@ -511,12 +520,12 @@ test("a source refusal after admission is retained and prevents cached result re
         await ctx.db.patch(decision.latestDecisionId, { decision: "rejected" });
     });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 4,
         }),
     ).toMatchObject({ kind: "refused", code: "source_not_approved" });
-    const invocation = await t.mutation(internal.execution.invocations.begin, {
+    const invocation = await beginFixtureInvocation(t, {
         missionId,
         expectedGeneration: 4,
         taskKey: "complete-revoked",
@@ -540,7 +549,8 @@ test("every mixed batch request has a persisted outcome and later dispatch reche
         requestKey: "mixed-batch",
         expectedGeneration: 4,
     });
-    const invocation = await t.mutation(internal.execution.invocations.begin, {
+    const piLease = await claimFixturePiLease(t, missionId, 4);
+    const invocation = await beginFixtureInvocation(t, {
         missionId,
         expectedGeneration: 4,
         taskKey: "batch",
@@ -583,14 +593,16 @@ test("every mixed batch request has a persisted outcome and later dispatch reche
         outcome: { kind: "refused", code: "invalid_operation_input" },
     });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
+            piLease,
             requestId: readId,
             expectedGeneration: 4,
         }),
     ).toMatchObject({ kind: "success" });
     await t.run((ctx) => ctx.db.patch(args.runId, { executionGeneration: 5 }));
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
+            piLease,
             requestId: consultId,
             expectedGeneration: 4,
         }),
@@ -633,4 +645,239 @@ test.each(
         kind: "refused",
         code: "stale_execution",
     });
+});
+
+test("transactional consultation records its result without scheduling a separate settlement", async () => {
+    const { t, missionId } = await seedHistoryMission();
+    const expectedGeneration = 1;
+    const requestId = await t.mutation(internal.execution.operations.enqueue, {
+        missionId,
+        expectedGeneration,
+        cause: "local-consult",
+        input: { kind: "consult_run_state" },
+    });
+    const args = {
+        requestId,
+        expectedGeneration,
+        piLease: await claimFixturePiLease(t, missionId, expectedGeneration),
+    };
+    const result = await t.mutation(
+        internal.execution.operations.executeLocal,
+        args,
+    );
+    expect(result).toMatchObject({ kind: "success" });
+    expect(await t.run((ctx) => ctx.db.get(requestId))).toMatchObject({
+        status: "completed",
+        outcome: result,
+    });
+    const retained = await t.run((ctx) => ctx.db.get(requestId));
+    expect(retained?.expiryJobId).toBeUndefined();
+    expect(retained?.waitEventId).toBeUndefined();
+    expect(
+        await t.mutation(internal.execution.operations.executeLocal, args),
+    ).toEqual(result);
+});
+
+test("local history reads settle both a cursor refusal and a corrupt retained pin", async () => {
+    const { t, missionId } = await seedHistoryMission();
+    const expectedGeneration = 1;
+    const piLease = await claimFixturePiLease(t, missionId, expectedGeneration);
+    const enqueue = (cursor?: string) =>
+        t.mutation(internal.execution.operations.enqueue, {
+            missionId,
+            expectedGeneration,
+            cause: cursor ?? "retained-history",
+            input: { kind: "consult_mission_state", cursor },
+        });
+    const refusedId = await enqueue("invalid-cursor");
+    const refusal = await t.mutation(
+        internal.execution.operations.executeLocal,
+        {
+            requestId: refusedId,
+            expectedGeneration,
+            piLease,
+        },
+    );
+    expect(refusal).toEqual({
+        kind: "refused",
+        code: "history_cursor_invalid",
+    });
+    expect(await t.run((ctx) => ctx.db.get(refusedId))).toMatchObject({
+        status: "completed",
+        outcome: refusal,
+    });
+
+    const corruptId = await enqueue();
+    await t.run(async (ctx) => {
+        const request = await ctx.db.get(corruptId);
+        assert(request?.pin?.kind === "history_read" && request.pin.frontier);
+        await ctx.db.patch(corruptId, {
+            pin: { ...request.pin, frontier: undefined },
+        });
+    });
+    const outcome = await t.mutation(
+        internal.execution.operations.executeLocal,
+        {
+            requestId: corruptId,
+            expectedGeneration,
+            piLease,
+        },
+    );
+    expect(outcome).toEqual({
+        kind: "unavailable",
+        code: "operation_execution_failed",
+    });
+    expect(await t.run((ctx) => ctx.db.get(corruptId))).toMatchObject({
+        status: "completed",
+        outcome,
+    });
+    const incidents = await t.run((ctx) =>
+        ctx.db
+            .query("agentExecutionEvents")
+            .withIndex("by_mission_and_kind", (q) =>
+                q
+                    .eq("missionId", missionId)
+                    .eq("kind", "operation_execution_incident"),
+            )
+            .collect(),
+    );
+    expect(incidents).toMatchObject([
+        {
+            requestId: corruptId,
+            protectedDiagnostic: { phase: "read_callback" },
+        },
+    ]);
+});
+
+test("local rollback recovery preserves a known failure without marking the operation unknown", async () => {
+    const { t, missionId } = await seedHistoryMission();
+    const expectedGeneration = 1;
+    const requestId = await t.mutation(internal.execution.operations.enqueue, {
+        missionId,
+        expectedGeneration,
+        cause: "local-rollback",
+        input: { kind: "consult_run_state" },
+    });
+    const args = {
+        requestId,
+        expectedGeneration,
+        piLease: await claimFixturePiLease(t, missionId, expectedGeneration),
+    };
+    const outcome = await t.mutation(
+        internal.execution.operations.settleLocalRollback,
+        args,
+    );
+    expect(outcome).toEqual({
+        kind: "unavailable",
+        code: "operation_execution_failed",
+    });
+    expect(await t.run((ctx) => ctx.db.get(requestId))).toMatchObject({
+        status: "completed",
+        knownNotDispatched: true,
+        outcome,
+    });
+    expect(
+        await t.mutation(
+            internal.execution.operations.settleLocalRollback,
+            args,
+        ),
+    ).toEqual(outcome);
+});
+
+test("a framing write and its receipt roll back together before failure settlement", async () => {
+    const f = await seedWorkbench(true);
+    const active = await f.t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId: f.runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: false,
+        },
+    );
+    assert(active);
+    const message = await f.t.run(async (ctx) =>
+        (
+            await ctx.db
+                .query("agentMessageDeliveries")
+                .withIndex("by_turn", (q) => q.eq("turnId", active.turnId))
+                .take(64)
+        ).find((row) => row.role === "user"),
+    );
+    assert(message);
+    const piLease = await claimFixturePiLease(f.t, active.missionId, 1);
+    const enqueue = (
+        cause: string,
+        eventBasis?: { kind: "analyst"; excerpt: string },
+    ) =>
+        f.t.mutation(internal.execution.operations.enqueue, {
+            missionId: active.missionId,
+            expectedGeneration: 1,
+            cause,
+            input: {
+                kind: "adjust_framing",
+                messageId: message._id,
+                expectedRevision: 1,
+                content: { scope: "Payments workflow", questions: [] },
+                eventBasis,
+            },
+        });
+    const refusedId = await enqueue("invalid-framing-excerpt", {
+        kind: "analyst",
+        excerpt: "This text was never in the active instruction.",
+    });
+    const refusal = await f.t.mutation(
+        internal.execution.operations.executeLocal,
+        {
+            requestId: refusedId,
+            expectedGeneration: 1,
+            piLease,
+        },
+    );
+    expect(refusal).toMatchObject({
+        kind: "refused",
+        code: "framing_event_basis_invalid",
+    });
+    expect(await f.t.run((ctx) => ctx.db.get(refusedId))).toMatchObject({
+        status: "completed",
+        outcome: refusal,
+    });
+    expect(
+        await f.client.query(api.framing.get, { runId: f.runId }),
+    ).toMatchObject({ revision: 1 });
+    const requestId = await enqueue("rolled-back-framing");
+    const args = { requestId, expectedGeneration: 1, piLease };
+    await expect(
+        f.t.run(async (ctx) => {
+            const outcome = await ctx.runMutation(
+                internal.execution.operations.executeLocal,
+                args,
+            );
+            expect(outcome).toMatchObject({ kind: "success" });
+            expect(await ctx.db.get(requestId)).toMatchObject({
+                status: "completed",
+                effect: { outcome },
+                outcome,
+            });
+            throw new Error("abort after effect and receipt");
+        }),
+    ).rejects.toThrow("abort after effect and receipt");
+    expect(
+        await f.client.query(api.framing.get, { runId: f.runId }),
+    ).toMatchObject({ revision: 1 });
+    const rolledBack = await f.t.run((ctx) => ctx.db.get(requestId));
+    expect(rolledBack?.status).toBe("pending");
+    expect(rolledBack?.effect).toBeUndefined();
+    expect(
+        await f.t.mutation(
+            internal.execution.operations.settleLocalRollback,
+            args,
+        ),
+    ).toEqual({
+        kind: "unavailable",
+        code: "operation_execution_failed",
+    });
+    expect(
+        await f.client.query(api.framing.get, { runId: f.runId }),
+    ).toMatchObject({ revision: 1 });
 });

@@ -17,9 +17,9 @@ Hot-path Tier 1 Convex execution mutations (`piStore`, `piControl`, `providerCal
 
 - [ ] Phase 1: Isolate Tier 1 V8 hot-path mutations (`piStore`, `piControl`, `providerCallReceipts`) and enforce Tier 1 static boundaries
 - [ ] Phase 2: Isolate Tier 2 V8 execution modules (`operations`, `invocationLifecycle`) and enforce Tier 2 static boundaries
-- [ ] Phase 3: Enforce `piLease` across all four paid/mutating boundaries and batch `invokeAgentModel` pre-call reads
-- [ ] Phase 4: Deduplicate `piMission` turn preparation and add atomic `operations.executeLocal` + `settleLocalRollback`
-- [ ] Phase 5: Add `piResultWakeVersion` + `adoptedWakeCount` bounded in-slice wait for fast background operations
+- [x] Phase 3: Enforce `piLease` across all four paid/mutating boundaries and batch `invokeAgentModel` pre-call reads
+- [x] Phase 4: Deduplicate `piMission` turn preparation and add atomic `operations.executeLocal` + `settleLocalRollback`
+- [x] Phase 5: Add `piResultWakeVersion` + `adoptedWakeCount` bounded in-slice wait for fast background operations
 - [ ] Phase 6: Share cross-campaign preflight cache with sanitized child environment and atomic publication
 
 ## Phase 1: Isolate Tier 1 V8 hot-path mutations (`piStore`, `piControl`, `providerCallReceipts`) and enforce Tier 1 static boundaries
@@ -66,14 +66,21 @@ Update `agentCatalog.ts` so `bindAgentDefinition` asserts structural equality ag
 
 #### Automated Verification
 
-- [ ] `pnpm convex:check` — verifies TypeScript types across all Convex modules after the split.
-- [ ] `node --experimental-strip-types scripts/check-execution-boundaries.ts` — verifies Tier 1 transitive import restrictions and `FUNCTION_OWNERS` rules.
-- [ ] `node --experimental-strip-types scripts/check-imports.ts` — verifies repository import rules.
-- [ ] `pnpm exec vitest run src/__tests__/convex/execution/pi-store.test.ts src/__tests__/convex/execution/pi-storage.test.ts src/__tests__/convex/execution/pi-mission.test.ts` — verifies Pi store, replay, authority, and mission-model receipt behavior unchanged.
+- [x] `pnpm convex:check` — verifies TypeScript types across all Convex modules after the split.
+- [x] `node --experimental-strip-types scripts/check-execution-boundaries.ts` — verifies Tier 1 transitive import restrictions and `FUNCTION_OWNERS` rules.
+- [x] `node --experimental-strip-types scripts/check-imports.ts` — verifies repository import rules.
+- [x] `pnpm exec vitest run src/__tests__/convex/execution/pi-store.test.ts src/__tests__/convex/execution/pi-storage.test.ts src/__tests__/convex/execution/pi-mission.test.ts` — verifies Pi store, replay, authority, and mission-model receipt behavior unchanged.
 
 #### Manual Verification
 
 - Inspect compiled V8 module closure sizes in `.convex/local/default/convex_local_storage/modules/` after a local backend sync to confirm `piStore.js`, `piControl.js`, and `providerCallReceipts.js` each compile under `<250 KB`.
+
+TDD evidence. The original three Pi suites passed 45 tests before the refactor. The new import rule regression failed before implementation because the checker accepted a Tier 1 dependency on Zod through a re-export. Final verification passed the full typecheck, both ownership/import checkers, 273 tests across 13 affected suites, the focused late-billing test through the new receipt mutation, and 11 qualification protocol tests.
+
+Local backend evidence (2026-11-27). The anonymous Convex watcher pushed the refactored modules to the worktree instance at `127.0.0.1:3224`. Counting each reachable JavaScript entry and static chunk once in the deployed archive, excluding source maps, yielded `piStore` 221,178 bytes, `piControl` 227,830 bytes, and `providerCallReceipts` 231,843 bytes. The publication-control smoke test verified each of 20 toggles with a read and restored the hold to false. The final 15 writes had a 10.6 ms median and 19.0 ms p95. This establishes bundle size and one local mutation's runtime behavior. The representative before-and-after turn benchmark remains in Phase 6.
+
+Implementation details. Full-document Pi queries moved to `execution/piControlReads.ts` so their return validators stay outside the mutation bundle. The installed Pi package exports its serializer version through `utils/version`. Model capacity and reasoning selection are available independently of that export.
+
 
 ## Phase 2: Isolate Tier 2 V8 execution modules (`operations`, `invocationLifecycle`) and enforce Tier 2 static boundaries
 
@@ -109,15 +116,17 @@ const TIER2_NO_HEAVY_CLOSURE_MODULES = [
 
 #### Automated Verification
 
-- [ ] `pnpm convex:check` — verifies Convex backend compilation.
-- [ ] `node --experimental-strip-types scripts/check-execution-boundaries.ts` — verifies both Tier 1 and Tier 2 static boundary rules pass.
-- [ ] `pnpm exec vitest run src/__tests__/convex/execution/dispatch.test.ts src/__tests__/convex/execution/operation-conformance.test.ts src/__tests__/convex/execution/pi-mission.test.ts` — verifies operation dispatch, framing, and invocation lifecycle regressions pass.
+- [x] `pnpm convex:check` — verifies Convex backend compilation.
+- [x] `node --experimental-strip-types scripts/check-execution-boundaries.ts` — verifies both Tier 1 and Tier 2 static boundary rules pass.
+- [x] `pnpm exec vitest run src/__tests__/convex/execution/dispatch.test.ts src/__tests__/convex/execution/operation-conformance.test.ts src/__tests__/convex/execution/pi-mission.test.ts` — verifies operation dispatch, framing, and invocation lifecycle regressions pass.
 
 #### Manual Verification
 
 - Inspect compiled V8 module closures for `operations.js` and `invocationLifecycle.js` to confirm `typebox`, `@convex-dev/auth`, and the 703 KB merged super-chunk are eliminated.
 
-## Phase 3: Enforce `piLease` across all four paid/mutating boundaries and batch `invokeAgentModel` pre-call reads
+TDD and local deployment evidence (2026-11-27). The original dispatch, operation-conformance, and Pi mission suites passed 65 tests. The Tier 2 transitive-import regression failed for the absent guard and passed after enforcement. Backend types and the architecture checker passed. The focused suites passed 67 tests including the guard. The deployment archive shows 1,445,162 bytes for `operations` and 2,096,706 bytes for `invocationLifecycle`. The largest reachable chunks are 435,375 and 549,808 bytes respectively. Their source maps contain Zod and no TypeBox, Convex Auth, or Pi AI SDK sources. The profile catalog generator now records the installed SDK tuple in the small metadata artifact so V8 can derive its serializer identity independently of the SDK import.
+
+## ✅ Phase 3: Enforce `piLease` across all four paid/mutating boundaries and batch `invokeAgentModel` pre-call reads
 
 This phase replaces redundant inline `storage.renewLease()` RPCs with atomic writer-epoch fencing across all four paid/mutating boundaries and collapses `invokeControlledGeneration`'s three sequential pre-call queries into one warm V8 query. It comes before turn-loop deduplication so lease safety is locked down before removing inline renewals in `piMission.ts`.
 
@@ -152,14 +161,16 @@ Add tests in `src/__tests__/convex/execution/pi-mission.test.ts` and `pi-recover
 
 #### Automated Verification
 
-- [ ] `pnpm convex:check` — verifies updated internal mutation/query signatures.
-- [ ] `pnpm exec vitest run src/__tests__/convex/execution/pi-mission.test.ts src/__tests__/convex/execution/pi-recovery.test.ts src/__tests__/convex/execution/pi-native-transport.test.ts` — verifies writer-epoch fencing, pre-call batching, and recovery invariants.
+- [x] `pnpm convex:check` — verifies updated internal mutation/query signatures.
+- [x] `pnpm exec vitest run src/__tests__/convex/execution/pi-mission.test.ts src/__tests__/convex/execution/pi-recovery.test.ts src/__tests__/convex/execution/pi-native-transport.test.ts` — verifies writer-epoch fencing, pre-call batching, and recovery invariants.
 
 #### Manual Verification
 
 None required for this phase; all fencing and early-return invariants are verified deterministically by `convex-test`.
 
-## Phase 4: Deduplicate `piMission` turn preparation and add atomic `operations.executeLocal` + `settleLocalRollback`
+TDD evidence. Before implementation, Pi admitted an invocation without its writer lease. The focused tests later passed for stale epochs, factual retention after expiry, and first-fragment errors during pre-dispatch early returns. The subsequent Pi transport, recovery, and deferred-wake rerun passed 96 tests.
+
+## ✅ Phase 4: Deduplicate `piMission` turn preparation and add atomic `operations.executeLocal` + `settleLocalRollback`
 
 This phase cuts per-turn Convex RPCs from ~25–35 to ~8–12 by eliminating duplicate `afterTools` / `section.render` / `request` round-trips, gating `root.configure` against `AgentDoc`, and executing the four pure-DB local operations inside one atomic `internalMutation`. It depends on Phase 2's pure-DB `framingCore.ts` and Phase 3's `piLease` fencing.
 
@@ -198,15 +209,17 @@ Add tests covering: `adjust_framing` queued observation acknowledgement (no `nat
 
 #### Automated Verification
 
-- [ ] `pnpm convex:check` — verifies Convex types.
-- [ ] `node --experimental-strip-types scripts/check-execution-boundaries.ts` — verifies `settleLocalRollback` ownership and Tier 1/Tier 2 boundaries.
-- [ ] `pnpm exec vitest run src/__tests__/convex/execution/pi-mission.test.ts src/__tests__/convex/execution/dispatch.test.ts src/__tests__/convex/execution/operation-conformance.test.ts src/__tests__/convex/execution/native-operations.test.ts` — verifies turn-loop deduplication, compaction/queued-input invariants, and `executeLocal` parity.
+- [x] `pnpm convex:check` — verifies Convex types.
+- [x] `node --experimental-strip-types scripts/check-execution-boundaries.ts` — verifies `settleLocalRollback` ownership and Tier 1/Tier 2 boundaries.
+- [x] `pnpm exec vitest run src/__tests__/convex/execution/pi-mission.test.ts src/__tests__/convex/execution/dispatch.test.ts src/__tests__/convex/execution/operation-conformance.test.ts src/__tests__/convex/execution/native-operations.test.ts` — verifies turn-loop deduplication, compaction/queued-input invariants, and `executeLocal` parity.
 
 #### Manual Verification
 
 None required for this phase; all state-machine and rollback invariants are covered deterministically.
 
-## Phase 5: Add `piResultWakeVersion` + `adoptedWakeCount` bounded in-slice wait for fast background operations
+TDD evidence. The simulated mission completed with eight context reads before deduplication. It now uses five reads, including startup, with one fresh read per subsequent tool round. Both local transaction endpoint tests failed before implementation and passed after it. The framing transaction test rolls back the domain revision, receipt, and request settlement together before recording the failure. The latest focused Pi and dispatch rerun passed 108 tests.
+
+## ✅ Phase 5: Add `piResultWakeVersion` + `adoptedWakeCount` bounded in-slice wait for fast background operations
 
 This phase eliminates the 3.90 MB Node worker teardown and cold restart on fast background operations (`readSkillOperation`, median 3.10 s) while keeping the durable `pi_slice_complete` fallback intact for long operations (`acquire_document`, `discover_sources_for_need`, `examiner`) and guaranteeing zero lost wakeups or 30 s `unchangedScheduledWait` stalls.
 
@@ -263,13 +276,15 @@ Add tests in `src/__tests__/convex/execution/pi-deferred-wake.test.ts` covering:
 
 #### Automated Verification
 
-- [ ] `pnpm resource-policy:check` — verifies synced policy constants across Convex and documentation/checks.
-- [ ] `pnpm convex:check` — verifies schema and function types.
-- [ ] `pnpm exec vitest run src/__tests__/convex/execution/pi-deferred-wake.test.ts src/__tests__/convex/execution/deferred-operations.test.ts src/__tests__/convex/execution/pi-mission.test.ts` — verifies all wake, concurrency, and crash-recovery invariants.
+- [x] `pnpm resource-policy:check` — verifies synced policy constants across Convex and documentation/checks.
+- [x] `pnpm convex:check` — verifies schema and function types.
+- [x] `pnpm exec vitest run src/__tests__/convex/execution/pi-deferred-wake.test.ts src/__tests__/convex/execution/deferred-operations.test.ts src/__tests__/convex/execution/pi-mission.test.ts` — verifies all wake, concurrency, and crash-recovery invariants.
 
 #### Manual Verification
 
 None required for this phase; timing validation against `convex-local-backend` runs in Phase 6.
+
+TDD evidence. Before implementation, completion replaced the existing lease recovery alarm with an immediate worker wake. Tests now confirm that the active worker keeps its alarm, that closing with an unadopted result schedules immediate replay, and that the lease alarm admits a new writer after a crash. The existing deferred-operation integration tests cover the completed-before-wait and completed-during-wait cases. The worker-level probes also verify completion in the active slice, a result that lands at durable wait creation, and an abort driven by actual lease renewal failure. Two results retained within the same lease confirm that adopting one cannot consume the other wake. Dispatch continues to enforce one in-flight effect per mission.
 
 ## Phase 6: Share cross-campaign preflight cache with sanitized child environment and atomic publication
 
@@ -313,17 +328,38 @@ Add tests in `src/__tests__/config/workbench-protocol.test.mjs` covering: cross-
 
 #### Automated Verification
 
-- [ ] `pnpm test:protocol` — verifies `workbench-protocol.test.mjs`, `qualification-campaign.test.mjs`, and `qualification-v2.test.mjs`.
-- [ ] `pnpm typecheck` — verifies full TypeScript type safety across frontend, scripts, and Convex.
-- [ ] `pnpm lint` — verifies Biome lint, import checks, execution boundaries (Tier 1 + Tier 2), and resource policy checks.
-- [ ] `pnpm format:check` — verifies formatting.
-- [ ] Run all 6 real preflight checks once under `buildPreflightChildEnv(process.env)` via a local `verifyQualificationCandidate` smoke check to confirm `pnpm@12.16.0` and Vitest succeed under the sanitized environment.
+- [x] `pnpm test:protocol` — verifies `workbench-protocol.test.mjs`, `qualification-campaign.test.mjs`, and `qualification-v2.test.mjs`.
+- [x] `pnpm typecheck` — verifies full TypeScript type safety across frontend, scripts, and Convex.
+- [x] `pnpm lint` — verifies Biome lint, import checks, execution boundaries (Tier 1 + Tier 2), and resource policy checks.
+- [x] `pnpm format:check` — verifies formatting.
+- [x] Run all 6 real preflight checks once under `buildPreflightChildEnv(process.env)` via a local `verifyQualificationCandidate` smoke check to confirm `pnpm@12.16.0` and Vitest succeed under the sanitized environment.
 
 #### Manual Verification
 
 - Run an isolated `convex-local-backend` timing probe (zero paid calls) and compare compiled V8 bundle sizes and per-mutation / per-turn latencies against the baseline recorded in [03-research-qualification-latency-optimization.md](03-research-qualification-latency-optimization.md).
 - Verify two back-to-back preflight runs on the same commit in separate campaign directories hit the shared cache on the second run (0 s Vitest rerun) while leaving both campaign archives self-contained.
 
+Fresh local deployment evidence (2026-11-28). After the in-slice wake change the reachable JavaScript closures measured 221,817 bytes for `piStore`, 229,696 for `piControl`, and 235,175 for `providerCallReceipts`. The remaining Tier 2 closures measured 1,454,949 bytes for `operations` and 2,107,543 for `invocationLifecycle`, with largest chunks of 435,375 and 549,808 bytes. The wake query projects the outcome kind and leaves full outcome adoption to the operation owner.
+
+Local preflight evidence (2026-11-28). All six real checks passed under the sanitized child environment on the same fingerprinted source tree. On the final fixture revision the first campaign took 94.690 s and the second took 83 ms. The domain preflight passed 246 tests. The second campaign copied all six logs byte-for-byte from the verified shared cache. Both archives retained their fingerprints, validation record, and logs.
+
+Extended execution verification. The native tool loop accepted a steering message at the after-tools input snapshot. Context overflow after a settled tool call preserved that result and the failed generation receipt, then completed after blocking compaction. The persisted Pi document recorded one tool configuration write across the unchanged tool rounds. Real transactional history reads returned a typed cursor refusal and retained a protected incident for a corrupt pin. The framing mutation preserved the prior revision on an invalid analyst excerpt and rolled back the new revision and receipt together after a post-write error.
+
+Disposable local backend benchmark (2026-11-28). The same backend and database ran the baseline at `067d15d` and then the candidate after a guarded watcher push. Each stage ran six fresh saved-material inspection missions with four observed simulated invocations per mission, zero provider receipts, and the expected quotation and result retained. Medians exclude the first mission and the first five publication-control mutations. The median mission took 25.476 s before and 10.566 s after. The mission time per observed turn was 6.369 s before and 2.642 s after. The median publication-control mutation took 93.7 ms before and 12.3 ms after. The node worker's reachable archive shrank from 4,070,591 to 3,675,786 bytes. The baseline emitted renewal contention and outstanding-mutation warnings. The candidate completed all six sampled missions without those warnings. The disposable worktree and deployment were removed after the probe.
+
+Final automated verification (2026-11-28). The full Convex suite passed all 2,725 tests across 245 files. Both shared-reply purge cases passed again after narrowing the final fixture's typed assertion. All six preflight gates, repository lint and resource policy, formatting, document links, and whitespace checks passed. The local bundle and benchmark evidence is recorded above. The RPI manual checkboxes remain open for reviewer confirmation of that evidence.
+
+
 ## Open Questions
 
 None.
+
+### Review follow-up
+
+A protocol integration test reproduced stale preflight reuse after adding or changing an authored script included in TypeScript checking. A second test reproduced the cache writing files that changed its own validation identity when the cache was inside the checkout. The validation identity now covers the authored checkout independently of the campaign archive. A workspace-local cache excludes its generated entries and retains tracked files in the validation input set. The protocol tests also cover a changed allowed environment value and verify that fresh logs are archived when a concurrent cache entry is invalid.
+
+The revoke-after-dispatch regression retained the factual result but observed a new wake token. A scheduled uncertain acquisition followed by a separate ready result reproduced the 30-second fallback after the worker adopted one result. Both fail before the fix and pass with authorized, once-per-terminal-request wake accounting. The restored research fallback tests exercise unchanged waits, log hydration after a new observation, and immediate replay after terminal settlement. Expired-child settlement delivers its unavailable result to the parent. Registry tests reject transactional callbacks for durable work, and the read callback receives only query access. Independently mutating lease expiry from inclusive to exclusive and removing the epoch match each made both invocation and paid-reservation tests fail on the disposable checkout.
+
+The coverage preset test reproduced a detached framing pump after closing the seed dossier's browser context. It now cancels the seed's pending framing jobs before closure and asserts that no scheduled function fails. A separate cold preflight under concurrent load recorded 15-second timeouts in model-profile fixtures. The three affected tests use the existing 30-second integration timeout and exercise genuine model preparation, including the legacy-policy refusal after campaign authorization.
+
+The follow-up backend benchmark deployed the corrected Convex files to a disposable anonymous localhost instance. Six saved-material missions completed with four observed invocations apiece, verified retained quotations, and zero provider receipts. The median after discarding the first sample was 10.664 s, compared with 10.566 s for the previous candidate and 25.476 s for the previously measured baseline. The median and p95 publication-control writes were 14.2 ms and 29.6 ms. The deployed Tier 1 closures were 225,313 bytes for `piStore`, 233,192 bytes for `piControl`, and 238,671 bytes for `providerCallReceipts`. This workload did not measure provider-backed Sources latency or long-history writer occupancy.

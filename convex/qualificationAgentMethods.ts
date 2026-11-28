@@ -1,6 +1,12 @@
+import { retainedMethodVersion } from "@convex/execution/agentAuthorityCatalog";
+
+export { retainedMethodVersion } from "@convex/execution/agentAuthorityCatalog";
+
 import type { Doc } from "@convex/_generated/dataModel";
 import type { QueryCtx } from "@convex/_generated/server";
+import { internalQuery } from "@convex/_generated/server";
 import { executionError } from "@convex/execution/errors";
+import { v } from "convex/values";
 import { campaignConfiguration } from "./qualificationCampaignPolicy";
 import { requireCampaignLot } from "./qualificationCampaigns";
 import {
@@ -8,11 +14,6 @@ import {
     requireBrowserTestRunOwner,
 } from "./runWorkspace";
 
-export function retainedMethodVersion(
-    definitionId: "workbench_v1" | "sources_v1",
-) {
-    return definitionId === "workbench_v1" ? 8 : 6;
-}
 const nativeMethodVersions = { workbench_v1: 7, sources_v1: 5 } as const;
 
 export function selectedTaskMethodVersion(
@@ -77,3 +78,16 @@ export async function requireRetainedMethodControl(
     )
         throw executionError("task_method_comparison_not_authorized");
 }
+
+export const requireRetainedAuthority = internalQuery({
+    args: { missionId: v.id("agentMissions") },
+    returns: v.null(),
+    handler: async (ctx, { missionId }) => {
+        const mission = await ctx.db.get(missionId);
+        const run = mission ? await ctx.db.get(mission.runId) : null;
+        if (!mission || !run)
+            throw executionError("task_method_comparison_not_authorized");
+        await requireRetainedMethodControl(ctx, mission, run);
+        return null;
+    },
+});

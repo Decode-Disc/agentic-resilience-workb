@@ -16,6 +16,7 @@ import type { FunctionReturnType } from "convex/server";
 import { getDocumentSize } from "convex/values";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedConversation } from "@/__tests__/setup/agent-harness";
+import { beginFixtureInvocation } from "@/__tests__/setup/pi-mission";
 import { readMessageBodies } from "@/__tests__/setup/retained-messages";
 
 const responseProbeBytes = Number(
@@ -411,7 +412,7 @@ async function beginReply(
         requestKey,
         expectedGeneration: 1,
     });
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId,
         expectedGeneration: 1,
         taskKey: "reply",
@@ -425,7 +426,7 @@ function recoverReceivedResponse(f: Awaited<ReturnType<typeof activeReply>>) {
     const args = { invocationId: f.invocationId, expectedGeneration: 1 };
     return f.t.action(async (ctx) => {
         const invocation = await ctx.runQuery(
-            internal.execution.piControl.invocation,
+            internal.execution.piControlReads.invocation,
             args,
         );
         return recoverPiInvocationBody(ctx, invocation, "received", args);
@@ -479,12 +480,12 @@ test("recovers the exact retained invocation response beyond one read transactio
     await retainOriginalResponse(f, stableStringify(response));
     await retainOriginalResponse(f, stableStringify(response));
     const retained = await f.t.query(
-        internal.execution.piControl.invocation,
+        internal.execution.piControlReads.invocation,
         args,
     );
     assert(retained.receivedOutputTextId);
     await expect(
-        f.t.query(internal.execution.piControl.invocationFragment, {
+        f.t.query(internal.execution.piControlReads.invocationFragment, {
             ...args,
             part: "raw",
             textId: retained.receivedOutputTextId,
@@ -834,16 +835,13 @@ test("Workbench completes with its admitted policy and facts when the original c
         },
     );
     assert(active);
-    const invocation = await f.t.mutation(
-        internal.execution.invocations.begin,
-        {
-            missionId: active.missionId,
-            expectedGeneration: 1,
-            taskKey: "large-workbench-context",
-            provenance: "simulation",
-            nativeInput: await workbenchAdmissionInput(f.t, active.missionId),
-        },
-    );
+    const invocation = await beginFixtureInvocation(f.t, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+        taskKey: "large-workbench-context",
+        provenance: "simulation",
+        nativeInput: await workbenchAdmissionInput(f.t, active.missionId),
+    });
     assert(invocation.kind === "ready");
     const stored = await f.t.run((ctx) => ctx.db.get(invocation.invocationId));
     assert(stored?.workbenchCompletionAdmission?.factsRevisionHash);
@@ -1065,6 +1063,25 @@ test.each([
             })
         ) {
             // Release every delivery body before inspecting the retained mission reference.
+        }
+    }
+    if (step === "agentMissions") {
+        while (
+            await f.t.run(async (ctx) => {
+                const mission = await ctx.db.get(f.missionId);
+                return (
+                    mission &&
+                    "protocolVersion" in mission &&
+                    Boolean(mission.textualOutcome)
+                );
+            })
+        ) {
+            expect(
+                await f.t.mutation(internal.dossierPurge.purgeStep, {
+                    runId: f.runId,
+                    step,
+                }),
+            ).toBe(true);
         }
     }
     await f.t.run(async (ctx) => {

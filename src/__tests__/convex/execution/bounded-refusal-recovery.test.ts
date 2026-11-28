@@ -1,6 +1,10 @@
 import { internal } from "@convex/_generated/api";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import {
+    beginFixtureInvocation,
+    dispatchFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
+import {
     seedInspectedEvidence,
     startRetainedInspection,
 } from "@/__tests__/setup/source-preparation";
@@ -31,7 +35,7 @@ test.each([
         name: string,
         args: Record<string, unknown>,
     ) {
-        const begun = await f.t.mutation(internal.execution.invocations.begin, {
+        const begun = await beginFixtureInvocation(f.t, {
             missionId,
             expectedGeneration: 4,
             taskKey,
@@ -56,10 +60,10 @@ test.each([
             },
         );
         assert(result.requestIds[0]);
-        const outcome = await f.t.action(
-            internal.execution.operations.dispatch,
-            { requestId: result.requestIds[0], expectedGeneration: 4 },
-        );
+        const outcome = await dispatchFixtureOperation(f.t, {
+            requestId: result.requestIds[0],
+            expectedGeneration: 4,
+        });
         const settlement = await f.t.mutation(
             internal.execution.invocations.settle,
             { invocationId: begun.invocationId, expectedGeneration: 4 },
@@ -95,7 +99,7 @@ test.each([
         });
     }
     {
-        const begun = await f.t.mutation(internal.execution.invocations.begin, {
+        const begun = await beginFixtureInvocation(f.t, {
             missionId,
             expectedGeneration: 4,
             taskKey: "honest-completion",

@@ -1,7 +1,12 @@
 import { api, internal } from "@convex/_generated/api";
 import { afterEach, expect, test, vi } from "vitest";
 import { seedConversation } from "@/__tests__/setup/agent-harness";
-import { seedPiHistory, seedPiMission } from "@/__tests__/setup/pi-mission";
+import {
+    beginFixtureInvocation,
+    dispatchFixtureOperation,
+    seedPiHistory,
+    seedPiMission,
+} from "@/__tests__/setup/pi-mission";
 import { readConversationPageWithBodies } from "@/__tests__/setup/retained-messages";
 
 afterEach(() => {
@@ -11,7 +16,7 @@ afterEach(() => {
 
 test("Pi required context references its journal without duplicating the prior reply while retaining current results", async () => {
     const { t, missionId, args } = await seedPiMission();
-    const first = await t.mutation(internal.execution.invocations.begin, {
+    const first = await beginFixtureInvocation(t, {
         missionId,
         expectedGeneration: 4,
         taskKey: "prior-reply",
@@ -45,7 +50,7 @@ test("Pi required context references its journal without duplicating the prior r
     });
     const requestId = returned.requestIds[0];
     if (!requestId) throw new Error("Expected reading");
-    await t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 4,
     });

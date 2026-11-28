@@ -12,6 +12,10 @@ import { stageObservedBody } from "@convex/execution/observedReply";
 import { preparePiResult } from "@convex/integrations/piInvocation";
 import type { Infer } from "convex/values";
 import { vi } from "vitest";
+import {
+    claimFixtureOperation,
+    dispatchFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
 import { seedInspectedEvidence } from "./source-preparation";
 
 /** Declares an already-adopted read for capacity/history fixtures; reading behavior tests dispatch the real operation. */
@@ -96,7 +100,7 @@ export async function dispatchSourcesOperation(
         expectedGeneration: number;
     },
 ) {
-    const result = await t.action(internal.execution.operations.dispatch, args);
+    const result = await dispatchFixtureOperation(t, args);
     if (result.kind !== "waiting") return result;
     const request = await t.run((ctx) => ctx.db.get(args.requestId));
     if (request?.scheduledExecution?.phase === "waiting_provider")
@@ -111,7 +115,7 @@ export async function dispatchSourcesOperation(
         (await t.action(action, {
             ...args,
             epoch: request.scheduledExecution.epoch,
-        })) ?? t.action(internal.execution.operations.dispatch, args)
+        })) ?? dispatchFixtureOperation(t, args)
     );
 }
 
@@ -123,7 +127,7 @@ export async function startSourcesOperation(
         expectedGeneration: number;
     },
 ) {
-    const claimed = await t.mutation(internal.execution.operations.claim, args);
+    const claimed = await claimFixtureOperation(t, args);
     if (claimed.kind === "outcome" && claimed.outcome.kind === "waiting")
         await t.mutation(
             internal.execution.operations.beginScheduledExecution,
@@ -211,7 +215,7 @@ export async function seedCapturedSources(
             },
         },
     );
-    const outcome = await f.t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -255,10 +259,10 @@ export async function seedObservedSources(
             },
         },
     );
-    const nativeOutcome = await f.t.action(
-        internal.execution.operations.dispatch,
-        { requestId: nativeReadRequestId, expectedGeneration: 4 },
-    );
+    const nativeOutcome = await dispatchFixtureOperation(f.t, {
+        requestId: nativeReadRequestId,
+        expectedGeneration: 4,
+    });
     if (nativeOutcome.kind !== "success")
         throw new Error("Native fixture read failed");
     return { ...f, nativeReadRequestId };

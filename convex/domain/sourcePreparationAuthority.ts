@@ -11,7 +11,7 @@ import {
 } from "@convex/resourcePolicy";
 import type { GenericDatabaseReader } from "convex/server";
 import { ConvexError, type Infer, v } from "convex/values";
-import { isExecutableQualificationVersion } from "./sourceQualification";
+import { isExecutableQualificationVersion } from "./sourceQualificationVersions";
 import {
     isResumableResearchPause,
     isSourcesSettlementPause,

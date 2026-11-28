@@ -4,7 +4,7 @@ import type { QueryCtx } from "@convex/_generated/server";
 import type { AnalystTurnWording } from "@convex/domain/preparedAnalystWording";
 import type { AgentDefinition } from "@convex/execution/agentDefinition";
 import { executionError, executionFailureCode } from "@convex/execution/errors";
-import { turnFramingCitationPolicy } from "@convex/framingCitationPolicy";
+import { turnFramingCitationPolicy } from "@convex/framingCitationPolicyCore";
 import { SOURCES_HANDOFF_READ_CAPACITY } from "@convex/resourcePolicy";
 import { requireSavedMaterialScope } from "./documentaryAccess";
 import { researchQuestionCapacity } from "./framingEditAuthority";

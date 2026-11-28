@@ -1,5 +1,5 @@
 import { internal } from "@convex/_generated/api";
-import { readInContextResult } from "@convex/domain/savedMaterialOperations";
+import { readInContextResult } from "@convex/domain/savedMaterialOperationResults";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { afterEach, expect, test, vi } from "vitest";
 import { seedPiMission } from "@/__tests__/setup/pi-mission";

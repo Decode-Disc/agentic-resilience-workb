@@ -3,6 +3,10 @@ import { domainSnapshot } from "@convex/execution/agentDefinition";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { scopedFixtureControl } from "@/__tests__/setup/model-stream";
+import {
+    beginFixtureInvocation,
+    dispatchFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
 import { readRetainedBody } from "@/__tests__/setup/retained-history";
 import {
     dispatchSourcesOperation,
@@ -56,7 +60,7 @@ async function qualifyObservedPassage() {
             ),
         };
     });
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 4,
         taskKey: "observed-evidence",
@@ -199,7 +203,7 @@ test.each([
     const first = f.qualification.output.contributions[0];
     assert(first);
     const { id: _id, version: _version, ...contribution } = first;
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 4,
         taskKey: "blank-contribution-identity",
@@ -295,10 +299,7 @@ test.each([
         taskKey: "retained-legacy-qualification",
         provenance: "simulation" as const,
     };
-    const begun = await f.t.mutation(
-        internal.execution.invocations.begin,
-        args,
-    );
+    const begun = await beginFixtureInvocation(f.t, args);
     assert(begun.kind === "ready");
     // Reconstruct the immutable snapshot admitted before semantic-only model inputs.
     const snapshot = JSON.parse(begun.inputJson);
@@ -354,10 +355,7 @@ test.each([
         expectedGeneration: 4,
         responseJson: JSON.stringify(response),
     });
-    const resumed = await f.t.mutation(
-        internal.execution.invocations.begin,
-        args,
-    );
+    const resumed = await beginFixtureInvocation(f.t, args);
     expect(resumed).toEqual({ ...begun, inputJson });
     const retained = await f.t.run((ctx) => ctx.db.get(begun.invocationId));
     assert(retained?.receivedOutputJson);
@@ -397,7 +395,7 @@ test("Sources adds to and corrects an observed qualification without model-suppl
     const first = f.qualification.output.contributions[0];
     assert(first);
     const { id, version: _version, evidence: _evidence, ...content } = first;
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 4,
         taskKey: "semantic-qualification-changes",
@@ -489,7 +487,7 @@ test("Sources adds to and corrects an observed qualification without model-suppl
 
 test("Sources preserves the invocation's observed qualification when another writer commits a newer one", async () => {
     const f = await qualifyObservedPassage();
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 4,
         taskKey: "stale-qualification-observation",
@@ -578,7 +576,7 @@ test("Sources preserves the invocation's observed qualification when another wri
 
 test("Sources completes from semantic need outcomes while the domain supplies the admitted revision and mandatory work", async () => {
     const f = await qualifyObservedPassage();
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 4,
         taskKey: "observed-completion",
@@ -786,7 +784,7 @@ test.each([
     "duplicate-read",
 ] as const)("completion preserves explicit semantic gap and %s accounting", async (variant) => {
     const f = await seedCapturedSources();
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 4,
         taskKey: "explicit-reading",
@@ -863,7 +861,7 @@ test.each([
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         }),
@@ -874,7 +872,7 @@ test.each([
         input: { kind: "read_in_context" },
         adoptedAt: expect.any(Number),
     });
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 4,
         taskKey: "contextual-gap",

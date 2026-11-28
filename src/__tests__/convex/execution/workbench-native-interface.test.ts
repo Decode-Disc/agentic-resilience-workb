@@ -4,6 +4,7 @@ import { runPiMission } from "@convex/integrations/piMission";
 import { nodeActionGenerationDeadline } from "@convex/resourcePolicy";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { originalOperationArguments } from "@/__tests__/setup/agent-harness";
+import { dispatchFixtureOperation } from "@/__tests__/setup/pi-mission";
 import {
     nativePiFixtureRoute,
     nativeTextReply as reply,
@@ -2549,7 +2550,7 @@ test("Workbench reads public context before Start and pins a dated passage to th
                     JSON.stringify(observed),
                 );
                 expect(
-                    await t.action(internal.execution.operations.dispatch, {
+                    await dispatchFixtureOperation(t, {
                         requestId: observed._id,
                         expectedGeneration: 1,
                     }),
@@ -3410,7 +3411,7 @@ test.each([
         },
     );
     expect(
-        await fixture.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(fixture.t, {
             requestId: unrelated,
             expectedGeneration: 1,
         }),
@@ -3440,10 +3441,10 @@ test.each([
             },
         },
     );
-    const refinement = await fixture.t.action(
-        internal.execution.operations.dispatch,
-        { requestId: refinementId, expectedGeneration: 1 },
-    );
+    const refinement = await dispatchFixtureOperation(fixture.t, {
+        requestId: refinementId,
+        expectedGeneration: 1,
+    });
     expect(refinement).toMatchObject({ kind: "success" });
     const projected = await fixture.t.run(async (ctx) => {
         const run = await ctx.db.get(fixture.runId);
@@ -3480,7 +3481,7 @@ test.each([
         requestKey: "later-analyst-edit",
         content: revisedByAnalyst,
     });
-    await fixture.t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(fixture.t, {
         requestId: refinementId,
         expectedGeneration: 1,
     });
@@ -3582,7 +3583,7 @@ test.each([
     });
     assert(
         (
-            await t.action(internal.execution.operations.dispatch, {
+            await dispatchFixtureOperation(t, {
                 requestId: searchId,
                 expectedGeneration: 1,
             })
@@ -3600,7 +3601,7 @@ test.each([
     });
     assert(
         (
-            await t.action(internal.execution.operations.dispatch, {
+            await dispatchFixtureOperation(t, {
                 requestId: readId,
                 expectedGeneration: 1,
             })
@@ -3643,7 +3644,7 @@ test.each([
             },
         },
     });
-    const outcome = await t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -4318,10 +4319,12 @@ test("independent read provenance inherits conditional A while adding B across t
         ),
     );
     assert(oldWrite);
-    await fixture.t.action(internal.execution.operations.dispatch, {
-        requestId: oldWrite._id,
-        expectedGeneration: 1,
-    });
+    await expect(
+        fixture.t.action(internal.execution.operations.dispatch, {
+            requestId: oldWrite._id,
+            expectedGeneration: 1,
+        }),
+    ).rejects.toThrow("pi_writer_fenced");
     expect(
         await fixture.client.query(api.framing.get, { runId: fixture.runId }),
     ).toEqual(deleted);

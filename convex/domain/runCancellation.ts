@@ -1,7 +1,7 @@
 import type { Doc } from "@convex/_generated/dataModel";
 import type { MutationCtx } from "@convex/_generated/server";
 import { cancelAgentMissionsForRun } from "@convex/execution/cancellation";
-import { recordResearchObservation } from "@convex/execution/researchControl";
+import { recordResearchObservation } from "@convex/execution/researchControlCore";
 import { workflow } from "@convex/workflow";
 import type { WorkflowId } from "@convex-dev/workflow";
 

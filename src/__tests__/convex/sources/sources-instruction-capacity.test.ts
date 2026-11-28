@@ -10,6 +10,10 @@ import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { scopedFixtureControl } from "@/__tests__/setup/model-stream";
 import {
+    beginFixtureInvocation,
+    dispatchFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
+import {
     dispatchSourcesOperation,
     prepareSourcesResult,
     recordDocumentaryRead,
@@ -292,13 +296,10 @@ test.each([
                 },
             },
         );
-        const outcome = await f.t.action(
-            internal.execution.operations.dispatch,
-            {
-                requestId,
-                expectedGeneration: 4,
-            },
-        );
+        const outcome = await dispatchFixtureOperation(f.t, {
+            requestId,
+            expectedGeneration: 4,
+        });
         expect(outcome).toMatchObject({ kind: "success" });
         assert(outcome.kind === "success");
         const value = JSON.parse(outcome.valueJson);
@@ -375,15 +376,12 @@ test.each([
     assert(preparation?.sourcesMission);
     const data = preparation.sourcesMission;
     expect(data.needs).toHaveLength(originalNeeds.length + transmitted.length);
-    const invocation = await f.t.mutation(
-        internal.execution.invocations.begin,
-        {
-            missionId: f.missionId,
-            expectedGeneration: 4,
-            taskKey: "need-capacity-completion",
-            provenance: "simulation",
-        },
-    );
+    const invocation = await beginFixtureInvocation(f.t, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        taskKey: "need-capacity-completion",
+        provenance: "simulation",
+    });
     expect(invocation.kind).toBe("ready");
     if (invocation.kind === "ready")
         expect(Buffer.byteLength(invocation.inputJson)).toBeGreaterThan(
@@ -566,15 +564,12 @@ test("unavailable controls and later requests retain explicit outcomes within co
     const p = await f.t.run((ctx) => ctx.db.get(f.preparationId));
     assert(p?.sourcesMission);
     const data = p.sourcesMission;
-    const invocation = await f.t.mutation(
-        internal.execution.invocations.begin,
-        {
-            missionId: f.missionId,
-            expectedGeneration: 4,
-            taskKey: "unavailable-work-completion",
-            provenance: "simulation",
-        },
-    );
+    const invocation = await beginFixtureInvocation(f.t, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        taskKey: "unavailable-work-completion",
+        provenance: "simulation",
+    });
     assert(invocation.kind === "ready", JSON.stringify(invocation));
     const authority = {
         invocationId: invocation.invocationId,
@@ -678,7 +673,7 @@ test.each([
         expectedGeneration: 4,
         outcome: { kind: "unavailable", code: "missing_configuration" },
     });
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 4,
         taskKey: "after-control",

@@ -1,13 +1,9 @@
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
-import {
-    type CompletionTransport,
-    MAX_MODEL_OPERATION_OUTPUT_BYTES,
-} from "@convex/execution/agentDefinition";
+import type { CompletionTransport } from "@convex/execution/agentDefinition";
 import { executionError } from "@convex/execution/errors";
 import type { AgentOperationDefinition } from "@convex/execution/executionProtocol";
 import { operationResultKey } from "@convex/execution/operationResults";
-import { type TranscriptContext, Type } from "@earendil-works/pi-ai";
-import { estimateContextTokens } from "@earendil-works/pi-ai/utils/estimate";
+import type { TranscriptContext } from "@earendil-works/pi-ai";
 import { asSchema, type JSONSchema7, jsonSchema, type ToolSet, tool } from "ai";
 import { convexToZod } from "convex-helpers/server/zod4";
 import { z } from "zod";
@@ -28,25 +24,6 @@ export function piMissionInput(completionTransport?: CompletionTransport) {
     return completionTransport === "native_tool"
         ? PI_NATIVE_COMPLETION_MISSION_INPUT
         : PI_MISSION_INPUT;
-}
-
-/** Native execution and offline calibration use the same tool metadata. */
-export async function piToolMetadata(
-    name: string,
-    operation: Pick<AgentOperationDefinition, "description" | "inputValidator">,
-) {
-    return {
-        name,
-        description: operation.description,
-        replay: "safe" as const,
-        executionMode: "sequential" as const,
-        outputLimits: {
-            maxBytes: MAX_MODEL_OPERATION_OUTPUT_BYTES,
-        },
-        parameters: Type.Unsafe<Record<string, unknown>>(
-            await asSchema(agentOperationInputSchema(operation)).jsonSchema,
-        ),
-    };
 }
 
 /** Pins the effective model tool declarations independently of object-key order and SDK metadata. */
@@ -125,32 +102,6 @@ export function piInstructionSection(instructions: string) {
 }
 
 export const PI_STATE_SECTION = "workbench_current_state";
-
-/** Uses Pi's estimator for the non-lossy section, actual declarations and an optional initial analyst lot. */
-export function piRequiredContextTokens(
-    instructions: string,
-    state: string,
-    tools: NonNullable<
-        Extract<
-            TranscriptContext["messages"][number],
-            { role: "system" }
-        >["toolsAdded"]
-    >,
-    initialInput?: string,
-) {
-    return estimateContextTokens([
-        {
-            role: "system",
-            content: piInstructionSection(instructions),
-            toolsAdded: tools,
-            timestamp: 0,
-        },
-        { role: "system", content: state, timestamp: 0 },
-        ...(initialInput
-            ? [{ role: "user" as const, content: initialInput, timestamp: 0 }]
-            : []),
-    ]).tokens;
-}
 
 /** Shared native section rendering for runtime and offline wire calibration. */
 export function piMissionStateText(

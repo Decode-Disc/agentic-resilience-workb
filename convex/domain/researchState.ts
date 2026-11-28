@@ -1,7 +1,7 @@
 import type { Doc } from "@convex/_generated/dataModel";
 import type { QueryCtx } from "@convex/_generated/server";
 import { approvalCatalog } from "@convex/execution/approvalCatalog";
-import { readApprovalFacts } from "@convex/execution/approvals";
+import { readApprovalFacts } from "@convex/execution/approvalCore";
 import { executionError } from "@convex/execution/errors";
 import { generationInterruption } from "@convex/execution/missionData";
 import { SOURCES_HANDOFF_READ_CAPACITY } from "@convex/resourcePolicy";

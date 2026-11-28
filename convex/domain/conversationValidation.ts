@@ -1,5 +1,6 @@
 import { internal } from "@convex/_generated/api";
 import { internalMutation } from "@convex/_generated/server";
+import { getAgentAuthority } from "@convex/execution/agentAuthorityCatalog";
 import {
     type AgentDefinition,
     hasCompletionText,
@@ -11,7 +12,6 @@ import { conversationValidationSchemas as schemas } from "./conversationValidati
 import {
     conversationValidationOperations,
     fixtureResult,
-    requireFixtureScope,
 } from "./conversationValidationOperations";
 
 export const conversationValidationV2Definition: AgentDefinition & {
@@ -36,9 +36,8 @@ export const conversationValidationV2Definition: AgentDefinition & {
             obligations: [],
         };
     },
-    async requireAuthority(ctx, _mission, run) {
-        await requireFixtureScope(ctx, run._id);
-    },
+    requireAuthority: getAgentAuthority("conversation_validation_v1", 2)
+        .requireAuthority,
     async context() {
         return { kind: "ready", context: { activeWork: {} } };
     },

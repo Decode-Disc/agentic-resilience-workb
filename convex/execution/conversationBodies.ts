@@ -1,11 +1,11 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { QueryCtx } from "@convex/_generated/server";
 import { executionError } from "@convex/execution/errors";
+import type { nativeInputBodyValidator } from "@convex/execution/piStorageValidators";
 import {
     completeRetainedText,
     retainedTextRange,
 } from "@convex/execution/retainedText";
-import type { nativeInputBodyValidator } from "@convex/execution/schema";
 import { MAX_OPERATION_RESULT_BYTES } from "@convex/resourcePolicy";
 import { type Infer, v } from "convex/values";
 
@@ -116,4 +116,15 @@ export function conversationPageBodies(
             throw executionError("conversation_message_unavailable");
         return { text: "", body: { contentHash: deliveryBodyHash(delivery) } };
     });
+}
+
+/** The delivery index order is also the order of the native analyst input lot. */
+export function analystTurnDeliveries(
+    ctx: QueryCtx,
+    turnId: Id<"agentConversationTurns">,
+) {
+    return ctx.db
+        .query("agentMessageDeliveries")
+        .withIndex("by_turn", (q) => q.eq("turnId", turnId))
+        .filter((q) => q.eq(q.field("role"), "user"));
 }

@@ -1,9 +1,22 @@
+import { canonicalFramingUrl, messageSuppliesFramingUrl } from "./framingUrls";
+
+export {
+    canonicalFramingUrl,
+    framingMessageUrls,
+    messageSuppliesFramingUrl,
+} from "./framingUrls";
+
+import { requireSavedMaterialScope } from "./savedMaterialAuthority";
+
+export { requireSavedMaterialScope } from "./savedMaterialAuthority";
+
 import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { QueryCtx } from "@convex/_generated/server";
 import type { AnalystTurnWording } from "@convex/domain/preparedAnalystWording";
+import { referencedContextResult } from "@convex/domain/savedMaterialOperationResults";
 import { requireMissionAuthority } from "@convex/execution/authority";
-import { conversationInstructions } from "@convex/execution/conversations";
+import { conversationInstructions } from "@convex/execution/conversationCore";
 import { executionError } from "@convex/execution/errors";
 import { operationHasStarted } from "@convex/execution/executionProtocol";
 import { missionScope } from "@convex/execution/missionData";
@@ -19,7 +32,6 @@ import { SEC_RETRIEVAL_VERSION } from "./evidenceArtifacts";
 import {
     documentaryReference,
     parseDocumentaryReference,
-    referencedContextResult,
 } from "./savedMaterialOperations";
 import { sha256Hex, stableStringify } from "./sourcePassages";
 import { readPreparationSourceDecision } from "./sourcePreparationAuthority";
@@ -329,23 +341,6 @@ export async function reusableFramingCaptureIds(
     return result;
 }
 
-export function canonicalFramingUrl(value: string) {
-    try {
-        const url = new URL(value);
-        if (
-            url.protocol !== "https:" ||
-            url.username ||
-            url.password ||
-            (url.port && url.port !== "443")
-        )
-            return undefined;
-        url.hash = "";
-        return url.toString();
-    } catch {
-        return undefined;
-    }
-}
-
 export function confirmedFramingFiling(canonicalUrl: string, cik: string) {
     const url = new URL(canonicalUrl);
     const cleanCik = cik.replace(/^0+/u, "");
@@ -359,25 +354,6 @@ export function confirmedFramingFiling(canonicalUrl: string, cik: string) {
         !url.search
         ? { cik: cleanCik, accession: filing[2] }
         : undefined;
-}
-
-export function framingMessageUrls(text: string) {
-    return [
-        ...new Set(
-            (text.match(/https:\/\/[^\s<>()[\]{}"']+/giu) ?? []).flatMap(
-                (link) => {
-                    const url = canonicalFramingUrl(
-                        link.replace(/[.,;!?]+$/u, ""),
-                    );
-                    return url ? [url] : [];
-                },
-            ),
-        ),
-    ];
-}
-
-export function messageSuppliesFramingUrl(text: string, canonicalUrl: string) {
-    return framingMessageUrls(text).includes(canonicalUrl);
 }
 
 /** Resolve only a lead actually returned by the selected, adopted discovery. */
@@ -801,38 +777,4 @@ export async function requireFramingAcquisitionRequest(
     )
         throw executionError("version_conflict");
     return { ...target, mission, request };
-}
-
-/** The approved-corpus prerequisite belongs to inspection, never to every kind of agent. */
-export async function requireSavedMaterialScope(
-    ctx: QueryCtx,
-    mission: Doc<"agentMissions">,
-    run?: Doc<"researchRuns">,
-) {
-    const scope = missionScope(mission);
-    if (
-        scope.kind !== "saved_material_inspection_v1" &&
-        scope.kind !== "workbench_v1" &&
-        scope.kind !== "sources_v1"
-    )
-        throw executionError("operation_not_allowed");
-    const owner = run ?? (await ctx.db.get(mission.runId));
-    const corpusRevisionId =
-        scope.kind === "saved_material_inspection_v1"
-            ? scope.corpusRevisionId
-            : owner?.activeCorpusRevisionId;
-    const revision = corpusRevisionId
-        ? await ctx.db.get(corpusRevisionId)
-        : null;
-    if (
-        revision?.runId !== mission.runId ||
-        (revision.status !== "approved" &&
-            !(
-                owner?.sourcesProtocol === "sources_mission_v1" &&
-                scope.kind !== "saved_material_inspection_v1"
-            )) ||
-        owner?.activeCorpusRevisionId !== revision._id
-    )
-        throw executionError("corpus_not_approved");
-    return revision;
 }

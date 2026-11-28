@@ -5,6 +5,11 @@ import type { OperationInput } from "@convex/execution/agentDefinition";
 import { stageObservedBody } from "@convex/execution/observedReply";
 import { preparePiReply } from "@convex/integrations/piInvocation";
 import { assert } from "vitest";
+import {
+    beginFixtureInvocation,
+    claimFixturePiLease,
+    dispatchFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
 import { seedConversation } from "./agent-harness";
 
 /** Prior published exchange followed by an active, separately authorized response. */
@@ -39,6 +44,7 @@ export async function seedHistoryMission(
         },
     );
     const begun = await f.t.mutation(internal.execution.invocations.begin, {
+        piLease: await claimFixturePiLease(f.t, priorMissionId, 1),
         missionId: priorMissionId,
         expectedGeneration: 1,
         taskKey: "prior",
@@ -129,7 +135,7 @@ export async function dispatchHistory(f: HistoryFixture, input: HistoryInput) {
             input,
         },
     );
-    const outcome = await f.t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -140,7 +146,7 @@ export async function dispatchHistory(f: HistoryFixture, input: HistoryInput) {
 export async function runHistoryTurn(f: HistoryFixture, input: HistoryInput) {
     const mission = await f.t.run((ctx) => ctx.db.get(f.missionId));
     assert(mission);
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 1,
         taskKey: `history:${mission.nextEventSequence}`,
@@ -164,7 +170,7 @@ export async function runHistoryTurn(f: HistoryFixture, input: HistoryInput) {
     });
     const requestId = finished.requestIds[0];
     assert(requestId);
-    const outcome = await f.t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });

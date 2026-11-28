@@ -3,6 +3,11 @@ import { internal } from "@convex/_generated/api";
 import { afterEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import {
+    beginFixtureInvocation,
+    claimFixtureOperation,
+    dispatchFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
+import {
     seedInspectedEvidence,
     startRetainedInspection,
 } from "@/__tests__/setup/source-preparation";
@@ -128,7 +133,7 @@ test("the shared native dispatcher applies only the validation agent's typed pro
         input: { kind: "check_fixture_value", index: 0 },
     });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: args.executionGeneration,
         }),
@@ -153,14 +158,14 @@ test("confirmed operations are reused without adding progress or provider attemp
         internal.execution.operations.enqueue,
         input,
     );
-    await t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 4,
     });
     expect(await t.mutation(internal.execution.operations.enqueue, input)).toBe(
         requestId,
     );
-    await t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -182,7 +187,7 @@ test("native and agent requests cannot acquire another definition's operations",
         status: "completed",
         outcome: { kind: "refused", code: "operation_not_allowed" },
     });
-    const invocation = await t.mutation(internal.execution.invocations.begin, {
+    const invocation = await beginFixtureInvocation(t, {
         missionId,
         expectedGeneration: args.executionGeneration,
         taskKey: "forbidden-tool",
@@ -226,7 +231,7 @@ test("native and agent requests cannot acquire another definition's operations",
 
 test("incompatible completion data cannot complete a validation mission", async () => {
     const { t, missionId } = await validationFixture();
-    const invocation = await t.mutation(internal.execution.invocations.begin, {
+    const invocation = await beginFixtureInvocation(t, {
         missionId,
         expectedGeneration: 4,
         taskKey: "wrong-result",
@@ -259,7 +264,7 @@ test.each([
         cause: "bad-result",
         input: { kind: "check_fixture_value", index: 0 },
     });
-    await t.mutation(internal.execution.operations.claim, {
+    await claimFixtureOperation(t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -295,7 +300,7 @@ test("stale results and unknown definition versions cannot advance a second agen
         cause: "late",
         input: { kind: "check_fixture_value", index: 0 },
     });
-    await t.mutation(internal.execution.operations.claim, {
+    await claimFixtureOperation(t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -403,12 +408,12 @@ test("a legacy mission keeps its stored requests, hash identities and flat compl
         }),
     ).toBe(requestId);
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 4,
         }),
     ).toMatchObject({ kind: "success" });
-    const invocation = await t.mutation(internal.execution.invocations.begin, {
+    const invocation = await beginFixtureInvocation(t, {
         missionId,
         expectedGeneration: 4,
         taskKey: "legacy-complete",

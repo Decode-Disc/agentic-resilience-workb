@@ -10,6 +10,11 @@ import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { providerFixtureResponse } from "@/__tests__/setup/model-stream";
 import {
+    beginFixtureInvocation,
+    claimFixtureOperation,
+    dispatchFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
+import {
     dispatchSourcesOperation,
     prepareSourcesResult,
     retainSourcesProposal,
@@ -73,15 +78,12 @@ async function seedCompletion() {
             text: "Inspect the documentary foundation",
             delivery: "queue",
         });
-    const invocation = await f.t.mutation(
-        internal.execution.invocations.begin,
-        {
-            missionId: f.missionId,
-            expectedGeneration: 4,
-            taskKey: "source-completion",
-            provenance: "simulation",
-        },
-    );
+    const invocation = await beginFixtureInvocation(f.t, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        taskKey: "source-completion",
+        provenance: "simulation",
+    });
     assert(invocation.kind === "ready");
     return {
         ...f,
@@ -336,7 +338,7 @@ test.each([
         code: "mission_context_changed",
     });
     if (count === 21) {
-        const fresh = await f.t.mutation(internal.execution.invocations.begin, {
+        const fresh = await beginFixtureInvocation(f.t, {
             missionId: f.missionId,
             expectedGeneration: 4,
             taskKey: "drained-instructions",
@@ -707,7 +709,7 @@ test.each([
             },
         );
         expect(
-            await f.t.mutation(internal.execution.operations.claim, {
+            await claimFixtureOperation(f.t, {
                 requestId: readId,
                 expectedGeneration: 1,
             }),
@@ -818,7 +820,7 @@ test("reservation admission and completion allow a response beyond 64 KiB within
             response,
         }),
     ).toMatchObject({ kind: "blocked", code: "mission_context_changed" });
-    const fresh = await f.t.mutation(internal.execution.invocations.begin, {
+    const fresh = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 4,
         taskKey: "fresh-capacity-completion",
@@ -920,7 +922,7 @@ test("unqualified work retains storage headroom for unfinished explanations thro
             response,
         }),
     ).toMatchObject({ kind: "blocked", code: "mission_context_changed" });
-    const fresh = await f.t.mutation(internal.execution.invocations.begin, {
+    const fresh = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 4,
         taskKey: "fresh-capacity-completion",
@@ -1021,7 +1023,7 @@ test("current Sources preserves restricted material, complete history and accoun
     );
     expect(
         (
-            await f.t.action(internal.execution.operations.dispatch, {
+            await dispatchFixtureOperation(f.t, {
                 requestId: readReqId,
                 expectedGeneration: 4,
             })
@@ -1274,7 +1276,7 @@ test("current Sources preserves restricted material, complete history and accoun
         simulation: false,
     });
     const terminalAcceptedName = getFunctionName(
-        internal.execution.piControl.terminalCompletionAccepted,
+        internal.execution.piControlReads.terminalCompletionAccepted,
     );
     let injectedCrash = false;
     const writer1 = "combined-writer-1";

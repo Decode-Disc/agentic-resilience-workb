@@ -3,6 +3,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import { workflow } from "@convex/workflow";
 import { afterEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
+import { claimFixtureOperation } from "@/__tests__/setup/pi-mission";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 
 test("delayed cancellation cleanup preserves a resumed newer generation", async () => {
@@ -113,7 +114,7 @@ test.each([
         ).toBe(false);
     else
         expect(
-            await t.mutation(internal.execution.operations.claim, {
+            await claimFixtureOperation(t, {
                 requestId,
                 expectedGeneration: 4,
             }),
@@ -159,7 +160,7 @@ test("run cancellation fences first and drains mission work in bounded scheduled
     }
     const firstRequestId = requestIds[0];
     if (!firstRequestId) throw new Error("Missing request fixture");
-    await t.mutation(internal.execution.operations.claim, {
+    await claimFixtureOperation(t, {
         requestId: firstRequestId,
         expectedGeneration: args.executionGeneration,
     });

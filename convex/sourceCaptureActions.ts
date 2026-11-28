@@ -10,10 +10,8 @@ import {
     PublicSourceUrlError,
     validatePublicSourceUrl,
 } from "@convex/domain/publicSourceUrl";
-import {
-    acquireDocumentResult,
-    documentaryReference,
-} from "@convex/domain/savedMaterialOperations";
+import { acquireDocumentResult } from "@convex/domain/savedMaterialOperationResults";
+import { documentaryReference } from "@convex/domain/savedMaterialOperations";
 import { DiscoveryRequestError } from "@convex/domain/sourceDiscoveryRecovery";
 import {
     type ObserveProviderDispatch,

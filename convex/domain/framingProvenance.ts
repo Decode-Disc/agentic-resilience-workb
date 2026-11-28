@@ -1,6 +1,6 @@
 import type { Doc } from "@convex/_generated/dataModel";
 import type { QueryCtx } from "@convex/_generated/server";
-import { conversationInstructions } from "@convex/execution/conversations";
+import { conversationInstructions } from "@convex/execution/conversationCore";
 import { executionError } from "@convex/execution/errors";
 import type { Infer } from "convex/values";
 import { validate } from "convex-helpers/validators";

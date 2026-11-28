@@ -2,9 +2,13 @@ import type { Doc, Id } from "@convex/_generated/dataModel";
 import { internalQuery, type QueryCtx } from "@convex/_generated/server";
 import { stableStringify } from "@convex/domain/sourcePassages";
 import { readConversationWording } from "@convex/execution/conversationBodies";
+import { conversationInstructions } from "@convex/execution/conversationCore";
+import {
+    missionModel,
+    revisionRoute,
+} from "@convex/execution/modelConfigurationCore";
 import { agentInputByteLength } from "@convex/integrations/modelInput";
 import { SIMULATION_MODEL_ROUTE } from "@convex/integrations/modelRouting";
-import { missionModel, revisionRoute } from "@convex/modelConfiguration";
 import { MAX_CONTEXT_BYTES } from "@convex/resourcePolicy";
 import { v } from "convex/values";
 import { validate } from "convex-helpers/validators";
@@ -16,7 +20,6 @@ import {
     readOperationCause,
     requireMissionAuthority,
 } from "./authority";
-import { conversationInstructions } from "./conversations";
 import {
     invocationResponseValidator,
     MAX_BATCH_REQUESTS,

@@ -1,8 +1,8 @@
 import type { Doc } from "@convex/_generated/dataModel";
 import { RESPONSE_CONTROL_MAX_INPUT_BYTES } from "@convex/resourcePolicy";
 import { type Infer, v } from "convex/values";
+import { sha256Hex } from "./hashing";
 import { researchStatus } from "./researchStateContracts";
-import { sha256Hex } from "./sourcePassages";
 
 /** One versioned policy owns configuration, score boundaries and correction limits. */
 export const responseControlConfiguration = v.object({

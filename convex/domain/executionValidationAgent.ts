@@ -1,3 +1,4 @@
+import { getAgentAuthority } from "@convex/execution/agentAuthorityCatalog";
 import {
     type AgentDefinition,
     domainSnapshot,
@@ -5,10 +6,6 @@ import {
 import { executionError } from "@convex/execution/errors";
 import { missionScope, missionState } from "@convex/execution/missionData";
 import { validate } from "convex-helpers/validators";
-import {
-    requireBrowserFixtureContext,
-    requireBrowserTestRunOwner,
-} from "./browserFixtureAccess";
 import {
     validationCompletionValidator,
     validationResultValidator,
@@ -49,16 +46,8 @@ export const executionValidationV2Definition: AgentDefinition & {
             obligations: ["check_all_values"],
         };
     },
-    async requireAuthority(ctx, mission, run) {
-        const visitor = await requireBrowserTestRunOwner(ctx, run);
-        const contextId = await requireBrowserFixtureContext(ctx, visitor);
-        if (
-            run.purpose !== "browser_test" ||
-            mission.ownerVisitorId !== visitor._id ||
-            run.browserTestContextId !== contextId
-        )
-            throw executionError("simulation_not_authorized");
-    },
+    requireAuthority: getAgentAuthority("execution_validation_v1", 2)
+        .requireAuthority,
     async context(_ctx, mission) {
         const scope = missionScope(mission);
         const state = missionState(mission);

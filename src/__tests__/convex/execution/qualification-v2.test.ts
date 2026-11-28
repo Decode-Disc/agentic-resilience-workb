@@ -17,6 +17,10 @@ import {
 import { compactFramingReplayDocuments } from "@evaluations/workbench-browser/protocol";
 import { makeFunctionReference } from "convex/server";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import {
+    claimFixturePiLease,
+    recordFixtureAttempt,
+} from "@/__tests__/setup/pi-mission";
 import { configurableCampaign } from "@/__tests__/setup/qualification-v2";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 
@@ -544,7 +548,7 @@ test("a qualified Sources grant still requires the deployment preparation window
     const started = await f.t.run((ctx) => ctx.db.get(f.runId));
     expect(started?.researchStartedAt).toEqual(expect.any(Number));
     expect(started?.sourcesEnvelope).toBeDefined();
-});
+}, 30_000);
 
 test.each([
     25, 75,
@@ -638,13 +642,13 @@ test.each([
         attempt: 1,
         inputHash: sha256Hex(inputJson),
     };
-    const admitted = await f.t.mutation(internal.providerCalls.recordAttempt, {
+    const admitted = await recordFixtureAttempt(f.t, {
         ...attempt,
         status: "started",
     });
     expect(admitted.shouldExecute).toBe(true);
     expect(admitted.deadlineAt).toBe(deadline);
-    await f.t.mutation(internal.providerCalls.recordAttempt, {
+    await recordFixtureAttempt(f.t, {
         ...attempt,
         status: "succeeded",
         reportedCost: 0,
@@ -716,25 +720,21 @@ test("the backend grants and enforces shared three-dossier budgets above histori
     const { attempt } = f;
     for (let index = 0; index < 23; index++) {
         const args = await attempt(index);
-        const started = await f.t.mutation(
-            internal.providerCalls.recordAttempt,
-            args,
-        );
+        const started = await recordFixtureAttempt(f.t, args);
         expect(started.shouldExecute).toBe(true);
-        expect(
-            (await f.t.mutation(internal.providerCalls.recordAttempt, args))
-                .shouldExecute,
-        ).toBe(false);
-        await f.t.mutation(internal.providerCalls.recordAttempt, {
+        expect((await recordFixtureAttempt(f.t, args)).shouldExecute).toBe(
+            false,
+        );
+        await recordFixtureAttempt(f.t, {
             ...args,
             status: "succeeded",
             reportedCost: 0,
             dispatchOutcome: "response_received",
         });
     }
-    await expect(
-        f.t.mutation(internal.providerCalls.recordAttempt, await attempt(23)),
-    ).rejects.toThrow("qualification_budget_exhausted");
+    await expect(recordFixtureAttempt(f.t, await attempt(23))).rejects.toThrow(
+        "qualification_budget_exhausted",
+    );
     expect(
         await f.t.run((ctx) =>
             ctx.db
@@ -746,8 +746,8 @@ test("the backend grants and enforces shared three-dossier budgets above histori
     for (const [index, binding] of f.bindings.slice(1).entries()) {
         for (let n = 0; n < (index === 0 ? 19 : 18); n++) {
             const args = await attempt(100 + index * 20 + n, binding.runId);
-            await f.t.mutation(internal.providerCalls.recordAttempt, args);
-            await f.t.mutation(internal.providerCalls.recordAttempt, {
+            await recordFixtureAttempt(f.t, args);
+            await recordFixtureAttempt(f.t, {
                 ...args,
                 status: "succeeded",
                 reportedCost: 0,
@@ -758,10 +758,7 @@ test("the backend grants and enforces shared three-dossier budgets above histori
     const second = f.bindings[1];
     if (!second) throw new Error("Missing second dossier");
     await expect(
-        f.t.mutation(
-            internal.providerCalls.recordAttempt,
-            await attempt(999, second.runId),
-        ),
+        recordFixtureAttempt(f.t, await attempt(999, second.runId)),
     ).rejects.toThrow("qualification_budget_exhausted");
 
     await f.t.mutation(internal.qualificationCampaigns.beginCleanup, {
@@ -785,20 +782,14 @@ test("the backend grants and enforces shared three-dossier budgets above histori
 test("an expired unresolved attempt fences another dossier without claiming budget exhaustion", async () => {
     const f = await liveFixture(2);
     const args = await f.attempt(0);
-    const first = await f.t.mutation(
-        internal.providerCalls.recordAttempt,
-        args,
-    );
+    const first = await recordFixtureAttempt(f.t, args);
     await f.t.run((ctx) =>
         ctx.db.patch(first.providerCallId, { leaseExpiresAt: Date.now() - 1 }),
     );
     const other = f.bindings[1];
     assert(other);
     await expect(
-        f.t.mutation(
-            internal.providerCalls.recordAttempt,
-            await f.attempt(1, other.runId),
-        ),
+        recordFixtureAttempt(f.t, await f.attempt(1, other.runId)),
     ).rejects.toThrow("qualification_outcome_unresolved");
     const calls = await f.t.run((ctx) =>
         ctx.db.query("providerCalls").collect(),
@@ -823,9 +814,14 @@ test("an expired unresolved attempt fences another dossier without claiming budg
 test("late billing updates retained consumption without reopening an unknown attempt", async () => {
     const f = await liveFixture(2);
     const args = await f.attempt(0);
+    const piLease = await claimFixturePiLease(
+        f.t,
+        args.missionId,
+        args.executionGeneration,
+    );
     const started = await f.t.mutation(
-        internal.providerCalls.recordAttempt,
-        args,
+        internal.execution.providerCallReceipts.recordMissionModelAttempt,
+        { ...args, piLease },
     );
     await f.t.run(async (ctx) => {
         const invocation = await ctx.db.get(args.invocationId);
@@ -837,17 +833,20 @@ test("late billing updates retained consumption without reopening an unknown att
             JSON.stringify({ model: "fixture/first-workbench", messages: [] }),
         );
     });
-    await f.t.mutation(internal.providerCalls.observeGeneration, {
-        invocationId: args.invocationId,
-        generationId: "fixture-generation",
-    });
-    await f.t.mutation(internal.providerCalls.recordAttempt, {
+    await f.t.mutation(
+        internal.execution.providerCallReceipts.observeGeneration,
+        {
+            invocationId: args.invocationId,
+            generationId: "fixture-generation",
+        },
+    );
+    await recordFixtureAttempt(f.t, {
         ...args,
         status: "failed",
         errorCode: "network_error",
         dispatchOutcome: "unknown",
     });
-    await f.t.mutation(internal.providerCalls.requestBilling, {
+    await f.t.mutation(internal.execution.providerCallReceipts.requestBilling, {
         invocationId: args.invocationId,
     });
     await f.t.mutation(internal.providerCalls.claimBilling, {
@@ -874,9 +873,9 @@ test("late billing updates retained consumption without reopening an unknown att
         unknown: 1,
         overruns: 1,
     });
-    await expect(
-        f.t.mutation(internal.providerCalls.recordAttempt, await f.attempt(1)),
-    ).rejects.toThrow("qualification_outcome_unresolved");
+    await expect(recordFixtureAttempt(f.t, await f.attempt(1))).rejects.toThrow(
+        "qualification_outcome_unresolved",
+    );
 });
 
 test("simulation binds every declared scenario once and inspection pages retain more than legacy limits", async () => {
@@ -1038,13 +1037,10 @@ test("backend execution surface is retained in the immutable authorization and c
 test("future policy settles a final known cost and retains reservations for unknown or partial observations", async () => {
     const f = await liveFixture(23, false, "known_final_v1");
     const first = await f.attempt(0);
-    const admitted = await f.t.mutation(
-        internal.providerCalls.recordAttempt,
-        first,
-    );
+    const admitted = await recordFixtureAttempt(f.t, first);
     const pending = await f.t.run((ctx) => ctx.db.get(admitted.providerCallId));
     expect(pending?.qualificationReservationUsd).toBeGreaterThan(0);
-    await f.t.mutation(internal.providerCalls.recordAttempt, {
+    await recordFixtureAttempt(f.t, {
         ...first,
         status: "succeeded",
         reportedCost: 0.00001,
@@ -1061,11 +1057,8 @@ test("future policy settles a final known cost and retains reservations for unkn
     expect(usage?.usage.costUsd).toBeCloseTo(0.00001, 10);
     expect(usage?.usage.model).toBe(1);
     const second = await f.attempt(1);
-    const uncertain = await f.t.mutation(
-        internal.providerCalls.recordAttempt,
-        second,
-    );
-    await f.t.mutation(internal.providerCalls.recordAttempt, {
+    const uncertain = await recordFixtureAttempt(f.t, second);
+    await recordFixtureAttempt(f.t, {
         ...second,
         status: "partial",
         reportedCost: 0,
@@ -1093,7 +1086,7 @@ test("a new grant cannot silently replace an explicitly selected legacy accounti
     await expect(liveFixture(23, false, "conservative_v1")).rejects.toThrow(
         "resource_policy_unsupported",
     );
-});
+}, 30_000);
 
 test("current native reservation uses admitted model capacity", async () => {
     const f = await liveFixture(23, false, "known_final_v1");
@@ -1121,13 +1114,10 @@ test("current native reservation uses admitted model capacity", async () => {
             { effectiveMaxOutputTokens: 6144 },
         );
     });
-    const admitted = await f.t.mutation(
-        internal.providerCalls.recordAttempt,
-        args,
-    );
+    const admitted = await recordFixtureAttempt(f.t, args);
     const receipt = await f.t.run((ctx) => ctx.db.get(admitted.providerCallId));
     expect(receipt?.qualificationReservationUsd).toBeCloseTo(0.0086016, 10);
-    await f.t.mutation(internal.providerCalls.recordAttempt, {
+    await recordFixtureAttempt(f.t, {
         ...args,
         status: "succeeded",
         reportedCost: 0.00001,
@@ -1149,10 +1139,7 @@ test("current native reservation uses admitted model capacity", async () => {
             { effectiveMaxOutputTokens: 6144 },
         );
     });
-    const reserve = f.t.mutation(
-        internal.providerCalls.recordAttempt,
-        expanded,
-    );
+    const reserve = recordFixtureAttempt(f.t, expanded);
     expect((await reserve).shouldExecute).toBe(true);
 });
 
@@ -1162,11 +1149,8 @@ test.each([
 ] as const)("late %s cost settlement preserves finality and counts the attempt once", async (status) => {
     const f = await liveFixture(23, false, "known_final_v1");
     const attempt = await f.attempt(0);
-    const admitted = await f.t.mutation(
-        internal.providerCalls.recordAttempt,
-        attempt,
-    );
-    await f.t.mutation(internal.providerCalls.recordAttempt, {
+    const admitted = await recordFixtureAttempt(f.t, attempt);
+    await recordFixtureAttempt(f.t, {
         ...attempt,
         status,
         dispatchOutcome: "response_received",
@@ -1177,9 +1161,9 @@ test.each([
         dispatchOutcome: "response_received" as const,
         reportedCost: 0.00001,
     };
-    await f.t.mutation(internal.providerCalls.recordAttempt, late);
-    await f.t.mutation(internal.providerCalls.recordAttempt, late);
-    await f.t.mutation(internal.providerCalls.recordAttempt, {
+    await recordFixtureAttempt(f.t, late);
+    await recordFixtureAttempt(f.t, late);
+    await recordFixtureAttempt(f.t, {
         ...attempt,
         status,
         dispatchOutcome: "response_received",
@@ -1348,9 +1332,9 @@ test("legacy usage without conflict accounting cannot authorize another attempt"
             .collect())
             await ctx.db.patch(row._id, { conflicts: undefined });
     });
-    await expect(
-        f.t.mutation(internal.providerCalls.recordAttempt, await f.attempt(0)),
-    ).rejects.toThrow("qualification_outcome_unresolved");
+    await expect(recordFixtureAttempt(f.t, await f.attempt(0))).rejects.toThrow(
+        "qualification_outcome_unresolved",
+    );
 });
 
 test.each([

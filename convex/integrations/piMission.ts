@@ -1,7 +1,7 @@
 "use node";
 
 import { internal } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
+import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { ActionCtx } from "@convex/_generated/server";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
@@ -13,6 +13,7 @@ import {
     SUBMIT_COMPLETION_TOOL,
 } from "@convex/execution/agentDefinition";
 import {
+    classifyDispatchFailure,
     executionError,
     executionFailureCode,
     protectedDiagnostic,
@@ -20,16 +21,23 @@ import {
 import type { AgentGenerationBackend } from "@convex/execution/executionProtocol";
 import { invokeControlledGeneration } from "@convex/execution/invokeAgentModel";
 import { generationInterruption } from "@convex/execution/missionData";
-import { revisionRoute } from "@convex/modelConfiguration";
+import { revisionRoute } from "@convex/execution/modelConfigurationCore";
+import {
+    piRequiredContextTokens,
+    piToolMetadata,
+} from "@convex/integrations/piModelAdapter";
 import {
     NATIVE_WORKER_POLICY,
+    PI_IN_SLICE_POLL_INTERVAL_MS,
+    PI_IN_SLICE_WAIT_MS,
     PI_LEASE_RENEW_INTERVAL_MS,
     PI_OPERATION_WAIT_POLL_MS,
     PI_RETAINED_OPERATION_BATCH,
+    PI_SLICE_YIELD_SAFETY_MS,
     PI_WORKER_SLICE_MS,
     resolveGenerationAuthority,
 } from "@convex/resourcePolicy";
-import { recoverCorrectionDraft } from "@convex/responseControl";
+import { recoverCorrectionDraft } from "@convex/responseControlCore";
 import {
     BACKGROUND_CONTEXT,
     withAbortSignal,
@@ -55,9 +63,12 @@ import {
     toToolDeclaration,
 } from "@earendil-works/pi-ai/utils/transcript";
 import {
+    AgentDoc,
+    type AgentState,
     AssistantEntry,
     type Conversation,
     createRegistry,
+    type DocumentState,
     defineExtension,
     defineTask,
     defineTool,
@@ -73,8 +84,6 @@ import {
     piMissionInput,
     piMissionMessages,
     piMissionStateText,
-    piRequiredContextTokens,
-    piToolMetadata,
     preparePiModelPayload,
     preparePiSimulationRequest,
 } from "./modelInput";
@@ -103,7 +112,7 @@ import { createNativeInputDelivery } from "./piNativeInput";
 import { openMissionPiStorage } from "./piStorage";
 import { createPiToolArgumentsCapture } from "./piToolArguments";
 
-export { piToolMetadata } from "./modelInput";
+export { piToolMetadata } from "./piModelAdapter";
 
 /** Read proof from Pi's immutable request checkpoint, including after the worker's memory is lost. */
 function nativePreparation(
@@ -158,7 +167,7 @@ export async function runPiMission(
     executionDeadlineAt: number,
 ) {
     const mission = await ctx.runQuery(
-        internal.execution.piControl.state,
+        internal.execution.piControlReads.state,
         args,
     );
     const simulated = mission.provenance === "simulation";
@@ -192,6 +201,9 @@ export async function runPiMission(
         writer,
         context,
     );
+    if (!storage.lease) throw executionError("pi_writer_fenced");
+    const { sessionId, writer: leaseWriter, epoch } = storage.lease;
+    const piLease = { sessionId, writer: leaseWriter, epoch };
     const faux = fauxProvider({
         models: [
             {
@@ -224,6 +236,13 @@ export async function runPiMission(
     if (!model) throw executionError("missing_authorized_route");
     const nativeContextWindow = model.contextWindow;
     const startedAt = Date.now();
+    const sliceDeadline = Math.min(
+        startedAt + PI_WORKER_SLICE_MS,
+        executionDeadlineAt,
+    );
+    const waitedInSlice = new Set<Id<"agentOperationRequests">>();
+    const pendingToolWakes = new Set<Id<"agentOperationRequests">>();
+    const adoptedWakes = new Set<Id<"agentOperationRequests">>();
     const responseState: {
         responseTooLarge: boolean;
         httpStatus?: number;
@@ -242,8 +261,20 @@ export async function runPiMission(
     let progressWrite: Promise<unknown> = Promise.resolve();
     let nativeSettled = false;
     let preparationChanges = 0;
+    let agentDocument: DocumentState<AgentState> | undefined;
+    let pendingTurnContext:
+        | Awaited<ReturnType<typeof buildTurnContext>>
+        | undefined;
+    let afterToolsPrepared = false;
+    let afterToolsHadQueuedInputs = false;
+    function resetTurnPreparation() {
+        pendingTurnContext = undefined;
+        afterToolsPrepared = false;
+        afterToolsHadQueuedInputs = false;
+    }
     const lastPreparedDelivery = { messages: 0, observations: 0, controls: 0 };
     function changedPreparation() {
+        resetTurnPreparation();
         if (++preparationChanges >= 3)
             throw executionError("native_preparation_stalled");
         return fauxAssistantMessage(
@@ -253,10 +284,10 @@ export async function runPiMission(
         );
     }
     const nativeDelivery = createNativeInputDelivery(ctx, args, storage);
-    async function syncInputs() {
-        if (definition.nativeConversation)
-            await nativeDelivery.synchronize(root, context);
-        else await nativeDelivery.synchronizeObservations(root, context);
+    function syncInputs() {
+        return definition.nativeConversation
+            ? nativeDelivery.synchronize(root, context)
+            : nativeDelivery.synchronizeObservations(root, context);
     }
     let failure: unknown;
     let wake: Wake = { active: true };
@@ -272,12 +303,85 @@ export async function runPiMission(
 
     async function dispatchRetainedOperation(
         requestId: Id<"agentOperationRequests">,
+        operationKind?: Doc<"agentOperationRequests">["input"]["kind"],
     ) {
-        await storage.renewLease();
-        return ctx.runAction(internal.execution.operations.dispatch, {
+        const scope = {
             requestId,
+            piLease,
             expectedGeneration: args.expectedGeneration,
+        };
+        if (
+            operationKind &&
+            definition.operations[operationKind]?.executeInTransaction
+        ) {
+            try {
+                return await ctx.runMutation(
+                    internal.execution.operations.executeLocal,
+                    scope,
+                );
+            } catch (error) {
+                return ctx.runMutation(
+                    internal.execution.operations.settleLocalRollback,
+                    {
+                        ...scope,
+                        failure: classifyDispatchFailure(
+                            error,
+                            "before_callback",
+                        ),
+                    },
+                );
+            }
+        }
+        return ctx.runAction(internal.execution.operations.dispatch, scope);
+    }
+
+    async function wakeStatus(requestId: Id<"agentOperationRequests">) {
+        return ctx.runQuery(internal.execution.piControl.operationWakeStatus, {
+            ...piLease,
+            missionId: args.missionId,
+            generation: args.expectedGeneration,
+            requestId,
         });
+    }
+
+    async function waitBrieflyInSlice(
+        requestId: Id<"agentOperationRequests">,
+        signal: AbortSignal,
+    ) {
+        waitedInSlice.add(requestId);
+        const until = Math.min(
+            Date.now() + PI_IN_SLICE_WAIT_MS,
+            sliceDeadline - PI_SLICE_YIELD_SAFETY_MS,
+        );
+        while (Date.now() < until) {
+            signal.throwIfAborted();
+            const current = await wakeStatus(requestId);
+            signal.throwIfAborted();
+            if (
+                current.outcome &&
+                current.outcome.kind !== "waiting" &&
+                (current.status === "observed" ||
+                    current.status === "completed")
+            ) {
+                return dispatchRetainedOperation(requestId);
+            }
+            const remaining = until - Date.now();
+            if (remaining <= 0) break;
+            await new Promise<void>((resolve) => {
+                const done = () => {
+                    clearTimeout(timer);
+                    signal.removeEventListener("abort", done);
+                    resolve();
+                };
+                const timer = setTimeout(
+                    done,
+                    Math.min(remaining, PI_IN_SLICE_POLL_INTERVAL_MS),
+                );
+                signal.addEventListener("abort", done, { once: true });
+            });
+        }
+        signal.throwIfAborted();
+        return undefined;
     }
 
     const waitOperation = defineTask<
@@ -294,6 +398,7 @@ export async function runPiMission(
                     task.input.requestId,
                 );
                 if (outcome.kind === "waiting") {
+                    waitedInSlice.add(task.input.requestId);
                     resumeAt = Date.now() + PI_OPERATION_WAIT_POLL_MS;
                     yieldSleep();
                     // Graceful close retains the read checkpoint as pending, so a result can resume it before recovery.
@@ -349,9 +454,24 @@ export async function runPiMission(
                                     throw executionError(
                                         "operation_correlation_invalid",
                                     );
-                                const outcome = await dispatchRetainedOperation(
+                                let outcome = await dispatchRetainedOperation(
                                     request._id,
+                                    request.input.kind,
                                 );
+                                if (outcome.kind === "waiting") {
+                                    const ready = await waitBrieflyInSlice(
+                                        request._id,
+                                        toolContext.abortSignal ?? abort.signal,
+                                    );
+                                    if (ready && ready.kind !== "waiting") {
+                                        (
+                                            toolContext.abortSignal ??
+                                            abort.signal
+                                        ).throwIfAborted();
+                                        pendingToolWakes.add(request._id);
+                                        outcome = ready;
+                                    }
+                                }
                                 let text = modelOperationOutcome(
                                     definition,
                                     outcome,
@@ -391,6 +511,16 @@ export async function runPiMission(
                                             "continuation_unavailable",
                                         );
                                     text = result.state.outcome.result;
+                                    if (waitedInSlice.has(request._id)) {
+                                        const current = await wakeStatus(
+                                            request._id,
+                                        );
+                                        if (
+                                            current.outcome &&
+                                            current.outcome.kind !== "waiting"
+                                        )
+                                            pendingToolWakes.add(request._id);
+                                    }
                                 }
                                 return {
                                     output: [{ type: "text" as const, text }],
@@ -415,14 +545,13 @@ export async function runPiMission(
                 try {
                     if (!storage.lease)
                         throw executionError("pi_writer_fenced");
-                    await storage.renewLease();
                     const lease = storage.lease;
                     const lookup = {
                         ...lease,
                         callId: api.callId,
                     };
                     const read =
-                        internal.execution.piControl.completionDisposition;
+                        internal.execution.piControlReads.completionDisposition;
                     let disposition = await ctx.runQuery(read, lookup);
                     if (disposition.kind === "historical") {
                         await recoverHistoricalCompletion(
@@ -498,12 +627,11 @@ export async function runPiMission(
                         tag: false,
                         async render(input) {
                             try {
-                                const current = await ctx.runQuery(
-                                    internal.execution.context.build,
-                                    { ...args, correctionAdmission: true },
-                                );
-                                if (current.kind !== "ready")
-                                    throw executionError(current.code);
+                                const prepared = pendingTurnContext;
+                                if (!prepared) resetTurnPreparation();
+                                pendingTurnContext = undefined;
+                                const current =
+                                    prepared ?? (await buildTurnContext());
                                 let inputJson = current.inputJson;
                                 if (inputJson.includes('"draftResponseHash"')) {
                                     const snapshot = JSON.parse(inputJson);
@@ -560,6 +688,9 @@ export async function runPiMission(
                 hooks: [
                     hook(GenerationTask, {
                         async afterTools() {
+                            for (const id of pendingToolWakes)
+                                adoptedWakes.add(id);
+                            pendingToolWakes.clear();
                             if (
                                 definition.completionTransport ===
                                     "native_tool" &&
@@ -567,7 +698,7 @@ export async function runPiMission(
                             ) {
                                 const lease = storage.lease;
                                 const read =
-                                    internal.execution.piControl
+                                    internal.execution.piControlReads
                                         .terminalCompletionAccepted;
                                 let accepted = await ctx.runQuery(read, lease);
                                 if (typeof accepted === "object") {
@@ -582,10 +713,13 @@ export async function runPiMission(
                                 if (accepted === true) return;
                             }
                             await settleRetainedOperations();
-                            await syncInputs();
-                            await refreshTools();
+                            const { hadQueued } = await syncInputs();
+                            pendingTurnContext = await refreshTools();
+                            afterToolsPrepared = true;
+                            afterToolsHadQueuedInputs = hadQueued;
                         },
                         async onYield() {
+                            resetTurnPreparation();
                             if (terminal) return undefined;
                             await syncInputs();
                             const state = await ctx.runQuery(
@@ -612,39 +746,63 @@ export async function runPiMission(
         );
     }
     installTools();
-    async function refreshTools() {
+    async function buildTurnContext() {
         const current = await ctx.runQuery(internal.execution.context.build, {
             ...args,
             correctionAdmission: true,
         });
         if (current.kind === "blocked") throw executionError(current.code);
+        return current;
+    }
+    async function refreshTools() {
+        const current = await buildTurnContext();
         const snapshot: unknown = JSON.parse(current.inputJson);
         tools = await buildTools(snapshot);
         installTools();
         const offered = new Set(
             Object.keys(agentToolSchemas(definition, snapshot)),
         );
-        await root.configure(
-            { modelTools: tools.filter((tool) => offered.has(tool.name)) },
-            context,
-        );
+        const modelTools = tools.filter((tool) => offered.has(tool.name));
+        const previous = agentDocument?.value?.modelTools;
+        if (
+            !Array.isArray(previous) ||
+            previous.length !== modelTools.length ||
+            modelTools.some((tool, index) => tool.name !== previous[index])
+        ) {
+            await root.configure({ modelTools }, context);
+        }
+        return current;
     }
 
     async function drainRetainedOperations() {
         for (let count = 0; count < PI_RETAINED_OPERATION_BATCH; count++) {
             const pending = await ctx.runQuery(
-                internal.execution.piControl.nextOperation,
+                internal.execution.piControlReads.nextOperation,
                 args,
             );
             if (!pending) return;
-            const outcome = await dispatchRetainedOperation(pending._id);
+            const outcome = await dispatchRetainedOperation(
+                pending._id,
+                pending.input.kind,
+            );
             if (outcome.kind === "waiting") {
-                resumeAt = Date.now() + PI_OPERATION_WAIT_POLL_MS;
-                throw executionError("pi_slice_complete");
+                const ready = await waitBrieflyInSlice(
+                    pending._id,
+                    abort.signal,
+                );
+                if (!ready || ready.kind === "waiting") {
+                    resumeAt = Date.now() + PI_OPERATION_WAIT_POLL_MS;
+                    throw executionError("pi_slice_complete");
+                }
+                abort.signal.throwIfAborted();
+                adoptedWakes.add(pending._id);
             }
         }
         if (
-            await ctx.runQuery(internal.execution.piControl.nextOperation, args)
+            await ctx.runQuery(
+                internal.execution.piControlReads.nextOperation,
+                args,
+            )
         )
             throw executionError("pi_slice_complete");
     }
@@ -652,12 +810,12 @@ export async function runPiMission(
     async function settleRetainedOperations() {
         await drainRetainedOperations();
         const current = await ctx.runQuery(
-            internal.execution.piControl.state,
+            internal.execution.piControlReads.state,
             args,
         );
         if (!current.lastInvocationId) return;
         const previous = await ctx.runQuery(
-            internal.execution.piControl.invocation,
+            internal.execution.piControlReads.invocation,
             {
                 invocationId: current.lastInvocationId,
                 expectedGeneration: args.expectedGeneration,
@@ -718,7 +876,7 @@ export async function runPiMission(
                 definition.completionTransport === "native_tool") &&
             storage.sessionId
                 ? await ctx.runQuery(
-                      internal.execution.piControl.nativeInvocation,
+                      internal.execution.piControlReads.nativeInvocation,
                       { ...args, sessionId: storage.sessionId, taskKey },
                   )
                 : null;
@@ -755,10 +913,13 @@ export async function runPiMission(
         }
         if (["completed", "cancelled"].includes(mission.status))
             throw executionError("pi_terminal_dispatch_forbidden");
+        const skipSettle = afterToolsPrepared;
+        const skipSync = afterToolsPrepared && !afterToolsHadQueuedInputs;
+        resetTurnPreparation();
         if (auxiliary) await drainRetainedOperations();
         else {
-            await settleRetainedOperations();
-            await syncInputs();
+            if (!skipSettle) await settleRetainedOperations();
+            if (!skipSync) await syncInputs();
         }
         const prepared = auxiliary
             ? undefined
@@ -809,6 +970,7 @@ export async function runPiMission(
             {
                 ...args,
                 taskKey,
+                piLease,
                 returnInputReference: true,
                 ...(prepared
                     ? {
@@ -850,7 +1012,7 @@ export async function runPiMission(
             expectedGeneration: args.expectedGeneration,
         };
         const retained = await ctx.runQuery(
-            internal.execution.piControl.invocation,
+            internal.execution.piControlReads.invocation,
             invocationArgs,
         );
         const retainedResponseJson = await recoverPiInvocationBody(
@@ -983,7 +1145,6 @@ export async function runPiMission(
                     const messages =
                         simulationRequest?.messages ?? expandedMessages;
                     if (simulationRequest) {
-                        await storage.renewLease();
                         await lifecycle.beforeDispatch(simulationRequest.json, {
                             effectiveMaxOutputTokens:
                                 simulationRequest.effectiveMaxOutputTokens,
@@ -1197,7 +1358,6 @@ export async function runPiMission(
                                 );
                                 try {
                                     const json = prepared.json;
-                                    await storage.renewLease();
                                     await lifecycle.beforeDispatch(json, {
                                         effectiveMaxOutputTokens:
                                             prepared.effectiveMaxOutputTokens,
@@ -1436,6 +1596,7 @@ export async function runPiMission(
                 invocationArgs,
                 executionDeadlineAt,
                 native,
+                piLease,
             );
             if (
                 !message &&
@@ -1452,7 +1613,7 @@ export async function runPiMission(
         }
         await drainRetainedOperations();
         const current = await ctx.runQuery(
-            internal.execution.piControl.invocation,
+            internal.execution.piControlReads.invocation,
             invocationArgs,
         );
         const responseJson = await recoverPiInvocationBody(
@@ -1771,15 +1932,29 @@ export async function runPiMission(
                     .catch(stop);
             });
         }
-        if (!terminal)
-            await root.configure(
-                {
-                    model: { provider: base.id, modelId: model.id },
-                    thinkingLevel: "off",
-                    instructions: definition.instructions,
-                },
+        if (!terminal) {
+            agentDocument = await harness.documentState(
+                AgentDoc,
+                root.id,
                 context,
             );
+            const active = agentDocument?.value;
+            if (
+                active?.model?.provider !== base.id ||
+                active.model.modelId !== model.id ||
+                active.thinkingLevel !== "off" ||
+                active.instructions !== definition.instructions
+            ) {
+                await root.configure(
+                    {
+                        model: { provider: base.id, modelId: model.id },
+                        thinkingLevel: "off",
+                        instructions: definition.instructions,
+                    },
+                    context,
+                );
+            }
+        }
         if (mission.status === "cancelled") {
             await root.abort(context);
             nativeSettled = true;
@@ -1887,14 +2062,17 @@ export async function runPiMission(
             !failure && (await harness.inspect(context)).tasks.length === 0;
         if (settled.status !== "done") {
             const current = await ctx.runQuery(
-                internal.execution.piControl.state,
+                internal.execution.piControlReads.state,
                 args,
             );
             const last = current.lastInvocationId
-                ? await ctx.runQuery(internal.execution.piControl.invocation, {
-                      invocationId: current.lastInvocationId,
-                      expectedGeneration: args.expectedGeneration,
-                  })
+                ? await ctx.runQuery(
+                      internal.execution.piControlReads.invocation,
+                      {
+                          invocationId: current.lastInvocationId,
+                          expectedGeneration: args.expectedGeneration,
+                      },
+                  )
                 : null;
             const json = last
                 ? await recoverPiInvocationBody(
@@ -1927,12 +2105,14 @@ export async function runPiMission(
         await progressWrite;
         if (failure) nativeSettled = false;
         progressView?.dispose();
+        agentDocument?.dispose();
         const nextWake = wake;
         await harness.close(BACKGROUND_CONTEXT);
         await ctx.runMutation(internal.execution.piControl.closeWorker, {
             ...args,
             writer,
             nativeSettled,
+            adoptedWakeCount: adoptedWakes.size,
             ...(failure && executionFailureCode(failure) !== "pi_slice_complete"
                 ? {
                       error:

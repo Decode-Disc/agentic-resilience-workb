@@ -1,6 +1,10 @@
 import { api, internal } from "@convex/_generated/api";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import {
+    beginFixtureInvocation,
+    dispatchFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
 import { readConversationPageWithBodies } from "@/__tests__/setup/retained-messages";
 import { activateSourcesMission } from "@/__tests__/setup/sources-mission";
 import {
@@ -47,16 +51,13 @@ async function complete(
     f: Awaited<ReturnType<typeof initialFraming>>,
     taskKey = "prose-only",
 ) {
-    const invocation = await f.t.mutation(
-        internal.execution.invocations.begin,
-        {
-            missionId: f.missionId,
-            expectedGeneration: 1,
-            taskKey,
-            provenance: "simulation",
-            nativeInput: await workbenchAdmissionInput(f.t, f.missionId),
-        },
-    );
+    const invocation = await beginFixtureInvocation(f.t, {
+        missionId: f.missionId,
+        expectedGeneration: 1,
+        taskKey,
+        provenance: "simulation",
+        nativeInput: await workbenchAdmissionInput(f.t, f.missionId),
+    });
     assert(invocation.kind === "ready");
     return f.t.mutation(internal.execution.invocations.finish, {
         invocationId: invocation.invocationId,
@@ -193,7 +194,7 @@ test("repeated missing-program completion permits correction beyond three invoca
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -221,16 +222,13 @@ test.each([
     expect(await complete(f)).toMatchObject({
         code: "completion_correction_required",
     });
-    const invocation = await f.t.mutation(
-        internal.execution.invocations.begin,
-        {
-            missionId: f.missionId,
-            expectedGeneration: 1,
-            taskKey: "pending-correction",
-            provenance: "simulation",
-            nativeInput: await workbenchAdmissionInput(f.t, f.missionId),
-        },
-    );
+    const invocation = await beginFixtureInvocation(f.t, {
+        missionId: f.missionId,
+        expectedGeneration: 1,
+        taskKey: "pending-correction",
+        provenance: "simulation",
+        nativeInput: await workbenchAdmissionInput(f.t, f.missionId),
+    });
     assert(invocation.kind === "ready");
     if (action === "cancel") {
         await f.client.mutation(api.execution.conversations.stopResponse, {

@@ -1,15 +1,15 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { internalQuery, type QueryCtx } from "@convex/_generated/server";
+import { localBrowserFixturesEnabled } from "@convex/domain/browserFixtureAccess";
 import type {
     DocumentaryContribution,
     DocumentaryControlV2,
 } from "@convex/domain/sourcesContracts";
-import { requireCampaignLot } from "@convex/qualificationCampaigns";
 import {
-    localBrowserFixturesEnabled,
     readWorkbenchQualification,
     SOURCES_QUALIFICATION_ENVELOPE,
-} from "@convex/runWorkspace";
+} from "@convex/qualificationAccess";
+import { requireCampaignLot } from "@convex/qualificationCampaignAccess";
 import { v } from "convex/values";
 
 /** Local, campaign-bound fixture authority. A revoked simulation throws before any live fallback. */

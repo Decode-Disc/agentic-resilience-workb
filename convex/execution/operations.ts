@@ -10,13 +10,14 @@ import {
 } from "@convex/_generated/server";
 import { readResearchState } from "@convex/domain/researchState";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
+import { requireInstructionVersion } from "@convex/execution/conversationCore";
+import { pauseResearchAtBoundary } from "@convex/execution/researchControlCore";
 import {
     CONVEX_NODE_ACTION_TIMEOUT_MS,
     DOSSIER_PURGE_PARENT_SCAN_BYTES,
     EXECUTION_WINDOW_MS,
     MAX_OPERATION_RESULT_BYTES,
 } from "@convex/resourcePolicy";
-import schema from "@convex/schema";
 import { workflow } from "@convex/workflow";
 import type { EventId, WorkflowId } from "@convex-dev/workflow";
 import { type Infer, v } from "convex/values";
@@ -36,10 +37,10 @@ import {
     requireMissionAuthority,
     requireRunAuthority,
 } from "./authority";
-import { requireInstructionVersion } from "./conversations";
 import { classifyDispatchFailure, protectedDiagnostic } from "./errors";
 import {
     type AgentOperationDefinition,
+    type OperationExecutionResult,
     operationHasStarted,
     operationInputValidator,
     operationOutcomeValidator,
@@ -72,14 +73,18 @@ import {
 } from "./operationContracts";
 import { validateOperationValue } from "./operationResults";
 import { schedulePiMission } from "./piControl";
+import {
+    piDispatchLeaseValidator,
+    requirePiDispatchLease,
+    sessionForMission,
+} from "./piSession";
 import { adoptProgress, agentProgressValidator } from "./progress";
-import { pauseResearchAtBoundary } from "./researchControl";
-
 import {
     deleteOperationObservationBatch,
     stageOperationObservation,
     textFragmentValidator,
 } from "./retainedText";
+import { missionDocument } from "./tableValidators";
 
 type Outcome = Infer<typeof operationOutcomeValidator>;
 type Input = Infer<typeof requestInputValidator>;
@@ -382,11 +387,10 @@ async function authority(
     return { mission, operation, runId, admittedRequest };
 }
 
-/** Persists a native effect's receipt atomically with its domain write, without replacing its admission pin. */
-export async function retainOperationEffect(
+/** Validates the receipt before transactions that must preflight their domain write. */
+export async function prepareOperationEffect(
     ctx: MutationCtx,
     request: Doc<"agentOperationRequests">,
-    pin: import("./agentDefinition").OperationPin,
     value: unknown,
 ) {
     const operation = operationFor(
@@ -409,6 +413,21 @@ export async function retainOperationEffect(
             MAX_OPERATION_RESULT_BYTES
     )
         throw executionError("operation_result_capacity");
+    return { valueJson, outcome };
+}
+
+/** Persists a native effect's receipt atomically with its domain write, without replacing its admission pin. */
+export async function retainOperationEffect(
+    ctx: MutationCtx,
+    request: Doc<"agentOperationRequests">,
+    pin: import("./agentDefinition").OperationPin,
+    value: unknown,
+) {
+    const { valueJson, outcome } = await prepareOperationEffect(
+        ctx,
+        request,
+        value,
+    );
     const effect = { pin, outcome };
     if (request.effect) {
         if (stableStringify(request.effect) !== stableStringify(effect))
@@ -697,11 +716,226 @@ export const readRunState = internalQuery({
     },
 });
 
+const claimOperationInTxArgs = v.object({
+    requestId: v.id("agentOperationRequests"),
+    expectedGeneration: v.number(),
+    piLease: v.optional(piDispatchLeaseValidator),
+});
+
+async function claimOperationInTx(
+    ctx: MutationCtx,
+    args: Infer<typeof claimOperationInTxArgs>,
+    atomicLocal = false,
+) {
+    const request = await ctx.db.get(args.requestId);
+    if (!request) throw executionError("request_unavailable");
+    const retainedMission = request.missionId
+        ? await ctx.db.get(request.missionId)
+        : null;
+    if (
+        (request.status !== "completed" &&
+            (request.adoptionGeneration ?? request.expectedGeneration) !==
+                args.expectedGeneration) ||
+        (retainedMission &&
+            retainedMission.generation !== args.expectedGeneration)
+    ) {
+        if (retainedMission?.executionRuntime !== "pi-durable")
+            await recordEvent(
+                ctx,
+                request,
+                "dispatch_refused",
+                "stale_execution",
+            );
+        return {
+            kind: "outcome" as const,
+            outcome: { kind: "refused" as const, code: "stale_execution" },
+        };
+    }
+    if (retainedMission)
+        await requirePiDispatchLease(
+            ctx,
+            retainedMission,
+            args.expectedGeneration,
+            args.piLease,
+        );
+    let state: Awaited<ReturnType<typeof authority>>;
+    try {
+        state = await authority(ctx, request, args.expectedGeneration);
+    } catch (error) {
+        const code = executionFailureCode(error);
+        if (!code) throw error;
+        // Known native effects still enter result observation; adoption below retains every authority fence.
+        if (request.effect && !request.outcome)
+            return {
+                kind: "adopt" as const,
+                outcome: request.effect.outcome,
+            };
+        const outcome = { kind: "refused" as const, code };
+        if (request.status === "pending")
+            await ctx.db.patch(request._id, {
+                status: "completed",
+                outcome,
+                knownNotDispatched: true,
+                completedAt: Date.now(),
+            });
+        await recordEvent(
+            ctx,
+            await requestAtAdmission(ctx, request),
+            "dispatch_refused",
+            code,
+            outcome,
+        );
+        return { kind: "outcome" as const, outcome };
+    }
+    if (request.adoptionRefusalCode)
+        return {
+            kind: "outcome" as const,
+            outcome: {
+                kind: "refused" as const,
+                code: request.adoptionRefusalCode,
+            },
+        };
+    if (request.outcome)
+        return request.status === "observed"
+            ? { kind: "adopt" as const, outcome: request.outcome }
+            : { kind: "outcome" as const, outcome: request.outcome };
+    if (request.effect && !request.outcome)
+        return { kind: "adopt" as const, outcome: request.effect.outcome };
+    if (request.status === "waiting") {
+        if (!request.waitReference)
+            throw executionError("wait_reference_unavailable");
+        return {
+            kind: "outcome" as const,
+            outcome: {
+                kind: "waiting" as const,
+                reference: request.waitReference,
+            },
+        };
+    }
+    if (request.status === "running" || request.status === "unknown") {
+        const unavailable = unknownObservationOutcome(state.operation);
+        if (unavailable) {
+            await markOperationUnknown(ctx, request);
+            return { kind: "outcome" as const, outcome: unavailable };
+        }
+        if (state.mission)
+            await ctx.db.patch(state.mission._id, {
+                status: "blocked",
+                blockCode: "operation_outcome_unknown",
+            });
+        await recordEvent(
+            ctx,
+            request,
+            "operation_unknown",
+            "operation_outcome_unknown",
+        );
+        return {
+            kind: "outcome" as const,
+            outcome: {
+                kind: "refused" as const,
+                code: "operation_outcome_unknown",
+            },
+        };
+    }
+    if (
+        (state.mission || state.operation?.nativeAuthority === "research") &&
+        (await pauseResearchAtBoundary(ctx, state.runId, state.mission))
+    )
+        return {
+            kind: "outcome" as const,
+            outcome: {
+                kind: "unavailable" as const,
+                code: "research_paused",
+            },
+        };
+    if (state.mission && state.operation?.effectKind !== "read") {
+        const missionId = state.mission._id;
+        for (const status of ["running", "waiting"] as const) {
+            const active = await ctx.db
+                .query("agentOperationRequests")
+                .withIndex("by_mission_and_status", (q) =>
+                    q.eq("missionId", missionId).eq("status", status),
+                )
+                .first();
+            if (active && active._id !== request._id)
+                return {
+                    kind: "outcome" as const,
+                    outcome: {
+                        kind: "unavailable" as const,
+                        code: "operation_in_progress",
+                    },
+                };
+        }
+    }
+    if (atomicLocal && !state.operation?.executeInTransaction)
+        throw executionError("operation_not_allowed");
+    const waitEventId =
+        request.waitEventId ??
+        (!atomicLocal &&
+        state.mission?.workflowId &&
+        "protocolVersion" in state.mission &&
+        state.mission.protocolVersion === 3
+            ? await workflow.createEvent(ctx, {
+                  name: `operation:${request._id}`,
+                  workflowId: state.mission.workflowId as WorkflowId,
+              })
+            : undefined);
+    const deadlineAt = state.mission?.deadlineAt ?? request.deadlineAt;
+    const expiryJobId =
+        atomicLocal || deadlineAt === undefined
+            ? undefined
+            : await ctx.scheduler.runAt(
+                  deadlineAt,
+                  internal.execution.operations.expire,
+                  {
+                      requestId: request._id,
+                      expectedGeneration: request.expectedGeneration,
+                  },
+              );
+    const scheduledJobId = state.operation?.scheduledAction
+        ? await ctx.scheduler.runAfter(0, state.operation.scheduledAction, {
+              requestId: args.requestId,
+              expectedGeneration: args.expectedGeneration,
+              epoch: 1,
+          })
+        : undefined;
+    const waitReference = scheduledJobId
+        ? `operation:${request._id}`
+        : undefined;
+    await ctx.db.patch(request._id, {
+        status: scheduledJobId ? "waiting" : "running",
+        scheduledExecution: scheduledJobId
+            ? {
+                  phase: "queued",
+                  epoch: 1,
+                  dispatchGeneration: args.expectedGeneration,
+                  jobId: scheduledJobId,
+              }
+            : undefined,
+        waitReference,
+        waitEventId,
+        expiryJobId,
+    });
+    await recordEvent(ctx, request, "operation_dispatched");
+    if (waitReference) {
+        await recordEvent(ctx, request, "operation_waiting");
+        return {
+            kind: "outcome" as const,
+            outcome: { kind: "waiting" as const, reference: waitReference },
+        };
+    }
+    if (request.input.kind === "invalid")
+        throw executionError("invalid_operation_input");
+    return {
+        kind: "execute" as const,
+        missionId: state.mission?._id,
+        runId: state.runId,
+        input: request.input,
+    };
+}
+
 export const claim = internalMutation({
-    args: {
-        requestId: v.id("agentOperationRequests"),
-        expectedGeneration: v.number(),
-    },
+    args: claimOperationInTxArgs.fields,
     returns: v.union(
         v.object({
             kind: v.literal("execute"),
@@ -718,202 +952,7 @@ export const claim = internalMutation({
             outcome: operationOutcomeValidator,
         }),
     ),
-    handler: async (ctx, args) => {
-        const request = await ctx.db.get(args.requestId);
-        if (!request) throw executionError("request_unavailable");
-        const retainedMission = request.missionId
-            ? await ctx.db.get(request.missionId)
-            : null;
-        if (
-            (request.status !== "completed" &&
-                (request.adoptionGeneration ?? request.expectedGeneration) !==
-                    args.expectedGeneration) ||
-            (retainedMission &&
-                retainedMission.generation !== args.expectedGeneration)
-        ) {
-            await recordEvent(
-                ctx,
-                request,
-                "dispatch_refused",
-                "stale_execution",
-            );
-            return {
-                kind: "outcome" as const,
-                outcome: { kind: "refused" as const, code: "stale_execution" },
-            };
-        }
-        let state: Awaited<ReturnType<typeof authority>>;
-        try {
-            state = await authority(ctx, request, args.expectedGeneration);
-        } catch (error) {
-            const code = executionFailureCode(error);
-            if (!code) throw error;
-            // Known native effects still enter result observation; adoption below retains every authority fence.
-            if (request.effect && !request.outcome)
-                return {
-                    kind: "adopt" as const,
-                    outcome: request.effect.outcome,
-                };
-            const outcome = { kind: "refused" as const, code };
-            if (request.status === "pending")
-                await ctx.db.patch(request._id, {
-                    status: "completed",
-                    outcome,
-                    knownNotDispatched: true,
-                    completedAt: Date.now(),
-                });
-            await recordEvent(
-                ctx,
-                await requestAtAdmission(ctx, request),
-                "dispatch_refused",
-                code,
-                outcome,
-            );
-            return { kind: "outcome" as const, outcome };
-        }
-        if (request.adoptionRefusalCode)
-            return {
-                kind: "outcome" as const,
-                outcome: {
-                    kind: "refused" as const,
-                    code: request.adoptionRefusalCode,
-                },
-            };
-        if (request.outcome)
-            return request.status === "observed"
-                ? { kind: "adopt" as const, outcome: request.outcome }
-                : { kind: "outcome" as const, outcome: request.outcome };
-        if (request.effect && !request.outcome)
-            return { kind: "adopt" as const, outcome: request.effect.outcome };
-        if (request.status === "waiting") {
-            if (!request.waitReference)
-                throw executionError("wait_reference_unavailable");
-            return {
-                kind: "outcome" as const,
-                outcome: {
-                    kind: "waiting" as const,
-                    reference: request.waitReference,
-                },
-            };
-        }
-        if (request.status === "running" || request.status === "unknown") {
-            const unavailable = unknownObservationOutcome(state.operation);
-            if (unavailable) {
-                await markOperationUnknown(ctx, request);
-                return { kind: "outcome" as const, outcome: unavailable };
-            }
-            if (state.mission)
-                await ctx.db.patch(state.mission._id, {
-                    status: "blocked",
-                    blockCode: "operation_outcome_unknown",
-                });
-            await recordEvent(
-                ctx,
-                request,
-                "operation_unknown",
-                "operation_outcome_unknown",
-            );
-            return {
-                kind: "outcome" as const,
-                outcome: {
-                    kind: "refused" as const,
-                    code: "operation_outcome_unknown",
-                },
-            };
-        }
-        if (
-            (state.mission ||
-                state.operation?.nativeAuthority === "research") &&
-            (await pauseResearchAtBoundary(ctx, state.runId, state.mission))
-        )
-            return {
-                kind: "outcome" as const,
-                outcome: {
-                    kind: "unavailable" as const,
-                    code: "research_paused",
-                },
-            };
-        if (state.mission && state.operation?.effectKind !== "read") {
-            const missionId = state.mission._id;
-            for (const status of ["running", "waiting"] as const) {
-                const active = await ctx.db
-                    .query("agentOperationRequests")
-                    .withIndex("by_mission_and_status", (q) =>
-                        q.eq("missionId", missionId).eq("status", status),
-                    )
-                    .first();
-                if (active && active._id !== request._id)
-                    return {
-                        kind: "outcome" as const,
-                        outcome: {
-                            kind: "unavailable" as const,
-                            code: "operation_in_progress",
-                        },
-                    };
-            }
-        }
-        const waitEventId =
-            request.waitEventId ??
-            (state.mission?.workflowId &&
-            "protocolVersion" in state.mission &&
-            state.mission.protocolVersion === 3
-                ? await workflow.createEvent(ctx, {
-                      name: `operation:${request._id}`,
-                      workflowId: state.mission.workflowId as WorkflowId,
-                  })
-                : undefined);
-        const deadlineAt = state.mission?.deadlineAt ?? request.deadlineAt;
-        const expiryJobId =
-            deadlineAt === undefined
-                ? undefined
-                : await ctx.scheduler.runAt(
-                      deadlineAt,
-                      internal.execution.operations.expire,
-                      {
-                          requestId: request._id,
-                          expectedGeneration: request.expectedGeneration,
-                      },
-                  );
-        const scheduledJobId = state.operation?.scheduledAction
-            ? await ctx.scheduler.runAfter(0, state.operation.scheduledAction, {
-                  ...args,
-                  epoch: 1,
-              })
-            : undefined;
-        const waitReference = scheduledJobId
-            ? `operation:${request._id}`
-            : undefined;
-        await ctx.db.patch(request._id, {
-            status: scheduledJobId ? "waiting" : "running",
-            scheduledExecution: scheduledJobId
-                ? {
-                      phase: "queued",
-                      epoch: 1,
-                      dispatchGeneration: args.expectedGeneration,
-                      jobId: scheduledJobId,
-                  }
-                : undefined,
-            waitReference,
-            waitEventId,
-            expiryJobId,
-        });
-        await recordEvent(ctx, request, "operation_dispatched");
-        if (waitReference) {
-            await recordEvent(ctx, request, "operation_waiting");
-            return {
-                kind: "outcome" as const,
-                outcome: { kind: "waiting" as const, reference: waitReference },
-            };
-        }
-        if (request.input.kind === "invalid")
-            throw executionError("invalid_operation_input");
-        return {
-            kind: "execute" as const,
-            missionId: state.mission?._id,
-            runId: state.runId,
-            input: request.input,
-        };
-    },
+    handler: (ctx, args) => claimOperationInTx(ctx, args),
 });
 
 async function ownedStructuredAttempt(
@@ -1239,395 +1278,409 @@ export const beginScheduledExecution = internalMutation({
     },
 });
 
-export const recordResult = internalMutation({
-    args: {
-        requestId: v.id("agentOperationRequests"),
-        expectedGeneration: v.number(),
-        outcome: operationOutcomeValidator,
-        epoch: v.optional(v.number()),
-        recovery: v.optional(v.literal("owned_wake")),
-        historyRead: v.optional(historyReadReceiptValidator),
-    },
-    returns: operationOutcomeValidator,
-    handler: async (ctx, args): Promise<Outcome> => {
-        const request = await ctx.db.get(args.requestId);
-        if (
-            !request ||
-            (request.status !== "completed" &&
-                request.expectedGeneration !== args.expectedGeneration &&
-                request.adoptionGeneration !== args.expectedGeneration)
-        )
-            throw executionError("request_unavailable");
-        if (
-            request.scheduledExecution &&
-            ((args.epoch !== undefined &&
-                !(args.recovery &&
-                request.scheduledExecution.phase === "waiting_provider"
-                    ? request.scheduledExecution.epoch === args.epoch
-                    : ownsScheduledEpoch(
-                          request,
-                          args.expectedGeneration,
-                          args.epoch,
-                      ))) ||
-                (args.epoch === undefined &&
-                    !request.outcome &&
-                    !request.effect) ||
-                (request.scheduledExecution.phase === "waiting_provider" &&
-                    !args.recovery))
-        )
-            return { kind: "refused", code: "stale_execution" };
-        if (
-            request.outcome &&
-            stableStringify(request.outcome) !==
-                stableStringify(args.outcome) &&
-            args.outcome.kind !== "waiting"
-        )
-            throw executionError("operation_result_conflict");
-        if (request.status === "completed") {
-            try {
-                await authority(ctx, request, args.expectedGeneration);
-            } catch (error) {
-                const code = executionFailureCode(error);
-                if (!code) throw error;
-                return { kind: "refused", code };
-            }
-            if (!request.outcome)
-                throw executionError("operation_result_unavailable");
-            if (request.adoptionRefusalCode)
-                return { kind: "refused", code: request.adoptionRefusalCode };
-            return request.outcome;
-        }
-        const mission = request.missionId
-            ? await ctx.db.get(request.missionId)
-            : null;
-        const operation = operationFor(request.input, mission ?? undefined);
-        if (
-            request.effect &&
-            stableStringify(request.effect.outcome) !==
-                stableStringify(args.outcome)
-        )
-            throw executionError("operation_result_conflict");
-        let outcome = args.outcome;
-        const missingEffectReceipt =
-            operation.effectKind === "atomic_effect" &&
-            outcome.kind === "success" &&
-            !request.effect;
-        let adoptionRefusalCode: string | undefined;
-        let diagnostic: Doc<"agentExecutionEvents">["protectedDiagnostic"];
-        if (outcome.kind === "success") {
-            try {
-                validateOperationValue(
-                    operation.resultValidator,
-                    JSON.parse(outcome.valueJson),
-                    ctx.db,
-                );
-                const validated = await operation.validateOutcome(
-                    request,
-                    outcome,
-                    ctx,
-                );
-                if (
-                    !validate(operationOutcomeValidator, validated, {
-                        db: ctx.db,
-                    }) ||
-                    (operation.effectKind === "read" &&
-                        validated.kind === "waiting")
-                )
-                    throw executionError("operation_contract_invalid");
-                if ("code" in validated) adoptionRefusalCode = validated.code;
-                else outcome = validated;
-            } catch (error) {
-                // Preserve the known observation; only pure domain callbacks are guarded here.
-                adoptionRefusalCode = "operation_adoption_failed";
-                diagnostic = protectedDiagnostic(error, "validate_outcome");
-            }
-        }
-        if (
-            outcome.kind === "success" &&
-            new TextEncoder().encode(outcome.valueJson).length >
-                MAX_OPERATION_RESULT_BYTES
-        )
-            outcome = {
-                kind: "unavailable",
-                code: "operation_result_capacity",
-            };
-        const historyRead = args.historyRead ?? request.historyRead;
-        if (
-            historyRead &&
-            request.historyRead &&
-            stableStringify(historyRead) !==
-                stableStringify(request.historyRead)
-        )
-            throw executionError("operation_result_conflict");
-        if (
-            outcome.kind === "success" &&
-            historySourceFor(request.input.kind) &&
-            request.operationVersion >= 2
-        ) {
-            if (!historyRead) throw executionError("history_receipt_invalid");
-            verifyHistoryReadReceipt(
-                request,
-                historyRead,
-                args.expectedGeneration,
-                outcome.valueJson,
-            );
-        } else if (historyRead) throw executionError("history_receipt_invalid");
-        if (outcome.kind === "waiting") {
-            if (!outcome.reference || outcome.reference.length > 160)
-                throw executionError("invalid_wait_reference");
-            if (request.outcome) return request.outcome;
-            if (
-                operation.effectKind === "durable_effect" &&
-                operation.scheduledAction &&
-                operation.scheduledRecovery
-            ) {
-                const call = await ownedStructuredAttempt(ctx, request);
-                if (!call) throw executionError("operation_not_dispatched");
-                await deferStructuredExecution(ctx, request, call);
-            }
-            await ctx.db.patch(request._id, {
-                status: "waiting",
-                waitReference: outcome.reference,
-            });
-            await recordEvent(ctx, request, "operation_waiting");
-            return outcome;
-        }
-        if (
-            !["running", "waiting", "observed", "unknown"].includes(
-                request.status,
-            )
-        )
-            throw executionError("operation_not_dispatched");
-        if (!request.outcome) {
-            const execution = request.scheduledExecution;
-            if (
-                (execution?.phase === "running" ||
-                    execution?.phase === "waiting_provider") &&
-                execution.wakeId
-            )
-                await ctx.scheduler.cancel(execution.wakeId);
-            if (request.expiryJobId)
-                await ctx.scheduler.cancel(request.expiryJobId);
-            await ctx.db.patch(request._id, {
-                outcome,
-                historyRead,
-                status: "observed",
-                ...(request.scheduledExecution
-                    ? {
-                          scheduledExecution: {
-                              phase: "finished" as const,
-                              epoch: request.scheduledExecution.epoch,
-                              dispatchGeneration:
-                                  request.scheduledExecution.dispatchGeneration,
-                          },
-                      }
-                    : {}),
-                completedAt: Date.now(),
-            });
-            await recordEvent(
-                ctx,
-                { ...request, outcome },
-                "operation_observed",
-                undefined,
-                undefined,
-                { diagnostic },
-            );
-            if (request.waitEventId && !request.waitNotified) {
-                await workflow.sendEvent(ctx, {
-                    id: request.waitEventId as EventId,
-                    value: null,
-                });
-                await ctx.db.patch(request._id, { waitNotified: true });
-            }
-        }
+const recordResultInTxArgs = v.object({
+    requestId: v.id("agentOperationRequests"),
+    expectedGeneration: v.number(),
+    outcome: operationOutcomeValidator,
+    epoch: v.optional(v.number()),
+    recovery: v.optional(v.literal("owned_wake")),
+    historyRead: v.optional(historyReadReceiptValidator),
+});
+
+/** A waiting request contributes one wake only when the mission can still consume its result. */
+async function notifyPiOperationResult(
+    ctx: MutationCtx,
+    request: Doc<"agentOperationRequests">,
+    mission: Doc<"agentMissions"> | null,
+) {
+    if (
+        mission?.executionRuntime !== "pi-durable" ||
+        request.status !== "waiting" ||
+        request.outcome
+    )
+        return;
+    const session = mission.piActiveWriter
+        ? await sessionForMission(ctx, mission)
+        : null;
+    const active =
+        session &&
+        session.writer === mission.piActiveWriter &&
+        session.generation === mission.generation &&
+        session.leaseUntil > Date.now();
+    await ctx.db.patch(mission._id, {
+        piResultWakeVersion: (mission.piResultWakeVersion ?? 0) + 1,
+        ...(!active ? { piResultWakePending: true } : {}),
+    });
+    if (!active) await schedulePiMission(ctx, mission._id, mission.generation);
+}
+
+async function recordResultInTx(
+    ctx: MutationCtx,
+    args: Infer<typeof recordResultInTxArgs>,
+): Promise<Outcome> {
+    const request = await ctx.db.get(args.requestId);
+    if (
+        !request ||
+        (request.status !== "completed" &&
+            request.expectedGeneration !== args.expectedGeneration &&
+            request.adoptionGeneration !== args.expectedGeneration)
+    )
+        throw executionError("request_unavailable");
+    if (
+        request.scheduledExecution &&
+        ((args.epoch !== undefined &&
+            !(args.recovery &&
+            request.scheduledExecution.phase === "waiting_provider"
+                ? request.scheduledExecution.epoch === args.epoch
+                : ownsScheduledEpoch(
+                      request,
+                      args.expectedGeneration,
+                      args.epoch,
+                  ))) ||
+            (args.epoch === undefined && !request.outcome && !request.effect) ||
+            (request.scheduledExecution.phase === "waiting_provider" &&
+                !args.recovery))
+    )
+        return { kind: "refused", code: "stale_execution" };
+    if (
+        request.outcome &&
+        stableStringify(request.outcome) !== stableStringify(args.outcome) &&
+        args.outcome.kind !== "waiting"
+    )
+        throw executionError("operation_result_conflict");
+    if (request.status === "completed") {
         try {
             await authority(ctx, request, args.expectedGeneration);
         } catch (error) {
             const code = executionFailureCode(error);
             if (!code) throw error;
-            if (mission) {
-                let canContinue = false;
-                try {
-                    await requireMissionAuthority(
-                        ctx,
-                        mission._id,
-                        args.expectedGeneration,
-                    );
-                    canContinue = true;
-                } catch (missionError) {
-                    if (!executionFailureCode(missionError)) throw missionError;
-                }
-                if (canContinue)
-                    await ctx.db.patch(request._id, {
-                        status: "completed",
-                        adoptionRefusalCode: code,
-                    });
-            }
-            await recordEvent(
-                ctx,
-                request,
-                "late_operation_result_refused",
-                code,
-            );
             return { kind: "refused", code };
         }
-        let advancedDomainProgress = false;
-        if (mission) {
-            const definition = getAgentDefinition(
-                mission.definitionId,
-                mission.definitionVersion,
+        if (!request.outcome)
+            throw executionError("operation_result_unavailable");
+        if (request.adoptionRefusalCode)
+            return { kind: "refused", code: request.adoptionRefusalCode };
+        return request.outcome;
+    }
+    const mission = request.missionId
+        ? await ctx.db.get(request.missionId)
+        : null;
+    const operation = operationFor(request.input, mission ?? undefined);
+    if (
+        request.effect &&
+        stableStringify(request.effect.outcome) !==
+            stableStringify(args.outcome)
+    )
+        throw executionError("operation_result_conflict");
+    let outcome = args.outcome;
+    const missingEffectReceipt =
+        operation.effectKind === "atomic_effect" &&
+        outcome.kind === "success" &&
+        !request.effect;
+    let adoptionRefusalCode: string | undefined;
+    let diagnostic: Doc<"agentExecutionEvents">["protectedDiagnostic"];
+    if (outcome.kind === "success") {
+        try {
+            validateOperationValue(
+                operation.resultValidator,
+                JSON.parse(outcome.valueJson),
+                ctx.db,
             );
-            let progress: AgentProgress = {};
-            let accounting: ReturnType<typeof adoptProgress> = {
-                kind: "ready",
-                keys: mission.progressKeys,
-                added: 0,
-            };
-            if (!adoptionRefusalCode && !missingEffectReceipt) {
-                try {
-                    const {
-                        progressKeys: _keys,
-                        noProgressTurns: _turns,
-                        lastSettledInvocationId: _settled,
-                        recoveryRead: _recoveryRead,
-                        ...domainMission
-                    } = mission;
-                    progress =
-                        outcome.kind === "success" &&
-                        !isCommonConsultation(request.input.kind)
-                            ? definition.progress(domainMission, outcome)
-                            : {};
-                    if (
-                        !validate(agentProgressValidator, progress, {
-                            db: ctx.db,
-                        }) ||
-                        (progress.state &&
-                            !validate(
-                                definition.stateValidator,
-                                progress.state,
-                                { db: ctx.db },
-                            ))
-                    )
-                        throw executionError("mission_state_invalid");
-                    accounting = adoptProgress(
-                        mission.progressKeys,
-                        outcome.kind === "success"
-                            ? [
-                                  ...(progress.facts ?? []),
-                                  ...(historyRead?.restorable === false
-                                      ? []
-                                      : (historyRead?.fragmentIds ?? [])),
-                              ]
-                            : [],
-                    );
-                } catch (error) {
-                    adoptionRefusalCode = "operation_adoption_failed";
-                    diagnostic = protectedDiagnostic(error, "reduce_progress");
-                }
-            }
-            const code = missingEffectReceipt
-                ? "operation_effect_receipt_missing"
-                : (adoptionRefusalCode ??
-                  (accounting.kind === "blocked"
-                      ? accounting.code
-                      : progress.blockCode));
-            if (code) {
-                await ctx.db.patch(mission._id, {
-                    status: "blocked",
-                    blockCode: code,
-                });
-                await ctx.db.patch(request._id, {
-                    status: "completed",
-                    adoptionRefusalCode: code,
-                });
-                await recordEvent(
-                    ctx,
-                    { ...request, outcome },
-                    "operation_adoption_failed",
-                    code,
-                    undefined,
-                    { diagnostic },
-                );
-                return adoptionRefusalCode || missingEffectReceipt
-                    ? { kind: "refused", code }
-                    : outcome;
-            }
-            if (accounting.kind !== "ready")
-                throw executionError("progress_contract_invalid");
-            advancedDomainProgress =
-                !isCommonConsultation(request.input.kind) &&
-                accounting.added > 0;
-            await ctx.db.patch(mission._id, {
-                ...domainDataPatch(
-                    mission,
-                    progress.state ? { state: progress.state } : {},
-                ),
-                progressKeys: accounting.keys,
-                ...(progress.obligations
-                    ? { obligations: progress.obligations }
-                    : {}),
-            });
-        } else {
-            const code = missingEffectReceipt
-                ? "operation_effect_receipt_missing"
-                : adoptionRefusalCode;
-            if (code) {
-                await ctx.db.patch(request._id, {
-                    status: "completed",
-                    adoptionRefusalCode: code,
-                });
-                await recordEvent(
-                    ctx,
-                    { ...request, outcome },
-                    "operation_adoption_failed",
-                    code,
-                    undefined,
-                    { diagnostic },
-                );
-                return { kind: "refused", code };
-            }
+            const validated = await operation.validateOutcome(
+                request,
+                outcome,
+                ctx,
+            );
+            if (
+                !validate(operationOutcomeValidator, validated, {
+                    db: ctx.db,
+                }) ||
+                (operation.effectKind === "read" &&
+                    validated.kind === "waiting")
+            )
+                throw executionError("operation_contract_invalid");
+            if ("code" in validated) adoptionRefusalCode = validated.code;
+            else outcome = validated;
+        } catch (error) {
+            // Preserve the known observation; only pure domain callbacks are guarded here.
+            adoptionRefusalCode = "operation_adoption_failed";
+            diagnostic = protectedDiagnostic(error, "validate_outcome");
+        }
+    }
+    if (
+        outcome.kind === "success" &&
+        new TextEncoder().encode(outcome.valueJson).length >
+            MAX_OPERATION_RESULT_BYTES
+    )
+        outcome = {
+            kind: "unavailable",
+            code: "operation_result_capacity",
+        };
+    const historyRead = args.historyRead ?? request.historyRead;
+    if (
+        historyRead &&
+        request.historyRead &&
+        stableStringify(historyRead) !== stableStringify(request.historyRead)
+    )
+        throw executionError("operation_result_conflict");
+    if (
+        outcome.kind === "success" &&
+        historySourceFor(request.input.kind) &&
+        request.operationVersion >= 2
+    ) {
+        if (!historyRead) throw executionError("history_receipt_invalid");
+        verifyHistoryReadReceipt(
+            request,
+            historyRead,
+            args.expectedGeneration,
+            outcome.valueJson,
+        );
+    } else if (historyRead) throw executionError("history_receipt_invalid");
+    if (outcome.kind === "waiting") {
+        if (!outcome.reference || outcome.reference.length > 160)
+            throw executionError("invalid_wait_reference");
+        if (request.outcome) return request.outcome;
+        if (
+            operation.effectKind === "durable_effect" &&
+            operation.scheduledAction &&
+            operation.scheduledRecovery
+        ) {
+            const call = await ownedStructuredAttempt(ctx, request);
+            if (!call) throw executionError("operation_not_dispatched");
+            await deferStructuredExecution(ctx, request, call);
         }
         await ctx.db.patch(request._id, {
-            status: "completed",
-            adoptedAt: Date.now(),
-            adoptionRefusalCode: undefined,
+            status: "waiting",
+            waitReference: outcome.reference,
+        });
+        await recordEvent(ctx, request, "operation_waiting");
+        return outcome;
+    }
+    if (!["running", "waiting", "observed", "unknown"].includes(request.status))
+        throw executionError("operation_not_dispatched");
+    if (!request.outcome) {
+        const execution = request.scheduledExecution;
+        if (
+            (execution?.phase === "running" ||
+                execution?.phase === "waiting_provider") &&
+            execution.wakeId
+        )
+            await ctx.scheduler.cancel(execution.wakeId);
+        if (request.expiryJobId)
+            await ctx.scheduler.cancel(request.expiryJobId);
+        await ctx.db.patch(request._id, {
+            outcome,
+            historyRead,
+            status: "observed",
+            ...(request.scheduledExecution
+                ? {
+                      scheduledExecution: {
+                          phase: "finished" as const,
+                          epoch: request.scheduledExecution.epoch,
+                          dispatchGeneration:
+                              request.scheduledExecution.dispatchGeneration,
+                      },
+                  }
+                : {}),
+            completedAt: Date.now(),
         });
         await recordEvent(
             ctx,
-            {
-                ...(await requestAtAdmission(ctx, request)),
-                expectedGeneration: args.expectedGeneration,
-                outcome,
-            },
-            "operation_completed",
-            outcome.kind === "success" ? undefined : outcome.code,
+            { ...request, outcome },
+            "operation_observed",
             undefined,
-            { historySource: advancedDomainProgress ? true : undefined },
+            undefined,
+            { diagnostic },
         );
-        if (
-            mission?.executionRuntime === "pi-durable" &&
-            request.status === "waiting" &&
-            !request.outcome
-        ) {
-            await ctx.db.patch(mission._id, { piResultWakePending: true });
-            await schedulePiMission(ctx, mission._id, args.expectedGeneration);
+        if (request.waitEventId && !request.waitNotified) {
+            await workflow.sendEvent(ctx, {
+                id: request.waitEventId as EventId,
+                value: null,
+            });
+            await ctx.db.patch(request._id, { waitNotified: true });
         }
-        const runId = mission?.runId ?? request.runId;
-        if (runId && (mission || operation.nativeAuthority === "research"))
-            await pauseResearchAtBoundary(ctx, runId, mission ?? undefined);
-        return outcome;
-    },
+    }
+    try {
+        await authority(ctx, request, args.expectedGeneration);
+    } catch (error) {
+        const code = executionFailureCode(error);
+        if (!code) throw error;
+        if (mission) {
+            let canContinue = false;
+            try {
+                await requireMissionAuthority(
+                    ctx,
+                    mission._id,
+                    args.expectedGeneration,
+                );
+                canContinue = true;
+            } catch (missionError) {
+                if (!executionFailureCode(missionError)) throw missionError;
+            }
+            if (canContinue) {
+                await ctx.db.patch(request._id, {
+                    status: "completed",
+                    adoptionRefusalCode: code,
+                });
+                await notifyPiOperationResult(ctx, request, mission);
+            }
+        }
+        await recordEvent(ctx, request, "late_operation_result_refused", code);
+        return { kind: "refused", code };
+    }
+    await notifyPiOperationResult(ctx, request, mission);
+    let advancedDomainProgress = false;
+    if (mission) {
+        const definition = getAgentDefinition(
+            mission.definitionId,
+            mission.definitionVersion,
+        );
+        let progress: AgentProgress = {};
+        let accounting: ReturnType<typeof adoptProgress> = {
+            kind: "ready",
+            keys: mission.progressKeys,
+            added: 0,
+        };
+        if (!adoptionRefusalCode && !missingEffectReceipt) {
+            try {
+                const {
+                    progressKeys: _keys,
+                    noProgressTurns: _turns,
+                    lastSettledInvocationId: _settled,
+                    recoveryRead: _recoveryRead,
+                    ...domainMission
+                } = mission;
+                progress =
+                    outcome.kind === "success" &&
+                    !isCommonConsultation(request.input.kind)
+                        ? definition.progress(domainMission, outcome)
+                        : {};
+                if (
+                    !validate(agentProgressValidator, progress, {
+                        db: ctx.db,
+                    }) ||
+                    (progress.state &&
+                        !validate(definition.stateValidator, progress.state, {
+                            db: ctx.db,
+                        }))
+                )
+                    throw executionError("mission_state_invalid");
+                accounting = adoptProgress(
+                    mission.progressKeys,
+                    outcome.kind === "success"
+                        ? [
+                              ...(progress.facts ?? []),
+                              ...(historyRead?.restorable === false
+                                  ? []
+                                  : (historyRead?.fragmentIds ?? [])),
+                          ]
+                        : [],
+                );
+            } catch (error) {
+                adoptionRefusalCode = "operation_adoption_failed";
+                diagnostic = protectedDiagnostic(error, "reduce_progress");
+            }
+        }
+        const code = missingEffectReceipt
+            ? "operation_effect_receipt_missing"
+            : (adoptionRefusalCode ??
+              (accounting.kind === "blocked"
+                  ? accounting.code
+                  : progress.blockCode));
+        if (code) {
+            await ctx.db.patch(mission._id, {
+                status: "blocked",
+                blockCode: code,
+            });
+            await ctx.db.patch(request._id, {
+                status: "completed",
+                adoptionRefusalCode: code,
+            });
+            await recordEvent(
+                ctx,
+                { ...request, outcome },
+                "operation_adoption_failed",
+                code,
+                undefined,
+                { diagnostic },
+            );
+            return adoptionRefusalCode || missingEffectReceipt
+                ? { kind: "refused", code }
+                : outcome;
+        }
+        if (accounting.kind !== "ready")
+            throw executionError("progress_contract_invalid");
+        advancedDomainProgress =
+            !isCommonConsultation(request.input.kind) && accounting.added > 0;
+        await ctx.db.patch(mission._id, {
+            ...domainDataPatch(
+                mission,
+                progress.state ? { state: progress.state } : {},
+            ),
+            progressKeys: accounting.keys,
+            ...(progress.obligations
+                ? { obligations: progress.obligations }
+                : {}),
+        });
+    } else {
+        const code = missingEffectReceipt
+            ? "operation_effect_receipt_missing"
+            : adoptionRefusalCode;
+        if (code) {
+            await ctx.db.patch(request._id, {
+                status: "completed",
+                adoptionRefusalCode: code,
+            });
+            await recordEvent(
+                ctx,
+                { ...request, outcome },
+                "operation_adoption_failed",
+                code,
+                undefined,
+                { diagnostic },
+            );
+            return { kind: "refused", code };
+        }
+    }
+    await ctx.db.patch(request._id, {
+        status: "completed",
+        adoptedAt: Date.now(),
+        adoptionRefusalCode: undefined,
+    });
+    await recordEvent(
+        ctx,
+        {
+            ...(await requestAtAdmission(ctx, request)),
+            expectedGeneration: args.expectedGeneration,
+            outcome,
+        },
+        "operation_completed",
+        outcome.kind === "success" ? undefined : outcome.code,
+        undefined,
+        { historySource: advancedDomainProgress ? true : undefined },
+    );
+    const runId = mission?.runId ?? request.runId;
+    if (runId && (mission || operation.nativeAuthority === "research"))
+        await pauseResearchAtBoundary(ctx, runId, mission ?? undefined);
+    return outcome;
+}
+
+export const recordResult = internalMutation({
+    args: recordResultInTxArgs.fields,
+    returns: operationOutcomeValidator,
+    handler: (ctx, args) => recordResultInTx(ctx, args),
 });
 export const dispatch = internalAction({
     args: {
         requestId: v.id("agentOperationRequests"),
         expectedGeneration: v.number(),
+        piLease: v.optional(piDispatchLeaseValidator),
     },
     returns: operationOutcomeValidator,
-    handler: async (ctx, args): Promise<Outcome> => {
+    handler: async (ctx, { piLease, ...args }): Promise<Outcome> => {
         const claimed = await ctx.runMutation(
             internal.execution.operations.claim,
-            args,
+            { ...args, piLease },
         );
         if (claimed.kind === "outcome") return claimed.outcome;
         if (claimed.kind === "adopt")
@@ -1722,6 +1775,22 @@ async function markOperationUnknown(
               }
             : { status: "unknown" },
     );
+    if (unavailable && mission && request.status === "waiting") {
+        // Keep the factual non-retryable outcome even if permission to resume has ended.
+        let active: Doc<"agentMissions"> | null = null;
+        try {
+            active = (
+                await requireMissionAuthority(
+                    ctx,
+                    mission._id,
+                    request.adoptionGeneration ?? request.expectedGeneration,
+                )
+            ).mission;
+        } catch (error) {
+            if (!executionFailureCode(error)) throw error;
+        }
+        await notifyPiOperationResult(ctx, request, active);
+    }
     if (
         !unavailable &&
         mission &&
@@ -1747,133 +1816,213 @@ async function markOperationUnknown(
 }
 
 /** Settles observed callback failures; an unacknowledged transaction still relies on expiry. */
-export const settleDispatchFailure = internalMutation({
-    args: {
-        requestId: v.id("agentOperationRequests"),
-        expectedGeneration: v.number(),
-        failure: dispatchFailureValidator,
-        epoch: v.optional(v.number()),
-    },
-    returns: operationOutcomeValidator,
-    handler: async (ctx, args): Promise<Outcome> => {
-        const request = await ctx.db.get(args.requestId);
-        if (
-            !request ||
-            (request.expectedGeneration !== args.expectedGeneration &&
-                request.adoptionGeneration !== args.expectedGeneration)
-        )
-            throw executionError("request_unavailable");
-        if (
-            request.scheduledExecution &&
-            (args.epoch === undefined ||
-                !ownsScheduledEpoch(
-                    request,
-                    args.expectedGeneration,
-                    args.epoch,
-                ))
-        )
-            return { kind: "refused", code: "stale_execution" };
-        const retained = request.outcome ?? request.effect?.outcome;
-        if (
-            args.failure.diagnostic &&
-            request.status !== "completed" &&
-            request.status !== "unknown"
-        )
-            await recordEvent(
-                ctx,
-                request,
-                "operation_execution_incident",
-                args.failure.code,
-                undefined,
-                { diagnostic: args.failure.diagnostic },
-            );
-        if (retained)
-            return ctx.runMutation(internal.execution.operations.recordResult, {
-                requestId: args.requestId,
-                expectedGeneration: args.expectedGeneration,
-                epoch: args.epoch,
-                outcome: retained,
-            });
-        if (request.status === "unknown")
-            return { kind: "unavailable", code: "operation_outcome_unknown" };
-        if (
-            request.status === "waiting" &&
-            request.scheduledExecution?.phase === "waiting_provider" &&
-            request.waitReference
-        )
-            return {
-                kind: "waiting",
-                reference: request.waitReference,
-            };
-        if (!["running", "waiting"].includes(request.status))
-            throw executionError("operation_not_dispatched");
-        if (args.failure.category === "uncertain_effect") {
-            const mission = request.missionId
-                ? await ctx.db.get(request.missionId)
-                : null;
-            const operation = operationFor(request.input, mission ?? undefined);
-            if (
-                operation.effectKind === "durable_effect" &&
-                operation.scheduledAction &&
-                operation.scheduledRecovery === "structured_model_v1"
-            ) {
-                const run = request.runId
-                    ? await ctx.db.get(request.runId)
-                    : null;
-                const recovered = run?.researchPauseRequested
-                    ? null
-                    : await operation.recoverScheduledResult?.(
-                          ctx,
-                          request,
-                          args.expectedGeneration,
-                      );
-                if (recovered)
-                    return ctx.runMutation(
-                        internal.execution.operations.recordResult,
-                        {
-                            requestId: args.requestId,
-                            expectedGeneration: args.expectedGeneration,
-                            epoch: args.epoch,
-                            outcome: recovered,
-                        },
-                    );
-                const call = await ownedStructuredAttempt(ctx, request);
-                if (
-                    call?.invocationId &&
-                    request.scheduledExecution?.phase === "running"
-                )
-                    return ctx.runMutation(
-                        internal.execution.operations.recordResult,
-                        {
-                            requestId: args.requestId,
-                            expectedGeneration: args.expectedGeneration,
-                            epoch: args.epoch,
-                            outcome: {
-                                kind: "waiting",
-                                reference: `operation:${request._id}`,
-                            },
-                        },
-                    );
-            }
-            await markOperationUnknown(ctx, request);
-            return { kind: "unavailable", code: "operation_outcome_unknown" };
-        }
-        if (args.failure.category === "incident" && !args.failure.diagnostic)
-            await recordEvent(
-                ctx,
-                request,
-                "operation_execution_incident",
-                "operation_execution_failed",
-            );
-        return ctx.runMutation(internal.execution.operations.recordResult, {
+const settleDispatchFailureInTxArgs = v.object({
+    requestId: v.id("agentOperationRequests"),
+    expectedGeneration: v.number(),
+    failure: dispatchFailureValidator,
+    epoch: v.optional(v.number()),
+});
+
+async function settleDispatchFailureInTx(
+    ctx: MutationCtx,
+    args: Infer<typeof settleDispatchFailureInTxArgs>,
+): Promise<Outcome> {
+    const request = await ctx.db.get(args.requestId);
+    if (
+        !request ||
+        (request.expectedGeneration !== args.expectedGeneration &&
+            request.adoptionGeneration !== args.expectedGeneration)
+    )
+        throw executionError("request_unavailable");
+    if (
+        request.scheduledExecution &&
+        (args.epoch === undefined ||
+            !ownsScheduledEpoch(request, args.expectedGeneration, args.epoch))
+    )
+        return { kind: "refused", code: "stale_execution" };
+    const retained = request.outcome ?? request.effect?.outcome;
+    if (
+        args.failure.diagnostic &&
+        request.status !== "completed" &&
+        request.status !== "unknown"
+    )
+        await recordEvent(
+            ctx,
+            request,
+            "operation_execution_incident",
+            args.failure.code,
+            undefined,
+            { diagnostic: args.failure.diagnostic },
+        );
+    if (retained)
+        return recordResultInTx(ctx, {
             requestId: args.requestId,
             expectedGeneration: args.expectedGeneration,
             epoch: args.epoch,
-            outcome:
-                args.failure.category === "authority"
-                    ? { kind: "refused", code: args.failure.code }
+            outcome: retained,
+        });
+    if (request.status === "unknown")
+        return { kind: "unavailable", code: "operation_outcome_unknown" };
+    if (
+        request.status === "waiting" &&
+        request.scheduledExecution?.phase === "waiting_provider" &&
+        request.waitReference
+    )
+        return {
+            kind: "waiting",
+            reference: request.waitReference,
+        };
+    if (!["running", "waiting"].includes(request.status))
+        throw executionError("operation_not_dispatched");
+    if (args.failure.category === "uncertain_effect") {
+        const mission = request.missionId
+            ? await ctx.db.get(request.missionId)
+            : null;
+        const operation = operationFor(request.input, mission ?? undefined);
+        if (
+            operation.effectKind === "durable_effect" &&
+            operation.scheduledAction &&
+            operation.scheduledRecovery === "structured_model_v1"
+        ) {
+            const run = request.runId ? await ctx.db.get(request.runId) : null;
+            const recovered = run?.researchPauseRequested
+                ? null
+                : await operation.recoverScheduledResult?.(
+                      ctx,
+                      request,
+                      args.expectedGeneration,
+                  );
+            if (recovered)
+                return recordResultInTx(ctx, {
+                    requestId: args.requestId,
+                    expectedGeneration: args.expectedGeneration,
+                    epoch: args.epoch,
+                    outcome: recovered,
+                });
+            const call = await ownedStructuredAttempt(ctx, request);
+            if (
+                call?.invocationId &&
+                request.scheduledExecution?.phase === "running"
+            )
+                return recordResultInTx(ctx, {
+                    requestId: args.requestId,
+                    expectedGeneration: args.expectedGeneration,
+                    epoch: args.epoch,
+                    outcome: {
+                        kind: "waiting",
+                        reference: `operation:${request._id}`,
+                    },
+                });
+        }
+        await markOperationUnknown(ctx, request);
+        return { kind: "unavailable", code: "operation_outcome_unknown" };
+    }
+    if (args.failure.category === "incident" && !args.failure.diagnostic)
+        await recordEvent(
+            ctx,
+            request,
+            "operation_execution_incident",
+            "operation_execution_failed",
+        );
+    return recordResultInTx(ctx, {
+        requestId: args.requestId,
+        expectedGeneration: args.expectedGeneration,
+        epoch: args.epoch,
+        outcome:
+            args.failure.category === "authority"
+                ? { kind: "refused", code: args.failure.code }
+                : {
+                      kind: "unavailable",
+                      code: "operation_execution_failed",
+                  },
+    });
+}
+
+export const settleDispatchFailure = internalMutation({
+    args: settleDispatchFailureInTxArgs.fields,
+    returns: operationOutcomeValidator,
+    handler: (ctx, args) => settleDispatchFailureInTx(ctx, args),
+});
+
+/** Claims, executes and adopts an operation without an action or intermediate persisted dispatch. */
+export const executeLocal = internalMutation({
+    args: claimOperationInTxArgs.fields,
+    returns: operationOutcomeValidator,
+    handler: async (ctx, args): Promise<Outcome> => {
+        const claimed = await claimOperationInTx(ctx, args, true);
+        if (claimed.kind === "outcome") return claimed.outcome;
+        const { piLease: _lease, ...scope } = args;
+        if (claimed.kind === "adopt")
+            return recordResultInTx(ctx, {
+                ...scope,
+                outcome: claimed.outcome,
+            });
+        const mission = claimed.missionId
+            ? await ctx.db.get(claimed.missionId)
+            : null;
+        const operation = operationFor(claimed.input, mission ?? undefined);
+        const input = { ...scope, ...claimed };
+        const validateResult = (result: OperationExecutionResult) =>
+            validateOperationExecutionResult(
+                operation,
+                result,
+                claimed.input.kind,
+            );
+        if (
+            operation.effectKind === "atomic_effect" &&
+            operation.executeInTransaction
+        ) {
+            // Any exception rolls back the framing write and the request claim together.
+            const result = validateResult(
+                await operation.executeInTransaction(ctx, input),
+            );
+            return recordResultInTx(ctx, { ...scope, ...result });
+        }
+        if (operation.effectKind !== "read" || !operation.executeInTransaction)
+            throw executionError("operation_not_allowed");
+        let result: ReturnType<typeof validateOperationExecutionResult>;
+        try {
+            result = validateResult(
+                await operation.executeInTransaction(
+                    { runQuery: ctx.runQuery.bind(ctx) },
+                    input,
+                ),
+            );
+        } catch (error) {
+            return settleDispatchFailureInTx(ctx, {
+                ...scope,
+                failure: classifyDispatchFailure(error, "read_callback"),
+            });
+        }
+        return recordResultInTx(ctx, { ...scope, ...result });
+    },
+});
+
+/** Settles an atomic operation after its transaction has rolled back. */
+export const settleLocalRollback = internalMutation({
+    args: {
+        ...claimOperationInTxArgs.fields,
+        failure: v.optional(dispatchFailureValidator),
+    },
+    returns: operationOutcomeValidator,
+    handler: async (ctx, { failure, ...args }): Promise<Outcome> => {
+        const request = await ctx.db.get(args.requestId);
+        if (request?.status !== "pending" && request?.status !== "completed")
+            throw executionError("operation_not_dispatched");
+        const claimed = await claimOperationInTx(ctx, args, true);
+        if (claimed.kind === "outcome") return claimed.outcome;
+        if (claimed.kind !== "execute")
+            throw executionError("operation_not_dispatched");
+        await ctx.db.patch(args.requestId, { knownNotDispatched: true });
+        return settleDispatchFailureInTx(ctx, {
+            requestId: args.requestId,
+            expectedGeneration: args.expectedGeneration,
+            failure:
+                failure?.category === "authority" ||
+                failure?.category === "incident"
+                    ? failure
                     : {
-                          kind: "unavailable",
+                          category: "incident",
                           code: "operation_execution_failed",
                       },
         });
@@ -1882,7 +2031,7 @@ export const settleDispatchFailure = internalMutation({
 
 export const missionForDispatch = internalQuery({
     args: { missionId: v.id("agentMissions"), expectedGeneration: v.number() },
-    returns: schema.doc("agentMissions"),
+    returns: missionDocument,
     handler: async (ctx, args) =>
         (
             await requireMissionAuthority(

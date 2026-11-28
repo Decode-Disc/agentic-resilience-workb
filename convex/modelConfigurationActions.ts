@@ -1,6 +1,10 @@
 "use node";
 
 import { executionError } from "@convex/execution/errors";
+import {
+    modelPrepared,
+    revisionRoute,
+} from "@convex/execution/modelConfigurationCore";
 import { browserModelMetadata } from "@convex/fixtures/browserModelMetadata";
 import { verifyResponseControlModel as verifyDecisionsModel } from "@convex/integrations/responseCoherence";
 import {
@@ -25,7 +29,6 @@ import {
     recommendedReasoningEffort,
 } from "./integrations/modelRouting";
 import { prepareNativeProfiles } from "./integrations/piModelProfiles";
-import { modelPrepared, revisionRoute } from "./modelConfiguration";
 import {
     modelPreparationInput,
     type nativeProfile,

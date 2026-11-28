@@ -1,6 +1,7 @@
 import { api, internal } from "@convex/_generated/api";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedConversation } from "@/__tests__/setup/agent-harness";
+import { beginFixtureInvocation } from "@/__tests__/setup/pi-mission";
 
 afterEach(() => {
     vi.useRealTimers();
@@ -152,7 +153,7 @@ test("retrying turn admission preserves instructions explicitly queued for the n
         start,
     );
     if (!first) throw new Error("Expected active turn");
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: first.missionId,
         expectedGeneration: 1,
         taskKey: "before-queued-message",

@@ -1,4 +1,8 @@
 import type { DataModel, Doc, Id } from "@convex/_generated/dataModel";
+import {
+    readInContextResult,
+    searchAvailableMaterialResult,
+} from "@convex/domain/savedMaterialOperationResults";
 import { executionError } from "@convex/execution/errors";
 import {
     MAX_CLAIM_STATEMENT_CHARS,
@@ -14,10 +18,6 @@ import type { Infer } from "convex/values";
 import { zodToConvex } from "convex-helpers/server/zod4";
 import { z } from "zod";
 import type { ClaimClassification, EvidenceRelation } from "./claims";
-import {
-    readInContextResult,
-    searchAvailableMaterialResult,
-} from "./savedMaterialOperations";
 import {
     SOURCE_COMPARISON_VERSION,
     type SourceComparisonDisposition,

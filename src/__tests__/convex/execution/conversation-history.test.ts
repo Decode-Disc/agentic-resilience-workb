@@ -7,6 +7,11 @@ import {
     runHistoryTurn,
     seedHistoryMission,
 } from "@/__tests__/setup/execution-history";
+import {
+    beginFixtureInvocation,
+    claimFixtureOperation,
+    dispatchFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 
 afterEach(() => {
@@ -190,7 +195,7 @@ test("a research reader's existing snapshot excludes an older queued message pub
         text: "LATER QUEUED INSTRUCTION",
     });
     async function finish(missionId: typeof priorMission, text: string) {
-        const begun = await f.t.mutation(internal.execution.invocations.begin, {
+        const begun = await beginFixtureInvocation(f.t, {
             missionId,
             expectedGeneration: 1,
             taskKey: `finish:${missionId}`,
@@ -224,10 +229,10 @@ test("a research reader's existing snapshot excludes an older queued message pub
                 input: { kind: "consult_conversation", cursor },
             },
         );
-        const outcome = await f.t.action(
-            internal.execution.operations.dispatch,
-            { requestId, expectedGeneration: 4 },
-        );
+        const outcome = await dispatchFixtureOperation(f.t, {
+            requestId,
+            expectedGeneration: 4,
+        });
         expect(outcome).toMatchObject({ kind: "success" });
         assert(outcome.kind === "success");
         return JSON.parse(outcome.valueJson);
@@ -257,10 +262,10 @@ test("a research reader's existing snapshot excludes an older queued message pub
         requestKey: "future",
     });
     await finish(nextMission, "Later response");
-    const originalRoot = await f.t.action(
-        internal.execution.operations.dispatch,
-        { requestId: pendingRoot, expectedGeneration: 4 },
-    );
+    const originalRoot = await dispatchFixtureOperation(f.t, {
+        requestId: pendingRoot,
+        expectedGeneration: 4,
+    });
     expect(originalRoot).toMatchObject({ kind: "success" });
     const next = await read(first.continueCursor);
     expect(next.entries[0].content).toBe("Original published answer");
@@ -284,7 +289,7 @@ test("conversation reading excludes queued instructions and recovers the exact n
             input: { kind: "consult_conversation" },
         },
     );
-    const outcome = await f.t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -311,7 +316,7 @@ test("conversation reading excludes queued instructions and recovers the exact n
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId: invalidId,
             expectedGeneration: 1,
         }),
@@ -335,7 +340,7 @@ test("conversation reading excludes queued instructions and recovers the exact n
             },
         },
     );
-    const corrected = await f.t.action(internal.execution.operations.dispatch, {
+    const corrected = await dispatchFixtureOperation(f.t, {
         requestId: correctedId,
         expectedGeneration: 1,
     });
@@ -481,7 +486,7 @@ test("corrupted retained receipts are incidents; completed legacy pages retain t
         ctx.db.patch(first.requestId, { operationVersion: 1 }),
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId: first.requestId,
             expectedGeneration: 1,
         }),
@@ -498,7 +503,7 @@ test("corrupted retained receipts are incidents; completed legacy pages retain t
     });
     await f.t.run((ctx) => ctx.db.patch(pending, { operationVersion: 1 }));
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId: pending,
             expectedGeneration: 1,
         }),
@@ -519,7 +524,7 @@ test("conversation restoration requests one native paginated record with explici
             input: { kind: "consult_conversation" },
         },
     );
-    await f.t.mutation(internal.execution.operations.claim, {
+    await claimFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });

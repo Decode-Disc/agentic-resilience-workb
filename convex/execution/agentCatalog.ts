@@ -31,6 +31,7 @@ import {
     workbenchV13Definition,
 } from "@convex/domain/workbenchAgent";
 import { getFunctionName } from "convex/server";
+import { getAgentAuthority } from "./agentAuthorityCatalog";
 import {
     type AgentDefinition,
     agentMethodInstructions,
@@ -74,6 +75,10 @@ export function assertOperationContract(
             operation.scheduledAction !== undefined &&
             (operation.scheduledRecovery !== undefined) !==
                 (typeof operation.recoverScheduledResult === "function")) ||
+        (operation.executeInTransaction !== undefined &&
+            ((operation.effectKind !== "read" &&
+                operation.effectKind !== "atomic_effect") ||
+                typeof operation.executeInTransaction !== "function")) ||
         typeof operation.resultValidator?.safeParse !== "function" ||
         typeof operation.pin !== "function" ||
         typeof operation.identity !== "function" ||
@@ -230,7 +235,9 @@ export function resolveAgentDefinition(
 
 /** Enumerates the exact versioned bindings accepted by runtime resolution. */
 export function registeredAgentDefinitions(): readonly AgentDefinition[] {
-    return supportedDefinitions().map(bindAgentDefinition);
+    return supportedDefinitions().map(({ id, version }) =>
+        getAgentDefinition(id, version),
+    );
 }
 
 let nativeOperations: Map<string, AgentOperationDefinition> | undefined;
@@ -273,5 +280,17 @@ export function getAgentDefinition(
             definition.id === id && definition.version === selectedVersion,
     );
     if (!definition) throw executionError("definition_version_conflict");
+    const authority = getAgentAuthority(definition.id, definition.version);
+    if (
+        authority.executionScope !== definition.executionScope ||
+        authority.nativeConversation !== definition.nativeConversation ||
+        authority.completionTransport !== definition.completionTransport ||
+        authority.hasConversationReply !==
+            Boolean(definition.conversationReply) ||
+        authority.scopeValidator !== definition.scopeValidator ||
+        authority.stateValidator !== definition.stateValidator ||
+        authority.requireAuthority !== definition.requireAuthority
+    )
+        throw executionError("definition_contract_invalid");
     return bindAgentDefinition(definition);
 }

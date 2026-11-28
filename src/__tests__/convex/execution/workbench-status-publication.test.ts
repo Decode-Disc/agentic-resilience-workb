@@ -1,5 +1,6 @@
 import { internal } from "@convex/_generated/api";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import { beginFixtureInvocation } from "@/__tests__/setup/pi-mission";
 import { readConversationPageWithBodies } from "@/__tests__/setup/retained-messages";
 import {
     seedWorkbench,
@@ -152,7 +153,7 @@ test.each([
         },
     );
     assert(active);
-    const invocation = await t.mutation(internal.execution.invocations.begin, {
+    const invocation = await beginFixtureInvocation(t, {
         missionId: active.missionId,
         expectedGeneration: 1,
         taskKey: "status-publication",
@@ -178,16 +179,13 @@ test.each([
         expect(
             JSON.parse(context.inputJson).domain.responseControl.reminder,
         ).toContain(expected);
-        const correction = await t.mutation(
-            internal.execution.invocations.begin,
-            {
-                missionId: active.missionId,
-                expectedGeneration: 1,
-                taskKey: "status-revision",
-                provenance: "simulation",
-                nativeInput: await workbenchAdmissionInput(t, active.missionId),
-            },
-        );
+        const correction = await beginFixtureInvocation(t, {
+            missionId: active.missionId,
+            expectedGeneration: 1,
+            taskKey: "status-revision",
+            provenance: "simulation",
+            nativeInput: await workbenchAdmissionInput(t, active.missionId),
+        });
         assert(correction.kind === "ready");
         expect(
             (

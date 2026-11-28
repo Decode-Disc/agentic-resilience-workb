@@ -4,6 +4,10 @@ import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { ConvexError } from "convex/values";
 import { afterEach, expect, test, vi } from "vitest";
 import {
+    claimFixturePiLease,
+    dispatchFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
+import {
     seedInspectedEvidence,
     startRetainedInspection,
 } from "@/__tests__/setup/source-preparation";
@@ -49,7 +53,7 @@ test("overlapping search results count each inspected passage only once", async 
                 input: { kind: "search_available_material", sourceId, query },
             },
         );
-        const outcome = await t.action(internal.execution.operations.dispatch, {
+        const outcome = await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 4,
         });
@@ -98,7 +102,7 @@ test.each([
         input: { kind: "read_in_context", sourceId, passageOrder: 0 },
     });
 
-    const outcome = await t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: args.executionGeneration,
     });
@@ -149,12 +153,18 @@ test.each([
             if (!capture?.storageId) throw new Error("Missing fixture capture");
             await ctx.storage.delete(capture.storageId);
         });
+    const piLease = await claimFixturePiLease(
+        t,
+        missionId,
+        args.executionGeneration,
+    );
     if (condition === "revoked")
         await t.run((ctx) => ctx.db.patch(visitorId, { status: "revoked" }));
 
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId,
+            piLease,
             expectedGeneration: args.executionGeneration,
         }),
     ).toMatchObject({ kind, code });
@@ -201,7 +211,7 @@ test("Workbench records the unit progress key of a successful contextual reading
         cause: "context-reading",
         input: { kind: "read_in_context", sourceId, passageOrder: 0 },
     });
-    const outcome = await t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -249,7 +259,7 @@ test("documentary search pages reach passages beyond the first response and refu
                 },
             },
         );
-        return t.action(internal.execution.operations.dispatch, {
+        return dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 4,
         });
@@ -311,7 +321,7 @@ test("requested context ranges continue with exact Unicode offsets without manuf
                 },
             },
         );
-        const result = await t.action(internal.execution.operations.dispatch, {
+        const result = await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 4,
         });
@@ -371,7 +381,7 @@ test.each([
                 input,
             },
         );
-        return f.t.action(internal.execution.operations.dispatch, {
+        return dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         });
@@ -518,7 +528,7 @@ test("an empty search leaves inspection incomplete until a passage is displayed"
                 input: { kind: "search_available_material", reference, query },
             },
         );
-        const outcome = await t.action(internal.execution.operations.dispatch, {
+        const outcome = await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 4,
         });

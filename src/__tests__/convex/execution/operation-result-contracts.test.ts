@@ -1,6 +1,6 @@
 import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import type { readInContextResult } from "@convex/domain/savedMaterialOperations";
+import type { readInContextResult } from "@convex/domain/savedMaterialOperationResults";
 import { sourcesDefinition } from "@convex/domain/sourcesAgent";
 import {
     bindAgentDefinition,
@@ -19,6 +19,10 @@ import {
 import { v } from "convex/values";
 import { assert, expect, expectTypeOf, test } from "vitest";
 import { z } from "zod";
+import {
+    beginFixtureInvocation,
+    claimFixturePiLease,
+} from "@/__tests__/setup/pi-mission";
 import {
     dispatchSourcesOperation,
     seedCapturedSources,
@@ -49,6 +53,7 @@ test("Sources receives structured success values instead of nested JSON strings"
 
 test("malformed documentary success stays observed but cannot be adopted or replayed as success", async () => {
     const f = await seedCapturedSources();
+    const piLease = await claimFixturePiLease(f.t, f.missionId, 4);
     const id = await f.t.mutation(internal.execution.operations.enqueue, {
         missionId: f.missionId,
         expectedGeneration: 4,
@@ -77,7 +82,8 @@ test("malformed documentary success stays observed but cannot be adopted or repl
     expect(retained?.outcome).toEqual({ kind: "success", valueJson });
     expect(retained?.adoptionRefusalCode).toBe("operation_adoption_failed");
     expect(
-        await dispatchSourcesOperation(f.t, {
+        await f.t.action(internal.execution.operations.dispatch, {
+            piLease,
             requestId: id,
             expectedGeneration: 4,
         }),
@@ -338,15 +344,12 @@ test("acquisition returns the source and immutable capture consumed by the share
 
 test("wrong-table input retains a field-level diagnostic and delivers it to Sources", async () => {
     const f = await seedCapturedSources();
-    const invocation = await f.t.mutation(
-        internal.execution.invocations.begin,
-        {
-            missionId: f.missionId,
-            expectedGeneration: 4,
-            taskKey: "wrong-table",
-            provenance: "simulation",
-        },
-    );
+    const invocation = await beginFixtureInvocation(f.t, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        taskKey: "wrong-table",
+        provenance: "simulation",
+    });
     assert(invocation.kind === "ready");
     const finished = await f.t.mutation(internal.execution.invocations.finish, {
         invocationId: invocation.invocationId,
@@ -491,15 +494,12 @@ test("a result ID from another table cannot become an adopted documentary contro
 
 test("nested invalid containers describe the declared type rather than the received constructor", async () => {
     const f = await seedCapturedSources();
-    const invocation = await f.t.mutation(
-        internal.execution.invocations.begin,
-        {
-            missionId: f.missionId,
-            expectedGeneration: 4,
-            taskKey: "nested-type",
-            provenance: "simulation",
-        },
-    );
+    const invocation = await beginFixtureInvocation(f.t, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        taskKey: "nested-type",
+        provenance: "simulation",
+    });
     assert(invocation.kind === "ready");
     const result = await f.t.mutation(internal.execution.invocations.finish, {
         invocationId: invocation.invocationId,

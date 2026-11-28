@@ -3,9 +3,9 @@
 import { internal } from "@convex/_generated/api";
 import type { ActionCtx } from "@convex/_generated/server";
 import { stableStringify } from "@convex/domain/sourcePassages";
+import { revisionRoute } from "@convex/execution/modelConfigurationCore";
 import { SIMULATION_MODEL_ROUTE } from "@convex/integrations/modelRouting";
 import { rejectedOutputDiagnostic } from "@convex/integrations/modelTransport";
-import { revisionRoute } from "@convex/modelConfiguration";
 import { resolveGenerationAuthority } from "@convex/resourcePolicy";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import type { Infer } from "convex/values";
@@ -26,9 +26,9 @@ import {
     invocationStructureError,
     successfulAuxiliaryResponse,
 } from "./executionProtocol";
-
 import { admittedInputHash } from "./journal";
 import { stageObservedBody } from "./observedReply";
+import type { PiDispatchLease } from "./piSession";
 import { retainedTextParts, verifyRetainedText } from "./retainedText";
 import { simulationFetch } from "./simulation";
 
@@ -103,13 +103,17 @@ export async function invokeControlledGeneration(
     },
     executionDeadlineAt: number,
     backend: AgentGenerationBackend,
+    piLease?: PiDispatchLease,
 ): Promise<Infer<typeof invocationReplyValidator>> {
+    const dispatchArgs = { ...args, piLease };
     const {
         invocation,
         mission,
         authority: grantedAuthority,
+        configuredModel,
+        firstFragment,
     } = await ctx.runQuery(
-        internal.execution.invocationLifecycle.forExecution,
+        internal.execution.invocationLifecycle.forExecutionBundle,
         args,
     );
     const retainReply = async (
@@ -141,11 +145,6 @@ export async function invokeControlledGeneration(
         deadlineAt: execution.deadlineAt,
     };
     const simulated = invocation.provenance === "simulation";
-    const configuredModel = simulated
-        ? null
-        : await ctx.runQuery(internal.modelConfiguration.forMission, {
-              missionId: mission._id,
-          });
     const route = simulated
         ? {
               ...SIMULATION_MODEL_ROUTE,
@@ -169,7 +168,9 @@ export async function invokeControlledGeneration(
     );
     const inputHash = admittedInputHash(invocation);
     const read = internal.execution.invocationLifecycle.executionInputFragment;
-    const first = await ctx.runQuery(read, { ...args, inputHash, index: 0 });
+    if (firstFragment.kind === "error")
+        throw executionError(firstFragment.code);
+    const first = firstFragment.fragment;
     const fragments = [first.content];
     for (let index = 1; index < first.fragmentCount; index++)
         fragments.push(
@@ -419,7 +420,7 @@ export async function invokeControlledGeneration(
                                     internal.execution.invocationLifecycle
                                         .stageRequest,
                                     {
-                                        ...args,
+                                        ...dispatchArgs,
                                         fragment: {
                                             ...manifest,
                                             index,
@@ -432,7 +433,7 @@ export async function invokeControlledGeneration(
                             internal.execution.invocationLifecycle
                                 .retainRequest,
                             {
-                                ...args,
+                                ...dispatchArgs,
                                 ...(textId
                                     ? { textId }
                                     : { requestJson: json }),
@@ -445,8 +446,9 @@ export async function invokeControlledGeneration(
                             throw executionError(retained.code);
                         if (!simulated) {
                             admitted = await ctx.runMutation(
-                                internal.providerCalls.recordAttempt,
-                                { ...attempt, status: "started" },
+                                internal.execution.providerCallReceipts
+                                    .recordMissionModelAttempt,
+                                { ...attempt, status: "started", piLease },
                             );
                             if (!admitted.shouldExecute)
                                 throw executionError(
@@ -457,7 +459,7 @@ export async function invokeControlledGeneration(
                         await ctx.runQuery(
                             internal.execution.invocationLifecycle
                                 .authorizeDispatch,
-                            args,
+                            dispatchArgs,
                         );
                         if (Date.now() >= executionDeadlineAt)
                             throw executionError("node_action_deadline");
@@ -473,7 +475,8 @@ export async function invokeControlledGeneration(
                     ? undefined
                     : async (observation) => {
                           await ctx.runMutation(
-                              internal.providerCalls.observeGeneration,
+                              internal.execution.providerCallReceipts
+                                  .observeGeneration,
                               { invocationId: invocation._id, ...observation },
                           );
                       },
@@ -510,9 +513,12 @@ export async function invokeControlledGeneration(
             args,
         );
         if (!simulated)
-            await ctx.runMutation(internal.providerCalls.requestBilling, {
-                invocationId: invocation._id,
-            });
+            await ctx.runMutation(
+                internal.execution.providerCallReceipts.requestBilling,
+                {
+                    invocationId: invocation._id,
+                },
+            );
         throw executionError("generation_backend_interrupted");
     }
     if (result.status === "blocked") {

@@ -2,6 +2,10 @@ import { internal } from "@convex/_generated/api";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import { afterEach, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
+import {
+    beginFixtureInvocation,
+    recordFixtureAttempt,
+} from "@/__tests__/setup/pi-mission";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 
@@ -71,7 +75,7 @@ test("a conflicting Pi observation rolls back settlement and a retry charges onc
         requestKey: "atomic-pi-observation",
         expectedGeneration: args.executionGeneration,
     });
-    const admitted = await t.mutation(internal.execution.invocations.begin, {
+    const admitted = await beginFixtureInvocation(t, {
         missionId,
         expectedGeneration: args.executionGeneration,
         taskKey: "observation",
@@ -95,7 +99,7 @@ test("a conflicting Pi observation rolls back settlement and a retry charges onc
         attempt: 1,
         inputHash: sha256Hex(admitted.inputJson),
     };
-    const receipt = await t.mutation(internal.providerCalls.recordAttempt, {
+    const receipt = await recordFixtureAttempt(t, {
         ...attempt,
         status: "started",
     });

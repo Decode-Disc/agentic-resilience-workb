@@ -16,14 +16,16 @@ import {
 import type { AnalystTurnWording } from "@convex/domain/preparedAnalystWording";
 import {
     acquireDocumentResult,
+    referencedContextResult,
+    referencedSearchResult,
+} from "@convex/domain/savedMaterialOperationResults";
+import {
     type documentaryCause,
     type documentaryPin,
     documentaryRange,
     documentaryReference,
     parseDocumentaryReference,
     type ReferencedSavedMaterialOperation,
-    referencedContextResult,
-    referencedSearchResult,
     type SavedMaterialOperation,
 } from "@convex/domain/savedMaterialOperations";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";

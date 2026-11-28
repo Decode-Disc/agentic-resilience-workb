@@ -3,6 +3,10 @@ import { assertSourcesCompletionCapacity } from "@convex/domain/sources";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { SOURCES_HANDOFF_READ_CAPACITY } from "@convex/resourcePolicy";
 import { expect, test } from "vitest";
+import {
+    claimFixtureOperation,
+    dispatchFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 
 test("Sources is a research binding using canonical shared reading operations", () => {
@@ -120,7 +124,7 @@ test("Sources reads its prepared capture without fabricating corpus approval", a
             },
         },
     );
-    const outcome = await f.t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -138,7 +142,7 @@ test("Sources reads its prepared capture without fabricating corpus approval", a
             },
         },
     );
-    const native = await f.t.action(internal.execution.operations.dispatch, {
+    const native = await dispatchFixtureOperation(f.t, {
         requestId: nativeId,
         expectedGeneration: 4,
     });
@@ -334,7 +338,7 @@ test("distinct need-bound queries retain distinct provider identities within the
             },
         );
         expect(
-            await f.t.mutation(internal.execution.operations.claim, {
+            await claimFixtureOperation(f.t, {
                 requestId,
                 expectedGeneration: 3,
             }),
@@ -400,7 +404,7 @@ test("the coverage preset orients the reserved query without adding searches", a
                 },
             },
         );
-        await f.t.mutation(internal.execution.operations.claim, {
+        await claimFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 3,
         });

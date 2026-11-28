@@ -1,6 +1,7 @@
 import { internal } from "@convex/_generated/api";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedHistoryMission } from "@/__tests__/setup/execution-history";
+import { dispatchFixtureOperation } from "@/__tests__/setup/pi-mission";
 
 afterEach(() => {
     vi.unstubAllEnvs();
@@ -19,7 +20,7 @@ test("the common read persists a result without research or framing effects", as
             input: { kind: "consult_run_state" },
         },
     );
-    const outcome = await f.t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });

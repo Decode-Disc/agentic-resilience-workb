@@ -31,6 +31,8 @@ import {
     internalMutation,
     type QueryCtx,
 } from "./_generated/server";
+import { withFixturePiWriter } from "./execution/fixturePiWriter";
+import { piDispatchLeaseValidator } from "./execution/piSession";
 import { requireCampaignLot } from "./qualificationCampaigns";
 import {
     initialDocumentaryMaterial,
@@ -398,19 +400,33 @@ export const install = internalAction({
                 input: state.readingInput,
             },
         );
-        const outcome = await ctx.runAction(
-            internal.execution.operations.dispatch,
-            { requestId: readRequestId, expectedGeneration: state.generation },
-        );
-        if (outcome.kind !== "success")
-            throw executionError("initial_fixture_read_unavailable");
-        await ctx.runMutation(
-            internal.qualificationInitialFixtureSetup.retain,
-            { ...args, readRequestId },
-        );
-        await ctx.runMutation(
-            internal.qualificationInitialFixtureSetup.settle,
-            { ...args, readRequestId },
+        await withFixturePiWriter(
+            ctx,
+            {
+                missionId: state.missionId,
+                expectedGeneration: state.generation,
+            },
+            "fixture:qualification-install",
+            async (piLease) => {
+                const outcome = await ctx.runAction(
+                    internal.execution.operations.dispatch,
+                    {
+                        requestId: readRequestId,
+                        expectedGeneration: state.generation,
+                        piLease,
+                    },
+                );
+                if (outcome.kind !== "success")
+                    throw executionError("initial_fixture_read_unavailable");
+                await ctx.runMutation(
+                    internal.qualificationInitialFixtureSetup.retain,
+                    { ...args, readRequestId },
+                );
+                await ctx.runMutation(
+                    internal.qualificationInitialFixtureSetup.settle,
+                    { ...args, readRequestId, piLease },
+                );
+            },
         );
         return {
             preparationId: state.preparationId,
@@ -421,7 +437,11 @@ export const install = internalAction({
 });
 
 export const settle = internalMutation({
-    args: { ...scopeArgs, readRequestId: v.id("agentOperationRequests") },
+    args: {
+        ...scopeArgs,
+        readRequestId: v.id("agentOperationRequests"),
+        piLease: piDispatchLeaseValidator,
+    },
     returns: v.null(),
     handler: async (ctx, args) => {
         const { run, fixture } = await requireInitialFixture(ctx, args);
@@ -438,6 +458,7 @@ export const settle = internalMutation({
                 missionId: mission._id,
                 expectedGeneration: run.executionGeneration,
                 taskKey: `fixture:${fixture.id}`,
+                piLease: args.piLease,
                 provenance: "simulation",
             },
         );

@@ -1,27 +1,29 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
 import type { AnalystTurnWording } from "@convex/domain/preparedAnalystWording";
+import { savedMaterialWireContract } from "@convex/domain/savedMaterialOperationResults";
+import { publicSearchWireResult } from "@convex/domain/workbenchOperationResults";
+import {
+    getAgentAuthority,
+    retainedMethodVersion,
+} from "@convex/execution/agentAuthorityCatalog";
 import {
     type AgentDefinition,
     agentToolSchemas,
     domainSnapshot,
     hasCompletionText,
 } from "@convex/execution/agentDefinition";
-import { conversationInstructions } from "@convex/execution/conversations";
+import { conversationInstructions } from "@convex/execution/conversationCore";
 import { executionError } from "@convex/execution/errors";
 import type { AgentOperationDefinition } from "@convex/execution/executionProtocol";
 import { operationProgressKeys } from "@convex/execution/missionData";
-import { researchControlConfirmation } from "@convex/execution/researchControl";
-import {
-    requireRetainedMethodControl,
-    retainedMethodVersion,
-} from "@convex/qualificationAgentMethods";
+import { researchControlConfirmation } from "@convex/execution/researchControlCore";
 import { MAX_WORKBENCH_TURN_OPERATIONS } from "@convex/resourcePolicy";
 import {
     completeResponseControl,
     readResponseFacts,
     responseControlContext,
-} from "@convex/responseControl";
+} from "@convex/responseControlCore";
 import {
     framingWriteState,
     hasFramingProgram,
@@ -35,7 +37,6 @@ import {
 } from "./savedMaterialAgentOperations";
 import {
     savedMaterialBinding,
-    savedMaterialWireContract,
     supportsScopedDocumentaryExamination,
     WORKBENCH_DOCUMENTARY_DEFINITION_VERSION,
 } from "./savedMaterialOperations";
@@ -58,7 +59,6 @@ import {
     legacyNativeAdjustFramingInput,
     modernSourceRequestInput,
     publicContextInput,
-    publicSearchWireResult,
     requestApprovalResult,
     workbenchSchemas as schemas,
     supportsDirectedFraming,
@@ -577,10 +577,7 @@ export const workbenchDefinition: AgentDefinition & {
             obligations: [],
         };
     },
-    async requireAuthority(_ctx, _mission, run) {
-        if (run.startMode !== "framed")
-            throw executionError("workbench_not_available");
-    },
+    requireAuthority: getAgentAuthority("workbench_v1", 4).requireAuthority,
     progress(_mission, outcome) {
         if (outcome.kind !== "success") return {};
         const value: unknown = JSON.parse(outcome.valueJson);
@@ -1189,8 +1186,8 @@ export const workbenchMethodControlDefinition: AgentDefinition & {
     },
     instructions: workbenchV6Definition.instructions,
     method: workbenchV6Definition.method,
-    async requireAuthority(ctx, mission, run) {
-        await requireRetainedMethodControl(ctx, mission, run);
-        await workbenchV7Definition.requireAuthority(ctx, mission, run);
-    },
+    requireAuthority: getAgentAuthority(
+        "workbench_v1",
+        retainedMethodVersion("workbench_v1"),
+    ).requireAuthority,
 };

@@ -2,6 +2,7 @@ import { api, internal } from "@convex/_generated/api";
 import { readWorkbenchFacts } from "@convex/domain/workbenchContext";
 import { extractObservedDestinations } from "@convex/integrations/evidenceNormalization";
 import { assert, expect, test } from "vitest";
+import { dispatchFixtureOperation } from "@/__tests__/setup/pi-mission";
 import {
     seedInspectedEvidence,
     startRetainedInspection,
@@ -74,13 +75,10 @@ test.each([
                         : input,
             },
         );
-        const outcome = await f.t.action(
-            internal.execution.operations.dispatch,
-            {
-                requestId,
-                expectedGeneration: 4,
-            },
-        );
+        const outcome = await dispatchFixtureOperation(f.t, {
+            requestId,
+            expectedGeneration: 4,
+        });
         assert(outcome.kind === "success");
         const value = JSON.parse(outcome.valueJson);
         expect(value.document).toMatchObject(expected);
@@ -209,10 +207,10 @@ test("shared reading exposes acquisition destinations only to capable missions a
                 },
             },
         );
-        const outcome = await f.t.action(
-            internal.execution.operations.dispatch,
-            { requestId, expectedGeneration },
-        );
+        const outcome = await dispatchFixtureOperation(f.t, {
+            requestId,
+            expectedGeneration,
+        });
         assert(outcome.kind === "success");
         statuses.push(JSON.parse(outcome.valueJson).documentaryStatus);
     }
@@ -285,7 +283,7 @@ test("saved material dates reconcile the verified capture with its metadata with
             },
         },
     );
-    const result = await f.t.action(internal.execution.operations.dispatch, {
+    const result = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -323,7 +321,7 @@ test("a pinned Sources reader opens capture bytes of unverified completeness", a
             },
         },
     );
-    const read = await f.t.action(internal.execution.operations.dispatch, {
+    const read = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -360,7 +358,7 @@ test("Sources 7 can reserve an observed link before its destination is a candida
             }),
         },
     });
-    const read = await f.t.action(internal.execution.operations.dispatch, {
+    const read = await dispatchFixtureOperation(f.t, {
         requestId: readId,
         expectedGeneration: 4,
     });
@@ -384,7 +382,7 @@ test("Sources 7 can reserve an observed link before its destination is a candida
         index: 99,
     });
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId: await acquire(forged),
             expectedGeneration: 4,
         }),

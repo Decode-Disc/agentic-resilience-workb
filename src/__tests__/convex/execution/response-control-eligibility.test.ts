@@ -3,6 +3,10 @@ import { stableStringify } from "@convex/domain/sourcePassages";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { preparePiReply } from "@convex/integrations/piInvocation";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import {
+    beginFixtureInvocation,
+    dispatchFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
 import { readConversationPageWithBodies } from "@/__tests__/setup/retained-messages";
 import {
     seedWorkbench,
@@ -29,16 +33,13 @@ async function begin(
         },
     );
     assert(active);
-    const invocation = await f.t.mutation(
-        internal.execution.invocations.begin,
-        {
-            missionId: active.missionId,
-            expectedGeneration: 1,
-            taskKey: key,
-            provenance: "simulation",
-            nativeInput: await workbenchAdmissionInput(f.t, active.missionId),
-        },
-    );
+    const invocation = await beginFixtureInvocation(f.t, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+        taskKey: key,
+        provenance: "simulation",
+        nativeInput: await workbenchAdmissionInput(f.t, active.missionId),
+    });
     assert(invocation.kind === "ready");
     return { ...active, invocation };
 }
@@ -217,7 +218,7 @@ test("unchanged dossier facts exempt a tool-free reply but retain operation revi
             input: { kind: "consult_run_state" },
         },
     );
-    await f.t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });

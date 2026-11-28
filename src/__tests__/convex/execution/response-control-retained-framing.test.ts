@@ -13,6 +13,10 @@ import {
 import { validate } from "convex-helpers/validators";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import retained from "@/__tests__/setup/fixtures/nvidia-citation-review.json";
+import {
+    beginFixtureInvocation,
+    recordFixtureAttempt,
+} from "@/__tests__/setup/pi-mission";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 import { readConversationPageWithBodies } from "@/__tests__/setup/retained-messages";
 import { workbenchAdmissionInput } from "@/__tests__/setup/workbench";
@@ -201,7 +205,7 @@ test.each([
         await ctx.db.patch(revisionId, { eventBasis });
         await ctx.db.patch(runId, { currentFramingRevisionId: revisionId });
     });
-    const begun = await t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(t, {
         missionId: active.missionId,
         expectedGeneration: 1,
         taskKey: "retained-draft",
@@ -225,11 +229,11 @@ test.each([
         inputHash: sha256Hex(invocation.inputJson),
         corpusRevisionId: invocation.corpusRevisionId,
     };
-    await t.mutation(internal.providerCalls.recordAttempt, {
+    await recordFixtureAttempt(t, {
         ...identity,
         status: "started",
     });
-    await t.mutation(internal.providerCalls.recordAttempt, {
+    await recordFixtureAttempt(t, {
         ...identity,
         status: "succeeded",
         dispatchOutcome: "response_received",

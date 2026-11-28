@@ -23,7 +23,7 @@ import {
 } from "@evaluations/workbench-browser/protocol";
 import { prepareCampaignScenarios } from "@evaluations/workbench-browser/scenarios";
 import { ConvexHttpClient } from "convex/browser";
-import { makeFunctionReference } from "convex/server";
+import { getFunctionName, makeFunctionReference } from "convex/server";
 import {
     CommitTsPlaceholder,
     convexToJson,
@@ -33,6 +33,7 @@ import {
 } from "convex/values";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import rateLimiterTest from "@/__tests__/convex/integrations/rate-limiter-test-register.js";
+import { dispatchFixtureOperation } from "@/__tests__/setup/pi-mission";
 import {
     nativePiFixtureRoute,
     nativeTextReply,
@@ -57,6 +58,7 @@ afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
 });
 
 const install = makeFunctionReference<
@@ -176,8 +178,24 @@ async function fixture(
         candidateHash: "b".repeat(64),
         changedPaths: [],
     });
-    const original = await f.t.run((ctx) => ctx.db.get(f.runId));
-    assert(original?.browserTestContextId);
+    await f.t.run(async (ctx) => {
+        const original = await ctx.db.get(f.runId);
+        assert(original?.browserTestContextId);
+        // The seed dossier supplies the invitation slot. Its queued framing is discarded.
+        for (const job of await ctx.db.system
+            .query("_scheduled_functions")
+            .collect()) {
+            if (
+                job.state.kind === "pending" &&
+                job.name ===
+                    getFunctionName(
+                        internal.execution.conversations.pumpWorkbench,
+                    ) &&
+                job.args[0]?.runId === original._id
+            )
+                await ctx.scheduler.cancel(job._id);
+        }
+    });
     await f.t.mutation(internal.runWorkspace.closeBrowserTestContext, {
         slotKey: "analyst-4",
         contextKey: "native-workbench",
@@ -258,6 +276,11 @@ async function fixture(
 }
 
 test("campaign coverage presets reach genuine Start pins on fresh dossiers", async () => {
+    const errors = vi.spyOn(console, "error");
+    const network = vi.fn<typeof fetch>(async () => {
+        throw new Error("Campaign coverage runs without provider I/O");
+    });
+    vi.stubGlobal("fetch", network);
     const presets = [
         "balanced",
         "first_party_depth",
@@ -294,19 +317,19 @@ test("campaign coverage presets reach genuine Start pins on fresh dossiers", asy
         expect(
             (await f.client.query(api.framing.get, { runId }))?.content,
         ).toEqual(f.framing);
-        for (let step = 0; step < 50; step++) {
-            const current = await f.t.run((ctx) => ctx.db.get(runId));
-            if (current?.sourcePreparationId) break;
-            await vi.advanceTimersByTimeAsync(20);
-            await f.t.finishInProgressScheduledFunctions();
-        }
-        const applied = await f.t.run(async (ctx) => {
-            const current = await ctx.db.get(runId);
-            return current?.sourcePreparationId
-                ? (await ctx.db.get(current.sourcePreparationId))
-                      ?.sourcesMission?.coveragePolicy
-                : undefined;
-        });
+        const readCoverage = () =>
+            f.t.run(async (ctx) => {
+                const current = await ctx.db.get(runId);
+                return current?.sourcePreparationId
+                    ? (await ctx.db.get(current.sourcePreparationId))
+                          ?.sourcesMission?.coveragePolicy
+                    : undefined;
+            });
+        await f.t.finishAllScheduledFunctions(
+            () => vi.advanceTimersByTime(100),
+            200,
+        );
+        const applied = await readCoverage();
         expect(applied).toEqual({
             version: "sources_coverage_v1",
             preset: run?.coveragePreset,
@@ -314,7 +337,13 @@ test("campaign coverage presets reach genuine Start pins on fresh dossiers", asy
         records.push(applied?.preset);
         await f.client.mutation(api.workflowControls.cancel, { runId });
     }
+    expect(
+        errors.mock.calls.filter(([message]) =>
+            String(message).startsWith("Error when running scheduled function"),
+        ),
+    ).toEqual([]);
     expect(records).toEqual(presets);
+    expect(network).not.toHaveBeenCalled();
 });
 
 test("initial fixture retention refuses cancellation after the adopted documentary read", async () => {
@@ -363,7 +392,7 @@ test("initial fixture retention refuses cancellation after the adopted documenta
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId: readRequestId,
             expectedGeneration: state.generation,
         }),
@@ -1004,7 +1033,7 @@ test.each(
             query: "latest announcement",
         },
     });
-    const searched = await f.t.action(internal.execution.operations.dispatch, {
+    const searched = await dispatchFixtureOperation(f.t, {
         requestId: searchId,
         expectedGeneration: 1,
     });
@@ -1034,7 +1063,7 @@ test.each(
                 },
             },
         );
-        const read = await f.t.action(internal.execution.operations.dispatch, {
+        const read = await dispatchFixtureOperation(f.t, {
             requestId: readId,
             expectedGeneration: 1,
         });
@@ -1086,7 +1115,7 @@ test.each(
                 },
             );
             expect(
-                await f.t.action(internal.execution.operations.dispatch, {
+                await dispatchFixtureOperation(f.t, {
                     requestId: editId,
                     expectedGeneration: 1,
                 }),
@@ -1168,7 +1197,7 @@ test("paired Sources fixture pins both agents before preparation and reads nativ
             },
         },
     );
-    await f.t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: state.generation,
     });
@@ -1257,10 +1286,10 @@ for (const scenario of frozenMethodCases.scenarios.filter(
                 },
             },
         );
-        const searched = await f.t.action(
-            internal.execution.operations.dispatch,
-            { requestId: searchId, expectedGeneration: 1 },
-        );
+        const searched = await dispatchFixtureOperation(f.t, {
+            requestId: searchId,
+            expectedGeneration: 1,
+        });
         if (scenario.framingReplay.unavailable)
             expect(searched).toMatchObject({
                 kind: "unavailable",
@@ -1287,10 +1316,10 @@ for (const scenario of frozenMethodCases.scenarios.filter(
                         },
                     },
                 );
-                const read = await f.t.action(
-                    internal.execution.operations.dispatch,
-                    { requestId, expectedGeneration: 1 },
-                );
+                const read = await dispatchFixtureOperation(f.t, {
+                    requestId,
+                    expectedGeneration: 1,
+                });
                 assert(read.kind === "success", JSON.stringify(read));
                 const value = JSON.parse(read.valueJson);
                 expect(value.document.contentHash).toBe(sha256Hex(doc.text));

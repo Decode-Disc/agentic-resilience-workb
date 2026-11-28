@@ -129,6 +129,11 @@ test("a recoverable research worker interruption releases its slot and supports 
         });
         await ctx.db.patch(f.missionId, { piActiveWriter: "recovery-writer" });
     });
+    await f.t.mutation(internal.execution.piStore.claim, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        writer: "recovery-writer",
+    });
     const before = await f.t.run((ctx) => ctx.db.get(f.preparationId));
     await f.t.mutation(internal.execution.piControl.closeWorker, {
         missionId: f.missionId,

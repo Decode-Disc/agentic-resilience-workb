@@ -3,7 +3,7 @@ import { executionError } from "@convex/execution/errors";
 import {
     awaitResearchControl,
     recordResearchObservation,
-} from "@convex/execution/researchControl";
+} from "@convex/execution/researchControlCore";
 import {
     type EventId,
     vResultValidator,

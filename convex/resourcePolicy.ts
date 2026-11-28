@@ -165,6 +165,10 @@ export const PI_REPLAY_PAGE_MAX_BYTES = 2 * 1024 * 1024;
 export const PI_WORKER_SLICE_MS = 80_000;
 export const PI_RETAINED_OPERATION_BATCH = 20;
 export const PI_OPERATION_WAIT_POLL_MS = 30_000;
+// Briefly retain the worker for a background result, leaving time for a durable checkpoint.
+export const PI_IN_SLICE_WAIT_MS = 8_000;
+export const PI_IN_SLICE_POLL_INTERVAL_MS = 300;
+export const PI_SLICE_YIELD_SAFETY_MS = 1_000;
 
 // Whole-mission authority, bounded history and structured-transport representations.
 // These byte capacities are not native model-context token limits.
