@@ -804,43 +804,43 @@ test("approvalRequestIdFromOperation validates real operation outcomes without u
     ).toBe("req-123");
 });
 
-test("requestApprovalFixture creates a conversation approval request and Deny leaves the run unchanged", async () => {
-    const f = await seedExpiredPreparation();
-    vi.stubEnv("E2E_FIXTURES_ENABLED", "true");
-    vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3210");
-    await f.t.run(async (ctx) => {
-        const visitor = await ctx.db.get(f.visitorId);
-        assert(visitor);
-        await ctx.db.patch(visitor.invitationId, {
-            slotKey: BROWSER_TEST_SLOT,
-        });
-    });
-    const contextId = await f.t.mutation(
-        internal.runWorkspace.openBrowserTestContext,
-        {
-            slotKey: BROWSER_TEST_SLOT,
-            contextKey: "request-approval-fixture",
-            durationMs: 60_000,
-        },
+test("the approval fixture raises a real request on a fresh framed dossier without launching Sources", async () => {
+    const {
+        t,
+        client: authClient,
+        runId,
+    } = await seedWorkbench(
+        true,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        null,
     );
-    await f.t.run((ctx) =>
-        ctx.db.patch(f.runId, {
-            purpose: "browser_test",
-            browserTestContextId: contextId,
-            reservationKey: "test:request-approval-fixture",
-            executionStatus: "running",
-        }),
+    await t.run((ctx) =>
+        ctx.db.patch(runId, { reservationKey: "test:native-workbench" }),
     );
-    await seedTimeLimitConversation(f);
-
-    await f.t.action(internal.execution.fixtures.requestApprovalFixture, {
-        runId: f.runId,
-        fixtureKey: "request-approval-fixture",
+    const queued = await t.run((ctx) =>
+        ctx.db
+            .query("agentMessageDeliveries")
+            .withIndex("by_run_and_status", (q) =>
+                q.eq("runId", runId).eq("status", "queued"),
+            )
+            .first(),
+    );
+    assert(queued);
+    await authClient.mutation(api.execution.conversations.removeQueued, {
+        runId,
+        messageId: queued._id,
     });
 
-    const authClient = client(f);
+    await t.action(internal.execution.fixtures.requestApprovalFixture, {
+        runId,
+        fixtureKey: "native-workbench",
+    });
+
     const history = await readWorkbenchPageWithBodies(authClient, {
-        runId: f.runId,
+        runId: runId,
         paginationOpts: { numItems: 20, cursor: null },
     });
     const reply = history.page.find(
@@ -870,12 +870,16 @@ test("requestApprovalFixture creates a conversation approval request and Deny le
         action: "pause_research",
     });
 
-    const run = await f.t.run((ctx) => ctx.db.get(f.runId));
+    const run = await t.run((ctx) => ctx.db.get(runId));
     expect(run).toMatchObject({
         executionStatus: "running",
-        executionGeneration: 4,
+        executionGeneration: 1,
     });
     expect(run?.researchPauseRequested).toBeFalsy();
+    expect(run?.sourcePreparationId).toBeUndefined();
+    expect(await t.run((ctx) => ctx.db.query("providerCalls").take(1))).toEqual(
+        [],
+    );
 });
 
 test("reachSourcesTimeLimit repeats after Always continue, auto-continues while granted, and asks again after revocation", async () => {

@@ -245,7 +245,7 @@ test("using what's prepared settles a limited run without a grant at 1440px", as
     expect(errors).toEqual([]);
 });
 
-test("approval cards work at 390px with reduced motion, including Workbench request_approval", async ({
+test("the Sources time-limit card works at 390px with reduced motion", async ({
     page,
 }) => {
     test.setTimeout(180000);
@@ -269,7 +269,6 @@ test("approval cards work at 390px with reduced motion, including Workbench requ
     await page.goto(`/workspace/${runId}?section=overview`);
 
     const progress = page.getByLabel("Documentary progress");
-    const askAi = page.getByRole("button", { name: "Ask AI" });
     const conversation = page.getByLabel("Research conversation");
     await expect(
         page
@@ -373,7 +372,42 @@ test("approval cards work at 390px with reduced motion, including Workbench requ
         });
     }
 
-    // Trigger a Workbench request_approval card and deny it.
+    await expectNoRawBodyCopy(page);
+    await progress.getByRole("button", { name: "Pause research" }).click();
+    expect(errors).toEqual([]);
+});
+
+test("the Workbench approval card supports keyboard navigation and denial at 390px", async ({
+    page,
+}) => {
+    test.setTimeout(120000);
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("console", (message) => {
+        if (message.type() === "error") errors.push(message.text());
+    });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await admitAnalyst(page);
+
+    const fixtureKey = `workbench-approval-390-${Date.now()}`;
+    const runId = await runConvexJson<string>(
+        "execution/fixtures:startWorkbench",
+        {
+            fixtureKey,
+            slotKey: browserTestSlot(),
+        },
+    );
+    await page.goto(`/workspace/${runId}?section=overview`);
+    await expect(
+        page
+            .getByLabel("Framing conversation")
+            .getByText("Simulation: the research program is saved.", {
+                exact: false,
+            }),
+    ).toBeVisible({ timeout: 60000 });
+    const conversation = page.getByLabel("Research conversation");
+    const progress = page.getByLabel("Documentary progress");
     await expect
         .poll(
             async () =>
@@ -387,7 +421,7 @@ test("approval cards work at 390px with reduced motion, including Workbench requ
         )
         .toBe(true);
     await fixture("requestApprovalFixture", runId, fixtureKey);
-    await askAi.click();
+    await page.getByRole("button", { name: "Ask AI" }).click();
     await expect(
         conversation.getByText(
             "Simulation: please confirm whether to pause research.",

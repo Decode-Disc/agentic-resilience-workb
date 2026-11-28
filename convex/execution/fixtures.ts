@@ -2713,8 +2713,25 @@ export const prepareRequestApprovalFixture = internalMutation({
             )
             .unique();
         if (previous?.status === "processed") return { kind: "done" };
+        if (run.startMode !== "framed")
+            throw new Error("A framed fixture dossier is required");
         if (
-            run.startMode !== "framed" ||
+            run.lifecycleState === "framing" &&
+            run.executionStatus === "idle" &&
+            run.currentFramingRevisionId &&
+            !run.fixedFramingRevisionId &&
+            !run.sourcePreparationId &&
+            !run.workflowId
+        ) {
+            // Approval UI tests need stable running research while Workbench admits a turn.
+            await ctx.db.patch(run._id, {
+                fixedFramingRevisionId: run.currentFramingRevisionId,
+                researchStartedAt: Date.now(),
+                lifecycleState: "discovering_sources",
+                executionStatus: "running",
+                agentExecutionVersion: 3,
+            });
+        } else if (
             !run.fixedFramingRevisionId ||
             run.executionStatus !== "running"
         )
