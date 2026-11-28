@@ -6,7 +6,7 @@ import {
     type MutationCtx,
     type QueryCtx,
 } from "@convex/_generated/server";
-import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
+import { sha256Hex, stableStringify } from "@convex/domain/hashing";
 import {
     deliveryBodyHash,
     nativeInputBody,
@@ -18,9 +18,8 @@ import {
     PI_OPERATION_WAIT_POLL_MS,
     PI_SESSION_LEASE_MS,
 } from "@convex/resourcePolicy";
-import schema from "@convex/schema";
 import { type Infer, v } from "convex/values";
-import { getAgentDefinition } from "./agentCatalog";
+import { getAgentAuthority } from "./agentAuthorityCatalog";
 import {
     executionError,
     executionFailureCode,
@@ -29,8 +28,8 @@ import {
     requireDossierAuthority,
     requireMissionAuthority,
 } from "./authority";
-import { analystTurnDeliveries } from "./conversations";
-import { successfulAuxiliaryResponse } from "./executionProtocol";
+import { successfulAuxiliaryResponse } from "./auxiliaryResponse";
+import { analystTurnDeliveries } from "./conversationBodies";
 import {
     contextObservationSequence,
     hasReceivedResponse,
@@ -38,19 +37,17 @@ import {
     matchInvocationResponse,
     receivedResponseDigest,
     retainedNativeCalls,
-} from "./journal";
+} from "./journalReads";
 import { retainedTextualOutcome } from "./missionData";
-import { completionFeedbackValidator } from "./operationContracts";
+import { operationRequestStatusValidator } from "./operationContracts";
 import {
     needsNativeSettlement,
     piLeaseValidator,
     requirePiWriter,
     sessionForMission,
     tracksNativeSettlement,
-} from "./piStore";
-import { suspendInterruptedResearch } from "./researchControl";
+} from "./piSession";
 import { retainedTextFragment } from "./retainedText";
-import { nativeInputsValidator } from "./schema";
 
 async function publicationStatusValue(ctx: QueryCtx) {
     const control = await publicationControl(ctx);
@@ -118,7 +115,13 @@ export const recoverPublicationWorkers = internalMutation({
                 writer: `publication-recovery:${session.epoch + 1}`,
                 leaseUntil: Date.now(),
             });
-            await ctx.db.patch(mission._id, { piActiveWriter: undefined });
+            await ctx.db.patch(mission._id, {
+                piActiveWriter: undefined,
+                ...((mission.piResultWakeVersion ?? 0) >
+                (mission.piPreparedWakeVersion ?? 0)
+                    ? { piResultWakePending: true }
+                    : {}),
+            });
             await recordMissionEvent(ctx, mission, {
                 kind: "publication_worker_recovered",
                 cause: "publication_recovery",
@@ -201,7 +204,7 @@ export const admittedInputs = internalMutation({
     },
 });
 
-async function requireNativeSession(
+export async function requireNativeSession(
     ctx: QueryCtx,
     missionId: Id<"agentMissions">,
     sessionId: Id<"piSessions">,
@@ -220,36 +223,6 @@ async function requireNativeSession(
     await requireDossierAuthority(ctx, mission.runId);
     return mission;
 }
-
-/** Original task identity survives worker restart; reading a terminal tail grants no progression authority. */
-export const nativeInvocation = internalQuery({
-    args: {
-        missionId: v.id("agentMissions"),
-        expectedGeneration: v.number(),
-        sessionId: v.id("piSessions"),
-        taskKey: v.string(),
-    },
-    returns: v.union(schema.doc("agentInvocations"), v.null()),
-    handler: async (ctx, args) => {
-        const mission = await requireNativeSession(
-            ctx,
-            args.missionId,
-            args.sessionId,
-            args.expectedGeneration,
-        );
-        const invocation = await ctx.db
-            .query("agentInvocations")
-            .withIndex("by_run_and_task_key", (q) =>
-                q
-                    .eq("runId", mission.runId)
-                    .eq("taskKey", `${args.sessionId}:${args.taskKey}`),
-            )
-            .unique();
-        if (invocation && invocation.missionId !== mission._id)
-            throw executionError("pi_task_mission_conflict");
-        return invocation;
-    },
-});
 
 /** A generation fence retires an already running wake; only pending jobs need cancellation. */
 export async function cancelPiWake(
@@ -329,7 +302,14 @@ async function recordWorkerFailure(
         code,
     });
     if (blockCode === "execution_interrupted" && !paused)
-        await suspendInterruptedResearch(ctx, mission);
+        await ctx.runMutation(
+            internal.execution.researchControl.suspendInterrupted,
+            {
+                missionId: mission._id,
+                previousBlockCode: mission.blockCode,
+                previousStatus: mission.status,
+            },
+        );
 }
 
 /** Research-only scheduled waits have no conversational steering queue; uncertainty takes normal replay. */
@@ -545,6 +525,7 @@ export const prepare = internalMutation({
         await ctx.db.patch(mission._id, {
             piActiveWriter: args.writer,
             piResultWakePending: undefined,
+            piPreparedWakeVersion: mission.piResultWakeVersion ?? 0,
         });
         await schedulePiMission(
             ctx,
@@ -555,141 +536,6 @@ export const prepare = internalMutation({
         return true;
     },
 });
-
-export const state = internalQuery({
-    args: { missionId: v.id("agentMissions"), expectedGeneration: v.number() },
-    returns: schema.doc("agentMissions"),
-    handler: async (ctx, args) => {
-        const mission = await ctx.db.get(args.missionId);
-        if (
-            mission &&
-            mission.generation === args.expectedGeneration &&
-            ["completed", "cancelled"].includes(mission.status) &&
-            needsNativeSettlement(
-                mission,
-                await sessionForMission(ctx, mission),
-            )
-        ) {
-            await requireDossierAuthority(ctx, mission.runId);
-            return mission;
-        }
-        return (
-            await requireMissionAuthority(
-                ctx,
-                args.missionId,
-                args.expectedGeneration,
-            )
-        ).mission;
-    },
-});
-
-const historicalCorrelation = v.object({
-    kind: v.literal("historical"),
-    invocation: schema.doc("agentInvocations"),
-});
-
-export const operation = internalQuery({
-    args: {
-        missionId: v.id("agentMissions"),
-        expectedGeneration: v.number(),
-        callId: v.string(),
-        historical: v.optional(
-            v.object({
-                invocationId: v.id("agentInvocations"),
-                responseHash: v.string(),
-                index: v.number(),
-            }),
-        ),
-    },
-    returns: v.union(
-        schema.doc("agentOperationRequests"),
-        historicalCorrelation,
-        v.null(),
-    ),
-    handler: async (ctx, args) => {
-        const { mission } = await requireMissionAuthority(
-            ctx,
-            args.missionId,
-            args.expectedGeneration,
-        );
-        const invocation = mission.lastInvocationId
-            ? await ctx.db.get(mission.lastInvocationId)
-            : null;
-        if (!invocation) throw executionError("invocation_unavailable");
-        if (invocation.missionId !== mission._id)
-            throw executionError("operation_correlation_invalid");
-        const recovered = args.historical;
-        if (
-            recovered &&
-            (recovered.invocationId !== invocation._id ||
-                !(await matchInvocationResponse(
-                    ctx,
-                    invocation,
-                    "adopted",
-                    recovered,
-                )))
-        )
-            throw executionError("operation_correlation_invalid");
-        const calls = await retainedNativeCalls(ctx, invocation);
-        if (calls) {
-            const index = calls.findIndex(
-                (call) => call.callId === args.callId,
-            );
-            const requestId = invocation.requestIds?.[index];
-            const request = requestId ? await ctx.db.get(requestId) : null;
-            if (request && request.missionId !== mission._id)
-                throw executionError("operation_correlation_invalid");
-            return request;
-        }
-        if (!invocation.requestIds?.length) return null;
-        // Retained historical responses must be reconstructed outside this transaction.
-        if (!recovered && invocation.outputTextId)
-            return { kind: "historical" as const, invocation };
-        const response =
-            !recovered && invocation.outputJson
-                ? JSON.parse(invocation.outputJson)
-                : null;
-        const index =
-            recovered?.index ??
-            (response?.kind === "operations"
-                ? response.requests.findIndex(
-                      (r: { callId: string }) => r.callId === args.callId,
-                  )
-                : -1);
-        if (!Number.isSafeInteger(index) || index < -1)
-            throw executionError("operation_correlation_invalid");
-        const id = invocation.requestIds[index];
-        if (id) {
-            const request = await ctx.db.get(id);
-            if (request && request.missionId !== mission._id)
-                throw executionError("operation_correlation_invalid");
-            return request;
-        }
-        for (const requestId of invocation.requestIds) {
-            const request = await ctx.db.get(requestId);
-            if (
-                request?.cause === args.callId &&
-                request.missionId === mission._id
-            )
-                return request;
-        }
-        return null;
-    },
-});
-
-const completionDispositionValidator = v.union(
-    v.object({ kind: v.literal("accepted") }),
-    v.object({
-        kind: v.literal("operation"),
-        requestId: v.id("agentOperationRequests"),
-    }),
-    v.object({ kind: v.literal("pending") }),
-    v.object({
-        kind: v.literal("refused"),
-        code: v.string(),
-        correction: v.optional(completionFeedbackValidator),
-    }),
-);
 
 async function nativeCompletionInvocation(
     ctx: QueryCtx,
@@ -705,7 +551,7 @@ async function nativeCompletionInvocation(
     if (!mission) return invalid("mission_unavailable");
     if (options.requireCompleted && mission.status !== "completed") return null;
     if (
-        getAgentDefinition(mission.definitionId, mission.definitionVersion)
+        getAgentAuthority(mission.definitionId, mission.definitionVersion)
             .completionTransport !== "native_tool"
     )
         return invalid("completion_correlation_invalid");
@@ -803,7 +649,7 @@ export const retainHistoricalCompletion = internalMutation({
     },
 });
 
-async function loadVerifiedNativeCompletionInvocation(
+export async function loadVerifiedNativeCompletionInvocation(
     ctx: QueryCtx,
     lease: Infer<typeof piLeaseValidator>,
     options: {
@@ -880,74 +726,6 @@ async function loadVerifiedNativeCompletionInvocation(
     return { kind: "historical" as const, invocation };
 }
 
-/** Resolves the retained disposition of a submit_completion tool call without re-running domain completion. */
-export const completionDisposition = internalQuery({
-    args: {
-        ...piLeaseValidator.fields,
-        callId: v.string(),
-    },
-    returns: v.union(completionDispositionValidator, historicalCorrelation),
-    handler: async (ctx, args) => {
-        const { callId, ...lease } = args;
-        const verified = await loadVerifiedNativeCompletionInvocation(
-            ctx,
-            lease,
-        );
-        if (!verified) throw executionError("completion_correlation_invalid");
-        if (verified.kind === "historical") return verified;
-        const { mission, invocation, requests } = verified;
-        if (requests) {
-            await requireMissionAuthority(ctx, mission._id, lease.generation);
-            const index = requests.findIndex(
-                (request) => request.callId === callId && request.completion,
-            );
-            const requestId =
-                index >= 0 ? invocation.requestIds?.[index] : undefined;
-            const request = requestId ? await ctx.db.get(requestId) : null;
-            if (!request || request.missionId !== mission._id)
-                throw executionError("completion_correlation_invalid");
-            return { kind: "operation" as const, requestId: request._id };
-        }
-        if (verified.callId === undefined || verified.callId !== callId)
-            throw executionError("completion_correlation_invalid");
-        if (mission.status === "completed" && !invocation.blockCode)
-            return { kind: "accepted" as const };
-        if (invocation.blockCode === "pending_operations")
-            return { kind: "pending" as const };
-        await requireMissionAuthority(ctx, mission._id, lease.generation);
-        if (
-            invocation.blockCode === "completion_correction_required" ||
-            invocation.blockCode === "mission_context_changed" ||
-            invocation.blockCode === "stale_instructions"
-        )
-            return {
-                kind: "refused" as const,
-                code: invocation.blockCode,
-                ...(invocation.correction
-                    ? { correction: invocation.correction }
-                    : {}),
-            };
-        throw executionError(
-            invocation.blockCode ?? "completion_correlation_invalid",
-        );
-    },
-});
-
-/** Confirms an accepted sole native completion from retained state for afterTools tail settlement. */
-export const terminalCompletionAccepted = internalQuery({
-    args: piLeaseValidator.fields,
-    returns: v.union(v.boolean(), historicalCorrelation),
-    handler: async (ctx, lease) => {
-        const verified = await loadVerifiedNativeCompletionInvocation(
-            ctx,
-            lease,
-            { requireCompleted: true, requireNoBlock: true },
-        );
-        if (verified?.kind === "historical") return verified;
-        return verified?.callId !== undefined;
-    },
-});
-
 export const finishAuxiliary = internalMutation({
     args: {
         invocationId: v.id("agentInvocations"),
@@ -1001,6 +779,42 @@ export const finishAuxiliary = internalMutation({
     },
 });
 
+/** Polls one owned background result without loading the operation runtime. */
+export const operationWakeStatus = internalQuery({
+    args: {
+        ...piLeaseValidator.fields,
+        requestId: v.id("agentOperationRequests"),
+    },
+    returns: v.object({
+        status: operationRequestStatusValidator,
+        outcome: v.optional(
+            v.object({
+                kind: v.union(
+                    v.literal("waiting"),
+                    v.literal("success"),
+                    v.literal("refused"),
+                    v.literal("unavailable"),
+                ),
+            }),
+        ),
+    }),
+    handler: async (ctx, { requestId, ...lease }) => {
+        await requirePiWriter(ctx, lease, Date.now());
+        const request = await ctx.db.get(requestId);
+        if (
+            !request ||
+            request.missionId !== lease.missionId ||
+            (request.adoptionGeneration ?? request.expectedGeneration) !==
+                lease.generation
+        )
+            throw executionError("request_unavailable");
+        return {
+            status: request.status,
+            outcome: request.outcome && { kind: request.outcome.kind },
+        };
+    },
+});
+
 export const closeWorker = internalMutation({
     args: {
         missionId: v.id("agentMissions"),
@@ -1008,6 +822,7 @@ export const closeWorker = internalMutation({
         writer: v.string(),
         at: v.optional(v.number()),
         error: v.optional(v.string()),
+        adoptedWakeCount: v.optional(v.number()),
         nativeSettled: v.optional(v.boolean()),
     },
     returns: v.null(),
@@ -1076,7 +891,16 @@ export const closeWorker = internalMutation({
             piWakeToken: undefined,
             piActiveWriter: undefined,
         });
-        const nextAt = mission.piResultWakePending ? Date.now() : args.at;
+        const adopted = args.adoptedWakeCount ?? 0;
+        if (!Number.isSafeInteger(adopted) || adopted < 0)
+            throw executionError("pi_wake_count_invalid");
+        const expectedVersion = (mission.piPreparedWakeVersion ?? 0) + adopted;
+        const unobservedWake =
+            mission.piResultWakePending === true ||
+            (mission.piResultWakeVersion ?? 0) > expectedVersion;
+        if (unobservedWake)
+            await ctx.db.patch(mission._id, { piResultWakePending: true });
+        const nextAt = unobservedWake ? Date.now() : args.at;
         const settlingTerminal =
             !args.nativeSettled && needsNativeSettlement(mission, session);
         if (!settlingTerminal && !args.error && nextAt !== undefined)
@@ -1084,7 +908,7 @@ export const closeWorker = internalMutation({
                 ctx,
                 mission._id,
                 args.expectedGeneration,
-                Math.min(nextAt, mission.piWakeAt ?? nextAt),
+                nextAt,
             );
         if (settlingTerminal && session) {
             const attempts = (session.settlementAttempts ?? 0) + 1;
@@ -1136,127 +960,6 @@ export const closeWorker = internalMutation({
                 internal.execution.conversations.pumpWorkbench,
                 { runId: mission.runId },
             );
-        return null;
-    },
-});
-
-const recoveryInvocationValidator = v.object({
-    invocationId: v.id("agentInvocations"),
-    expectedGeneration: v.number(),
-});
-
-async function requireRecoveryInvocation(
-    ctx: QueryCtx,
-    {
-        invocationId,
-        expectedGeneration,
-    }: Infer<typeof recoveryInvocationValidator>,
-    sessionId?: Id<"piSessions">,
-) {
-    const invocation = await ctx.db.get(invocationId);
-    if (!invocation?.missionId) throw executionError("invocation_unavailable");
-    if (sessionId)
-        await requireNativeSession(
-            ctx,
-            invocation.missionId,
-            sessionId,
-            expectedGeneration,
-        );
-    else {
-        if (
-            (invocation.adoptionGeneration ?? invocation.generation) !==
-            expectedGeneration
-        )
-            throw executionError("invocation_unavailable");
-        await requireMissionAuthority(
-            ctx,
-            invocation.missionId,
-            expectedGeneration,
-        );
-    }
-    return invocation;
-}
-
-export const invocation = internalQuery({
-    args: recoveryInvocationValidator.fields,
-    returns: schema.doc("agentInvocations"),
-    handler: (ctx, args) => requireRecoveryInvocation(ctx, args),
-});
-
-/** Reads one fragment of the response pinned by the invocation and recovery authority. */
-export const invocationFragment = internalQuery({
-    args: {
-        ...recoveryInvocationValidator.fields,
-        sessionId: v.optional(v.id("piSessions")),
-        part: v.union(
-            v.literal("received"),
-            v.literal("adopted"),
-            v.literal("raw"),
-        ),
-        textId: v.id("retainedTexts"),
-        index: v.number(),
-    },
-    returns: v.object({
-        content: v.string(),
-        fragmentCount: v.number(),
-        contentHash: v.string(),
-        characters: v.number(),
-        sizeBytes: v.number(),
-    }),
-    handler: async (ctx, args) => {
-        const invocation = await requireRecoveryInvocation(
-            ctx,
-            args,
-            args.sessionId,
-        );
-        const expected =
-            args.part === "raw"
-                ? invocation.rawOutputTextId
-                : args.part === "adopted"
-                  ? invocation.outputTextId
-                  : invocation.receivedOutputTextId;
-        if (expected !== args.textId)
-            throw executionError("invocation_result_conflict");
-        const text = await invocationResponseManifest(
-            ctx,
-            invocation,
-            args.textId,
-            args.part === "raw" ? "raw" : "response",
-        );
-        return {
-            content: await retainedTextFragment(ctx, text, args.index),
-            fragmentCount: text.fragmentHashes.length,
-            contentHash: text.contentHash,
-            characters: text.characters,
-            sizeBytes: text.sizeBytes,
-        };
-    },
-});
-
-export const nextOperation = internalQuery({
-    args: { missionId: v.id("agentMissions"), expectedGeneration: v.number() },
-    returns: v.union(schema.doc("agentOperationRequests"), v.null()),
-    handler: async (ctx, args) => {
-        await requireMissionAuthority(
-            ctx,
-            args.missionId,
-            args.expectedGeneration,
-        );
-        for (const status of [
-            "observed",
-            "waiting",
-            "running",
-            "pending",
-            "unknown",
-        ] as const) {
-            const request = await ctx.db
-                .query("agentOperationRequests")
-                .withIndex("by_mission_and_status", (q) =>
-                    q.eq("missionId", args.missionId).eq("status", status),
-                )
-                .first();
-            if (request) return request;
-        }
         return null;
     },
 });
@@ -1426,8 +1129,8 @@ export const publicationState = internalQuery({
         }
         if (
             !completed ||
-            !getAgentDefinition(mission.definitionId, mission.definitionVersion)
-                .conversationReply
+            !getAgentAuthority(mission.definitionId, mission.definitionVersion)
+                .hasConversationReply
         )
             return { completed, staleInstructions };
         throw executionError("publication_context_unavailable");
@@ -1531,3 +1234,5 @@ export const retireForRepreparation = internalMutation({
 
 // Retained function path for older native continuations.
 export const retireCapacity = retireForRepreparation;
+
+import { nativeInputsValidator } from "./piStorageValidators";

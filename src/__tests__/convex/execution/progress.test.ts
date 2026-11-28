@@ -8,6 +8,10 @@ import {
     runHistoryTurn,
     seedHistoryMission,
 } from "@/__tests__/setup/execution-history";
+import {
+    beginFixtureInvocation,
+    claimFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
 
 afterEach(() => {
     vi.restoreAllMocks();
@@ -155,7 +159,7 @@ test.each([
                   )
                 : fixtureResult(7),
     };
-    await f.t.mutation(internal.execution.operations.claim, {
+    await claimFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -241,7 +245,7 @@ test("new draft observations cannot renew a restoration window, while material p
     const current = await f.t.run((ctx) => ctx.db.get(f.missionId));
     assert(current);
     const keys = current.progressKeys;
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 1,
         taskKey: "new-draft",
@@ -298,7 +302,7 @@ test("outcome-validation diagnostics survive an authority refusal after observat
             input: { kind: "consult_run_state" },
         },
     );
-    await f.t.mutation(internal.execution.operations.claim, {
+    await claimFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });

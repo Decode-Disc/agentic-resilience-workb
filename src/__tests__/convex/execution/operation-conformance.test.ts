@@ -19,6 +19,11 @@ import { readFramingCitationPolicy } from "@convex/framingCitationPolicy";
 import { retainedMethodVersion } from "@convex/qualificationAgentMethods";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedHistoryMission } from "@/__tests__/setup/execution-history";
+import {
+    beginFixtureInvocation,
+    claimFixturePiLease,
+    dispatchFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
 import { admitMethodComparison } from "@/__tests__/setup/qualification-method-comparison";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 import { workbenchAdmissionInput } from "@/__tests__/setup/workbench";
@@ -158,6 +163,7 @@ test.each(
     for (const [name, operation] of Object.entries(commonOperations))
         expect(binding.operations[name]).toBe(operation);
     const f = await fixture(binding);
+    const piLease = await claimFixturePiLease(f.t, f.missionId, f.generation);
     const stateRequestId = await f.t.mutation(
         internal.execution.operations.enqueue,
         {
@@ -167,10 +173,11 @@ test.each(
             input: { kind: "consult_run_state" },
         },
     );
-    const stateResult = await f.t.action(
-        internal.execution.operations.dispatch,
-        { requestId: stateRequestId, expectedGeneration: f.generation },
-    );
+    const stateResult = await dispatchFixtureOperation(f.t, {
+        requestId: stateRequestId,
+        expectedGeneration: f.generation,
+        piLease,
+    });
     assert(stateResult.kind === "success");
     const state = JSON.parse(stateResult.valueJson);
     expect(state.research).toMatchObject({
@@ -194,7 +201,8 @@ test.each(
         });
     const initialProgress = (await f.t.run((ctx) => ctx.db.get(f.missionId)))
         ?.progressKeys;
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
+        piLease,
         missionId: f.missionId,
         expectedGeneration: f.generation,
         taskKey: "conformance-unknown",
@@ -227,14 +235,16 @@ test.each(
         outcome: { kind: "refused", code: "invalid_operation_input" },
     });
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
+            piLease,
             requestId: invalidId,
             expectedGeneration: f.generation,
         }),
     ).toEqual({ kind: "refused", code: "invalid_operation_input" });
     const requestId = await enqueue("history:invalid");
     const dispatch = (id: typeof requestId) =>
-        f.t.action(internal.execution.operations.dispatch, {
+        dispatchFixtureOperation(f.t, {
+            piLease,
             requestId: id,
             expectedGeneration: f.generation,
         });

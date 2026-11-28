@@ -20,6 +20,7 @@ import {
     projectSourcesOperationAdmission,
 } from "@convex/domain/sourcesAgent";
 import { projectWorkbenchOperationAdmission } from "@convex/domain/workbenchAgent";
+import { projectWorkbenchCompletionAdmission } from "@convex/domain/workbenchCompletionAdmission";
 import { workbenchInstructionMessageIds } from "@convex/domain/workbenchInstructions";
 import { preparedResponseReviewDraft } from "@convex/domain/workbenchResponseControlContracts";
 import {
@@ -27,16 +28,23 @@ import {
     retainedDeliveryBody,
 } from "@convex/execution/conversationBodies";
 import {
+    analystTurnDeliveries,
+    publishTurn,
+    readPreparedTurnWording,
+    requireInstructionVersion,
+} from "@convex/execution/conversationCore";
+import {
+    missionModel,
+    pinMissionModel,
+} from "@convex/execution/modelConfigurationCore";
+import { pauseResearchAtBoundary } from "@convex/execution/researchControlCore";
+import {
     agentToolSetKey,
     piInstructionSection,
 } from "@convex/integrations/modelInput";
 import { NATIVE_MODEL_SERIALIZER } from "@convex/integrations/modelRouting";
-import { pinMissionModel } from "@convex/modelConfiguration";
-import {
-    providerAttemptValidator,
-    requireQualificationResultDeadline,
-    requireQualifiedBrowserMission,
-} from "@convex/providerCalls";
+import { effectiveModelConfiguration } from "@convex/modelConfigurationSchema";
+import { readWorkbenchQualificationDeadline } from "@convex/qualificationAccess";
 import { patchQualificationReceipt } from "@convex/qualificationUsage";
 import {
     HISTORY_PAGE_SIZE,
@@ -46,9 +54,6 @@ import {
     MAX_WORKING_NOTES_BYTES,
     SOURCE_COMPARISON_MAX_OUTPUT_BYTES,
 } from "@convex/resourcePolicy";
-import { projectWorkbenchCompletionAdmission } from "@convex/responseControl";
-import { readWorkbenchQualificationDeadline } from "@convex/runWorkspace";
-import schema from "@convex/schema";
 import {
     paginationOptsValidator,
     paginationResultValidator,
@@ -74,12 +79,6 @@ import {
 } from "./authority";
 import { normalizeNativeHistoryInput } from "./commonOperations";
 import { buildMissionContext } from "./context";
-import {
-    analystTurnDeliveries,
-    publishTurn,
-    readPreparedTurnWording,
-    requireInstructionVersion,
-} from "./conversations";
 import { executionFailureValidation } from "./errors";
 import {
     AI_SDK_BACKEND,
@@ -126,7 +125,16 @@ import {
     operationInputFeedback,
 } from "./operationContracts";
 import { persistOperationRequest } from "./operations";
-import { pauseResearchAtBoundary } from "./researchControl";
+import {
+    type PiDispatchLease,
+    piDispatchLeaseValidator,
+    requirePiDispatchLease,
+} from "./piSession";
+import {
+    requireQualificationResultDeadline,
+    requireQualifiedBrowserMission,
+} from "./providerCallReceipts";
+import { providerAttemptValidator } from "./providerReceiptValidators";
 import {
     appendRetainedText,
     completeRetainedText,
@@ -136,6 +144,7 @@ import {
     stageRetainedText,
     textFragmentValidator,
 } from "./retainedText";
+import { invocationDocument, missionDocument } from "./tableValidators";
 
 /** Late diagnostic bytes may be retained, but never grant permission for more external work. */
 function resolveWorkingNotes(
@@ -312,6 +321,7 @@ async function requireDispatchAuthority(
     ctx: QueryCtx,
     invocationId: Doc<"agentInvocations">["_id"],
     expectedGeneration: number,
+    piLease?: PiDispatchLease,
 ) {
     const invocation = await ctx.db.get(invocationId);
     if (
@@ -326,6 +336,7 @@ async function requireDispatchAuthority(
             invocation.missionId,
             expectedGeneration,
         );
+        await requirePiDispatchLease(ctx, mission, expectedGeneration, piLease);
         if (invocation.provenance === "live")
             await requireQualifiedBrowserMission(ctx, run, mission);
         await requireInstructionVersion(
@@ -375,6 +386,7 @@ export const authorizeDispatch = internalQuery({
     args: {
         invocationId: v.id("agentInvocations"),
         expectedGeneration: v.number(),
+        piLease: v.optional(piDispatchLeaseValidator),
     },
     returns: v.null(),
     handler: async (ctx, args) => {
@@ -382,6 +394,7 @@ export const authorizeDispatch = internalQuery({
             ctx,
             args.invocationId,
             args.expectedGeneration,
+            args.piLease,
         );
         const request = await ctx.db
             .query("agentInvocationPayloads")
@@ -443,6 +456,7 @@ export const stageRequest = internalMutation({
     args: {
         invocationId: v.id("agentInvocations"),
         expectedGeneration: v.number(),
+        piLease: v.optional(piDispatchLeaseValidator),
         fragment: textFragmentValidator,
     },
     returns: v.id("retainedTexts"),
@@ -451,6 +465,7 @@ export const stageRequest = internalMutation({
             ctx,
             args.invocationId,
             args.expectedGeneration,
+            args.piLease,
         );
         return stageRetainedText(
             ctx,
@@ -464,6 +479,7 @@ export const retainRequest = internalMutation({
     args: {
         invocationId: v.id("agentInvocations"),
         expectedGeneration: v.number(),
+        piLease: v.optional(piDispatchLeaseValidator),
         requestJson: v.optional(v.string()),
         textId: v.optional(v.id("retainedTexts")),
         effectiveMaxOutputTokens: v.optional(v.number()),
@@ -477,6 +493,7 @@ export const retainRequest = internalMutation({
             ctx,
             args.invocationId,
             args.expectedGeneration,
+            args.piLease,
         );
         const payload = await retainInvocationPayload(
             ctx,
@@ -504,6 +521,7 @@ export const begin = internalMutation({
         expectedGeneration: v.number(),
         taskKey: v.string(),
         returnInputReference: v.optional(v.literal(true)),
+        piLease: v.optional(piDispatchLeaseValidator),
         piSessionId: v.optional(v.id("piSessions")),
         preparedInputHash: v.optional(v.string()),
         preparedObservationSequence: v.optional(v.number()),
@@ -538,6 +556,12 @@ export const begin = internalMutation({
             ctx,
             args.missionId,
             args.expectedGeneration,
+        );
+        await requirePiDispatchLease(
+            ctx,
+            mission,
+            args.expectedGeneration,
+            args.piLease,
         );
         const generationBackend = requireSupportedMissionBackend(mission);
         if (mission.provenance && mission.provenance !== args.provenance)
@@ -797,62 +821,105 @@ async function executionInvocation(
     return { invocation, mission, run };
 }
 
+const executionInvocationArgs = v.object({
+    invocationId: v.id("agentInvocations"),
+    expectedGeneration: v.number(),
+});
+const executionGrant = v.object({
+    invocation: invocationDocument,
+    mission: missionDocument,
+    authority: v.object({
+        resourcePolicy: v.optional(v.string()),
+        deadlineAt: v.number(),
+    }),
+});
+const executionFragment = v.object({
+    content: v.string(),
+    contentHash: v.string(),
+    sizeBytes: v.number(),
+    characters: v.number(),
+    fragmentCount: v.number(),
+});
+
+async function readExecutionGrant(
+    ctx: QueryCtx,
+    args: Infer<typeof executionInvocationArgs> & { inputHash?: string },
+) {
+    const { invocation, mission, run } = await executionInvocation(ctx, args);
+    if (
+        args.inputHash !== undefined &&
+        args.inputHash !== admittedInputHash(invocation)
+    )
+        throw executionError("invocation_input_invalid");
+    const qualificationDeadline =
+        invocation.provenance === "live"
+            ? await readWorkbenchQualificationDeadline(ctx, run)
+            : undefined;
+    return {
+        invocation,
+        mission,
+        authority: {
+            resourcePolicy: mission.resourcePolicy,
+            deadlineAt: Math.min(
+                mission.deadlineAt,
+                qualificationDeadline ?? Infinity,
+            ),
+        },
+    };
+}
+
 export const forExecution = internalQuery({
     args: {
-        invocationId: v.id("agentInvocations"),
-        expectedGeneration: v.number(),
+        ...executionInvocationArgs.fields,
         inputHash: v.optional(v.string()),
     },
-    returns: v.object({
-        invocation: schema.doc("agentInvocations"),
-        mission: schema.doc("agentMissions"),
-        authority: v.object({
-            resourcePolicy: v.optional(v.string()),
-            deadlineAt: v.number(),
-        }),
+    returns: executionGrant,
+    handler: readExecutionGrant,
+});
+
+export const forExecutionBundle = internalQuery({
+    args: executionInvocationArgs.fields,
+    returns: executionGrant.extend({
+        configuredModel: v.union(effectiveModelConfiguration, v.null()),
+        firstFragment: v.union(
+            v.object({ kind: v.literal("ready"), fragment: executionFragment }),
+            v.object({ kind: v.literal("error"), code: v.string() }),
+        ),
     }),
     handler: async (ctx, args) => {
-        const { invocation, mission, run } = await executionInvocation(
-            ctx,
-            args,
-        );
-        if (
-            args.inputHash !== undefined &&
-            args.inputHash !== admittedInputHash(invocation)
-        )
-            throw executionError("invocation_input_invalid");
-        const qualificationDeadline =
-            invocation.provenance === "live"
-                ? await readWorkbenchQualificationDeadline(ctx, run)
-                : undefined;
-        return {
-            invocation,
-            mission,
-            authority: {
-                resourcePolicy: mission.resourcePolicy,
-                deadlineAt: Math.min(
-                    mission.deadlineAt,
-                    qualificationDeadline ?? Infinity,
-                ),
-            },
-        };
+        const grant = await readExecutionGrant(ctx, args);
+        const { invocation, mission } = grant;
+        const configuredModel =
+            invocation.provenance === "simulation"
+                ? null
+                : ((await missionModel(ctx, mission)) ?? null);
+        let firstFragment:
+            | { kind: "ready"; fragment: Infer<typeof executionFragment> }
+            | { kind: "error"; code: string };
+        try {
+            const fragment = await admittedInputFragment(
+                ctx,
+                invocation,
+                0,
+                admittedInputHash(invocation),
+            );
+            firstFragment = { kind: "ready", fragment };
+        } catch (error) {
+            const code = executionFailureCode(error);
+            if (!code) throw error;
+            firstFragment = { kind: "error", code };
+        }
+        return { ...grant, configuredModel, firstFragment };
     },
 });
 
 export const executionInputFragment = internalQuery({
     args: {
-        invocationId: v.id("agentInvocations"),
-        expectedGeneration: v.number(),
+        ...executionInvocationArgs.fields,
         index: v.number(),
         inputHash: v.string(),
     },
-    returns: v.object({
-        content: v.string(),
-        contentHash: v.string(),
-        sizeBytes: v.number(),
-        characters: v.number(),
-        fragmentCount: v.number(),
-    }),
+    returns: executionFragment,
     handler: async (ctx, args) => {
         const { invocation } = await executionInvocation(ctx, args);
         return admittedInputFragment(
@@ -941,6 +1008,7 @@ export const retainOutput = internalMutation({
         invocationId: v.id("agentInvocations"),
         expectedGeneration: v.number(),
         ...receivedOutputArgs,
+        piLease: v.optional(piDispatchLeaseValidator),
         observableReplyJson: v.optional(v.string()),
         observableReplyTextId: v.optional(v.id("retainedTexts")),
     },
@@ -964,10 +1032,29 @@ export const retainOutput = internalMutation({
                 args.rawOutputTextId !== undefined)
         )
             throw executionError("invocation_result_invalid");
+        const response =
+            args.responseJson === undefined
+                ? undefined
+                : JSON.parse(args.responseJson);
+        if (
+            response?.kind === "blocked" &&
+            response.code === "pi_writer_fenced"
+        )
+            throw executionError("pi_writer_fenced");
+        const mission = invocation.missionId
+            ? await ctx.db.get(invocation.missionId)
+            : null;
+        if (mission && (!invocation.providerCallId || args.piLease))
+            await requirePiDispatchLease(
+                ctx,
+                mission,
+                args.expectedGeneration,
+                args.piLease,
+            );
         const receivedOutputJson =
-            args.responseJson !== undefined
-                ? stableStringify(JSON.parse(args.responseJson))
-                : undefined;
+            args.responseJson === undefined
+                ? undefined
+                : stableStringify(response);
         const responseText = args.responseTextId
             ? await invocationResponseManifest(
                   ctx,
@@ -1108,15 +1195,12 @@ export const retainOutput = internalMutation({
                       args.rawOutputJson,
                   )),
         });
-        if (invocation.missionId) {
-            const mission = await ctx.db.get(invocation.missionId);
-            if (mission && !hasReceivedResponse(invocation))
-                await recordMissionEvent(ctx, mission, {
-                    kind: "invocation_output_observed",
-                    cause: invocation.taskKey,
-                    invocationId: invocation._id,
-                });
-        }
+        if (mission && !hasReceivedResponse(invocation))
+            await recordMissionEvent(ctx, mission, {
+                kind: "invocation_output_observed",
+                cause: invocation.taskKey,
+                invocationId: invocation._id,
+            });
         return null;
     },
 });
@@ -1338,9 +1422,12 @@ export const finishOneShot = internalMutation({
                     blockCode: captureFailure,
                     completedAt: Date.now(),
                 });
-            await ctx.runMutation(internal.providerCalls.requestBilling, {
-                invocationId: invocation._id,
-            });
+            await ctx.runMutation(
+                internal.execution.providerCallReceipts.requestBilling,
+                {
+                    invocationId: invocation._id,
+                },
+            );
             return invocation.blockCode ?? captureFailure;
         }
         if (invocation.status === "blocked")
@@ -1401,9 +1488,12 @@ export const finishOneShot = internalMutation({
                 status: "returned",
                 completedAt: Date.now(),
             });
-        await ctx.runMutation(internal.providerCalls.requestBilling, {
-            invocationId: invocation._id,
-        });
+        await ctx.runMutation(
+            internal.execution.providerCallReceipts.requestBilling,
+            {
+                invocationId: invocation._id,
+            },
+        );
         return null;
     },
 });

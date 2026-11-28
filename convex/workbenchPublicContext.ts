@@ -23,7 +23,7 @@ import { requireMissionAuthority } from "@convex/execution/authority";
 import {
     conversationInstructions,
     requireInstructionVersion,
-} from "@convex/execution/conversations";
+} from "@convex/execution/conversationCore";
 import { executionError } from "@convex/execution/errors";
 import { historyTextFragment } from "@convex/execution/journal";
 import { missionScope } from "@convex/execution/missionData";

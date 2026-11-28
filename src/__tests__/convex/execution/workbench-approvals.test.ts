@@ -11,6 +11,12 @@ import { buildMissionContext } from "@convex/execution/context";
 import { BROWSER_TEST_SLOT } from "@convex/runWorkspace";
 import { afterEach, assert, beforeEach, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
+import {
+    beginFixtureInvocation,
+    claimFixtureOperation,
+    dispatchFixtureOperation,
+    recordFixtureAttempt,
+} from "@/__tests__/setup/pi-mission";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 import {
     readConversationPageWithBodies,
@@ -118,7 +124,7 @@ test("an exact command applies the action and records an approved request", asyn
             messageId,
         },
     });
-    const outcome = await t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -174,7 +180,7 @@ test("an exact command applies the action and records an approved request", asyn
             ).nativeObservations?.controlSequence ?? 0
         );
     });
-    const invocation = await t.mutation(internal.execution.invocations.begin, {
+    const invocation = await beginFixtureInvocation(t, {
         missionId: active.missionId,
         expectedGeneration: 1,
         taskKey: "confirm-pause",
@@ -201,11 +207,11 @@ test("an exact command applies the action and records an approved request", asyn
         attempt: 1,
         inputHash: sha256Hex(invocation.inputJson),
     };
-    await t.mutation(internal.providerCalls.recordAttempt, {
+    await recordFixtureAttempt(t, {
         ...attempt,
         status: "started",
     });
-    await t.mutation(internal.providerCalls.recordAttempt, {
+    await recordFixtureAttempt(t, {
         ...attempt,
         status: "succeeded",
         dispatchOutcome: "response_received",
@@ -245,7 +251,7 @@ test("an interpreted request creates a pending approval instead of acting", asyn
             messageId,
         },
     });
-    const outcome = await t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -331,7 +337,7 @@ test("asking about a pending system decision shows the same request again", asyn
             },
         },
     );
-    const outcome = await f.t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -441,7 +447,7 @@ test("an active grant applies the interpreted request", async () => {
             messageId,
         },
     });
-    const outcome = await t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -482,7 +488,7 @@ test("an unavailable action creates no request", async () => {
             messageId,
         },
     });
-    const outcome = await t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -627,7 +633,7 @@ test.each([
             messageId,
         },
     });
-    await t.mutation(internal.execution.operations.claim, {
+    await claimFixtureOperation(t, {
         requestId: pauseReqId,
         expectedGeneration: 1,
     });
@@ -637,7 +643,7 @@ test.each([
     });
     await t.mutation(internal.execution.researchControl.checkpoint, { runId });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId: pauseReqId,
             expectedGeneration: 1,
         }),
@@ -671,7 +677,7 @@ test.each([
             },
         },
     );
-    await t.mutation(internal.execution.operations.claim, {
+    await claimFixtureOperation(t, {
         requestId: resumeReqId,
         expectedGeneration: 1,
     });
@@ -685,7 +691,7 @@ test.each([
         expectedGeneration: 1,
     });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId: resumeReqId,
             expectedGeneration: 1,
         }),
@@ -720,7 +726,7 @@ test("an undispatched approval operation is refused after a later analyst checkp
     });
     await t.mutation(internal.execution.researchControl.checkpoint, { runId });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId: staleReqId,
             expectedGeneration: 1,
         }),
@@ -798,43 +804,43 @@ test("approvalRequestIdFromOperation validates real operation outcomes without u
     ).toBe("req-123");
 });
 
-test("requestApprovalFixture creates a conversation approval request and Deny leaves the run unchanged", async () => {
-    const f = await seedExpiredPreparation();
-    vi.stubEnv("E2E_FIXTURES_ENABLED", "true");
-    vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3210");
-    await f.t.run(async (ctx) => {
-        const visitor = await ctx.db.get(f.visitorId);
-        assert(visitor);
-        await ctx.db.patch(visitor.invitationId, {
-            slotKey: BROWSER_TEST_SLOT,
-        });
-    });
-    const contextId = await f.t.mutation(
-        internal.runWorkspace.openBrowserTestContext,
-        {
-            slotKey: BROWSER_TEST_SLOT,
-            contextKey: "request-approval-fixture",
-            durationMs: 60_000,
-        },
+test("the approval fixture raises a real request on a fresh framed dossier without launching Sources", async () => {
+    const {
+        t,
+        client: authClient,
+        runId,
+    } = await seedWorkbench(
+        true,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        null,
     );
-    await f.t.run((ctx) =>
-        ctx.db.patch(f.runId, {
-            purpose: "browser_test",
-            browserTestContextId: contextId,
-            reservationKey: "test:request-approval-fixture",
-            executionStatus: "running",
-        }),
+    await t.run((ctx) =>
+        ctx.db.patch(runId, { reservationKey: "test:native-workbench" }),
     );
-    await seedTimeLimitConversation(f);
-
-    await f.t.action(internal.execution.fixtures.requestApprovalFixture, {
-        runId: f.runId,
-        fixtureKey: "request-approval-fixture",
+    const queued = await t.run((ctx) =>
+        ctx.db
+            .query("agentMessageDeliveries")
+            .withIndex("by_run_and_status", (q) =>
+                q.eq("runId", runId).eq("status", "queued"),
+            )
+            .first(),
+    );
+    assert(queued);
+    await authClient.mutation(api.execution.conversations.removeQueued, {
+        runId,
+        messageId: queued._id,
     });
 
-    const authClient = client(f);
+    await t.action(internal.execution.fixtures.requestApprovalFixture, {
+        runId,
+        fixtureKey: "native-workbench",
+    });
+
     const history = await readWorkbenchPageWithBodies(authClient, {
-        runId: f.runId,
+        runId: runId,
         paginationOpts: { numItems: 20, cursor: null },
     });
     const reply = history.page.find(
@@ -864,12 +870,16 @@ test("requestApprovalFixture creates a conversation approval request and Deny le
         action: "pause_research",
     });
 
-    const run = await f.t.run((ctx) => ctx.db.get(f.runId));
+    const run = await t.run((ctx) => ctx.db.get(runId));
     expect(run).toMatchObject({
         executionStatus: "running",
-        executionGeneration: 4,
+        executionGeneration: 1,
     });
     expect(run?.researchPauseRequested).toBeFalsy();
+    expect(run?.sourcePreparationId).toBeUndefined();
+    expect(await t.run((ctx) => ctx.db.query("providerCalls").take(1))).toEqual(
+        [],
+    );
 });
 
 test("reachSourcesTimeLimit repeats after Always continue, auto-continues while granted, and asks again after revocation", async () => {

@@ -5,7 +5,7 @@ import {
     completeCharacterBoundary,
     sha256CheckpointHex,
     sha256Hex,
-} from "@convex/domain/sourcePassages";
+} from "@convex/domain/hashing";
 import {
     CONVEX_MAX_ARRAY_VALUES,
     CONVEX_MAX_DOCUMENT_BYTES,

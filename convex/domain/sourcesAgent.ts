@@ -1,6 +1,16 @@
 import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
+import { savedMaterialWireContract } from "@convex/domain/savedMaterialOperationResults";
+import {
+    consultableSourceResult,
+    discoveryResult,
+    documentarySubmissionResult,
+} from "@convex/domain/sourcesOperationResults";
+import {
+    getAgentAuthority,
+    retainedMethodVersion,
+} from "@convex/execution/agentAuthorityCatalog";
 import {
     type AgentDefinition,
     domainSnapshot,
@@ -14,16 +24,11 @@ import {
 } from "@convex/execution/missionData";
 import { completionFeedbackValidator } from "@convex/execution/operationContracts";
 import {
-    requireRetainedMethodControl,
-    retainedMethodVersion,
-} from "@convex/qualificationAgentMethods";
-import {
     CONVEX_MAX_DOCUMENT_BYTES,
     SOURCES_HANDOFF_READ_CAPACITY,
     SOURCES_MAX_EVIDENCE_REFERENCES,
     SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS,
 } from "@convex/resourcePolicy";
-import { sourcesSimulationEnabled } from "@convex/sourcesSimulation";
 import { ConvexError, getDocumentSize, type Infer, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { readResearchContext } from "./researchContext";
@@ -37,7 +42,6 @@ import {
     REFERENCED_SOURCES_VERSION,
     SCOPED_DOCUMENTARY_SOURCES_VERSION,
     savedMaterialBinding,
-    savedMaterialWireContract,
     supportsScopedDocumentaryExamination,
 } from "./savedMaterialOperations";
 import { sha256Hex, stableStringify } from "./sourcePassages";
@@ -61,11 +65,8 @@ import {
 } from "./sources";
 import {
     consultableSourceInput,
-    consultableSourceResult,
     discoverSourcesInput,
-    discoveryResult,
     documentaryCheckInput,
-    documentarySubmissionResult,
     qualificationObservations,
     qualificationSubmissionInput,
     sourcesCompletionAdmission,
@@ -486,19 +487,7 @@ export const sourcesV4Definition: AgentDefinition & { id: "sources_v1" } = {
             sourcesContinuationAvailable(ctx, run, preparation)
         );
     },
-    async requireAuthority(ctx, mission) {
-        if (!("scope" in mission) || mission.scope.kind !== "sources_v1")
-            throw executionError("sources_scope_invalid");
-        if (mission.provenance === "simulation")
-            await sourcesSimulationEnabled(ctx, mission.runId);
-        const state = await requireSourcesPreparation(
-            ctx,
-            mission.scope.preparationId,
-            "observation",
-        );
-        if (state.run._id !== mission.runId)
-            throw executionError("sources_scope_invalid");
-    },
+    requireAuthority: getAgentAuthority("sources_v1", 4).requireAuthority,
     async context(ctx, mission, run) {
         if (!("scope" in mission) || mission.scope.kind !== "sources_v1")
             return { kind: "blocked", code: "sources_scope_invalid" };
@@ -859,8 +848,8 @@ export const sourcesMethodControlDefinition: AgentDefinition & {
         catalogue: false,
     },
     instructions: sourcesV4Definition.instructions,
-    async requireAuthority(ctx, mission, run) {
-        await requireRetainedMethodControl(ctx, mission, run);
-        await sourcesV5Definition.requireAuthority(ctx, mission, run);
-    },
+    requireAuthority: getAgentAuthority(
+        "sources_v1",
+        retainedMethodVersion("sources_v1"),
+    ).requireAuthority,
 };

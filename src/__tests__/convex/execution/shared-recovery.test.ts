@@ -4,6 +4,10 @@ import { historyPageValidator } from "@convex/execution/operationContracts";
 import { MAX_OPERATION_RESULT_BYTES } from "@convex/resourcePolicy";
 import { validate } from "convex-helpers/validators";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import {
+    beginFixtureInvocation,
+    dispatchFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
 import { readRetainedBody } from "@/__tests__/setup/retained-history";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 
@@ -17,7 +21,7 @@ async function refusedProposal(
     text = "Rejected proposal must remain inspectable",
 ) {
     const f = await seedCapturedSources();
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 4,
         taskKey: "recover-refusal",
@@ -64,7 +68,7 @@ async function consult(
             input: { kind: "consult_mission_state", ...args },
         },
     );
-    return f.t.action(internal.execution.operations.dispatch, {
+    return dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -236,7 +240,7 @@ test("Sources correction identifies the affected need with its exact domain iden
     const preparation = await f.t.run((ctx) => ctx.db.get(f.preparationId));
     assert(preparation?.sourcesMission);
     const data = preparation.sourcesMission;
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 4,
         taskKey: "need-diagnostic",

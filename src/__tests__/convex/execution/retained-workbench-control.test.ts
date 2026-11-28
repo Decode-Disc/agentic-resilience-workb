@@ -1,6 +1,7 @@
 import { api, internal } from "@convex/_generated/api";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import { dispatchFixtureOperation } from "@/__tests__/setup/pi-mission";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 
 afterEach(() => {
@@ -101,7 +102,7 @@ test("Workbench consultation preserves authoritative facts without duplicating t
         cause: "consultation-facts",
         input: { kind: "consult_mission_state" },
     });
-    const outcome = await t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });

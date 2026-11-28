@@ -1,6 +1,7 @@
 import { internal } from "@convex/_generated/api";
 import { afterEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
+import { dispatchFixtureOperation } from "@/__tests__/setup/pi-mission";
 import {
     seedInspectedEvidence,
     startRetainedInspection,
@@ -89,7 +90,7 @@ test.each([
         input: { kind: "read_in_context", sourceId, passageOrder: 0 },
     });
     if (phase === "after_effect_commit")
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 4,
         });

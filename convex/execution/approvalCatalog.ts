@@ -4,14 +4,14 @@ import { sourcesContinuationAvailable } from "@convex/domain/sources";
 import {
     requestSourcesSettlement,
     sourcesSettlementBlock,
-} from "@convex/sourcesMission";
-import type { ApprovalAction, AuditActor } from "./approvalContracts";
-import { executionError } from "./errors";
+} from "@convex/domain/sourcesSettlement";
 import {
     pauseResearch,
     readResearchControlReadiness,
     resumeResearch,
-} from "./researchControl";
+} from "@convex/execution/researchControlCore";
+import type { ApprovalAction, AuditActor } from "./approvalContracts";
+import { executionError } from "./errors";
 
 export type ApprovalActionDefinition = {
     readonly exclusiveWith: readonly ApprovalAction[];

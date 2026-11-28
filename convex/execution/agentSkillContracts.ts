@@ -1,13 +1,7 @@
 import { v } from "convex/values";
-import { z } from "zod";
-export const agentSkillBindingSchema = z
-    .object({
-        packageId: z.string(),
-        skillName: z.enum(["workbench-framing", "source-preparation"]),
-        catalogue: z.literal(false).optional(),
-    })
-    .strict();
-export type AgentSkillBinding = z.infer<typeof agentSkillBindingSchema>;
+import type { AgentSkillBinding } from "./agentSkillResults";
+
+export type { AgentSkillBinding } from "./agentSkillResults";
 export const sourcesDocumentaryMethod = {
     packageId: "research-methods-v2",
     skillName: "source-preparation",
@@ -28,11 +22,3 @@ export const skillReadPin = v.object({
     path: v.string(),
     resourceHash: v.string(),
 });
-export const skillReadResult = z
-    .object({
-        packageId: z.string(),
-        path: z.string(),
-        resourceHash: z.string(),
-        text: z.string(),
-    })
-    .strict();

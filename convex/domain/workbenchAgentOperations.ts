@@ -1,6 +1,7 @@
 import { internal } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
 import type { QueryCtx } from "@convex/_generated/server";
+import { publicSearchWireResult } from "@convex/domain/workbenchOperationResults";
 import type { OperationOutcome } from "@convex/execution/agentDefinition";
 import { readOperationCause } from "@convex/execution/authority";
 import {
@@ -23,6 +24,10 @@ import {
     framingWriteReceipt,
 } from "./framingContracts";
 import {
+    persistWorkbenchFraming,
+    prepareWorkbenchFraming,
+} from "./framingCore";
+import {
     framingConditionalReferences,
     framingPublicReferences,
 } from "./framingProvenance";
@@ -42,7 +47,6 @@ import {
     publicReadResultValidator,
     publicSearchInput,
     publicSearchOutcomeValidator,
-    publicSearchWireResult,
     requestApprovalInput,
     requestApprovalResultValidator,
     sourceRequestInput,
@@ -94,6 +98,18 @@ function recoverableWorkbenchRefusal(
         : undefined;
 }
 
+function framingOperationResult(result: number | string) {
+    return {
+        outcome:
+            typeof result === "number"
+                ? { kind: "success" as const, value: { revision: result } }
+                : observeOperationOutcome({
+                      kind: "success",
+                      valueJson: result,
+                  }),
+    };
+}
+
 const adjustFraming: Extract<
     AgentOperationDefinition,
     { effectKind: "atomic_effect" }
@@ -136,21 +152,32 @@ const adjustFraming: Extract<
                     expectedGeneration: args.expectedGeneration,
                 },
             );
-            if (typeof result === "number")
-                return {
-                    outcome: { kind: "success", value: { revision: result } },
-                };
-            return {
-                outcome: observeOperationOutcome({
-                    kind: "success",
-                    valueJson: result,
-                }),
-            };
+            return framingOperationResult(result);
         } catch (error) {
             const refusal = recoverableWorkbenchRefusal(error);
             if (refusal) return { outcome: refusal };
             throw error;
         }
+    },
+    async executeInTransaction(ctx, args) {
+        if (!args.requestId)
+            return {
+                outcome: { kind: "refused", code: "request_unavailable" },
+            };
+        let prepared: Awaited<ReturnType<typeof prepareWorkbenchFraming>>;
+        try {
+            prepared = await prepareWorkbenchFraming(ctx, {
+                requestId: args.requestId,
+                expectedGeneration: args.expectedGeneration,
+            });
+        } catch (error) {
+            const refusal = recoverableWorkbenchRefusal(error);
+            if (refusal) return { outcome: refusal };
+            throw error;
+        }
+        return framingOperationResult(
+            await persistWorkbenchFraming(ctx, prepared),
+        );
     },
     validateOutcome(_request, outcome) {
         return outcome;
@@ -300,6 +327,7 @@ export const responseCoherenceOperation: Extract<
             {
                 requestId: args.requestId,
                 expectedGeneration: args.expectedGeneration,
+                piLease: args.piLease,
             },
         );
         return {
@@ -458,6 +486,7 @@ const publicContextOperation: Extract<
                     {
                         requestId: args.requestId,
                         expectedGeneration: args.expectedGeneration,
+                        piLease: args.piLease,
                     },
                 ),
             ),

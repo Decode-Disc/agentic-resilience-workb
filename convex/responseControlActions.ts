@@ -6,6 +6,7 @@ import {
     responseReviewResult,
 } from "@convex/domain/workbenchResponseControlContracts";
 import { executionError, executionFailureCode } from "@convex/execution/errors";
+import { piDispatchLeaseValidator } from "@convex/execution/piSession";
 import {
     checkResponseCoherence,
     verifyResponseControlModel,
@@ -22,9 +23,13 @@ export const execute = internalAction({
     args: {
         requestId: v.id("agentOperationRequests"),
         expectedGeneration: v.number(),
+        piLease: v.optional(piDispatchLeaseValidator),
     },
     returns: responseReviewResult,
-    handler: async (ctx, args): Promise<Infer<typeof responseReviewResult>> => {
+    handler: async (
+        ctx,
+        { piLease, ...args },
+    ): Promise<Infer<typeof responseReviewResult>> => {
         const executionDeadlineAt = nodeActionGenerationDeadline(Date.now());
         let job: FunctionReturnType<
             typeof internal.responseControl.forExecution
@@ -82,7 +87,7 @@ export const execute = internalAction({
         try {
             admitted = await ctx.runMutation(
                 internal.providerCalls.recordAttempt,
-                { ...identity, status: "started" },
+                { ...identity, status: "started", piLease },
             );
         } catch (error) {
             const code = executionFailureCode(error);

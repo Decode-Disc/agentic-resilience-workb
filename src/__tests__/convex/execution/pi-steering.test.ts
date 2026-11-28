@@ -282,7 +282,7 @@ test("public Resume reuses a confirmed Pi reply retained during analyst pause", 
     expect(gate.calls()).toBe(4);
 }, 30000);
 
-test("a Pi parent sleeps durably for its child and resumes from retained results", async () => {
+test("a Pi parent adopts a fast child result without reopening its worker", async () => {
     vi.useFakeTimers();
     const f = await seedConversation(true);
     await import("@convex/execution/agentCatalog");
@@ -357,7 +357,7 @@ test("a Pi parent sleeps durably for its child and resumes from retained results
             )
             .unique(),
     );
-    expect(session?.epoch).toBeGreaterThan(1);
+    expect(session?.epoch).toBe(1);
     const requests = await f.t.run((ctx) =>
         ctx.db
             .query("agentOperationRequests")

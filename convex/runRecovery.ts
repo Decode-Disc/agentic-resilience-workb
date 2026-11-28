@@ -11,13 +11,13 @@ import {
 } from "@convex/domain/sources";
 import { isDocumentaryResearchPhase } from "@convex/domain/transitions";
 import type { AuditActor } from "@convex/execution/approvalContracts";
-import { readSourcesDecisionRequestId } from "@convex/execution/approvals";
+import { readSourcesDecisionRequestId } from "@convex/execution/approvalCore";
 import { recordMissionEvent } from "@convex/execution/authority";
 import { executionError } from "@convex/execution/errors";
 import {
     raiseSourcesTimeLimitDecision,
     recordResearchObservation,
-} from "@convex/execution/researchControl";
+} from "@convex/execution/researchControlCore";
 import {
     MAX_AUDIT_REASON_CHARS,
     MIN_AUDIT_REASON_CHARS,

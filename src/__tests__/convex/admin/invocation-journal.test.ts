@@ -7,6 +7,13 @@ import schema from "@convex/schema";
 import type { FunctionReturnType } from "convex/server";
 import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
+import {
+    beginFixtureInvocation,
+    retainFixtureOutput,
+    retainFixtureRequest,
+    seedSettledFixtureReceipt,
+    stageFixtureRequest,
+} from "@/__tests__/setup/pi-mission";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 
 async function journalFixture(
@@ -21,14 +28,14 @@ async function journalFixture(
         definitionId: "saved_material_inspection_v1",
         requestKey: "admin-journal",
     });
-    const invocation = await t.mutation(internal.execution.invocations.begin, {
+    const invocation = await beginFixtureInvocation(t, {
         missionId,
         expectedGeneration: 4,
         taskKey: "first",
         provenance: "simulation",
     });
     if (invocation.kind !== "ready") throw new Error("Expected invocation");
-    await t.mutation(internal.execution.invocations.retainRequest, {
+    await retainFixtureRequest(t, {
         invocationId: invocation.invocationId,
         expectedGeneration: 4,
         requestJson: JSON.stringify({
@@ -156,7 +163,7 @@ test.each([
         provenance: "simulation",
         content: "Historical reply, preserved exactly.",
     });
-    await t.mutation(internal.execution.invocations.retainOutput, {
+    await retainFixtureOutput(t, {
         invocationId,
         expectedGeneration: 4,
         responseJson: '{"kind":"blocked","code":"historical_record"}',
@@ -314,8 +321,9 @@ test("inspection preserves the adoption fence of an observation received after c
     const owner = t.withIdentity({
         subject: `${userId}|late-journal-observation`,
     });
+    await seedSettledFixtureReceipt(t, invocationId);
     await owner.mutation(api.workflowControls.cancel, { runId: args.runId });
-    await t.mutation(internal.execution.invocations.retainOutput, {
+    await retainFixtureOutput(t, {
         invocationId,
         expectedGeneration: 4,
         responseJson: '{"kind":"blocked","code":"late_response"}',
@@ -401,7 +409,7 @@ test("administrator pages the exact complete fragmented request with the same au
     });
     await f.t.run((ctx) => ctx.db.patch(f.visitorId, { role: "admin" }));
     const identity = f.t.withIdentity({ subject: `${f.userId}|journal-test` });
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId,
         expectedGeneration: 4,
         taskKey: "fragmented-admin",
@@ -414,15 +422,12 @@ test("administrator pages the exact complete fragmented request with the same au
     const { manifest, parts } = retainedTextParts(json);
     let textId: Id<"retainedTexts"> | undefined;
     for (const [index, content] of parts.entries())
-        textId = await f.t.mutation(
-            internal.execution.invocationLifecycle.stageRequest,
-            {
-                invocationId: begun.invocationId,
-                expectedGeneration: 4,
-                fragment: { ...manifest, index, content },
-            },
-        );
-    await f.t.mutation(internal.execution.invocations.retainRequest, {
+        textId = await stageFixtureRequest(f.t, {
+            invocationId: begun.invocationId,
+            expectedGeneration: 4,
+            fragment: { ...manifest, index, content },
+        });
+    await retainFixtureRequest(f.t, {
         invocationId: begun.invocationId,
         expectedGeneration: 4,
         textId,
@@ -520,7 +525,7 @@ test.each([
     );
     if (!responseTextId || !observableReplyTextId)
         throw new Error("Missing staged fixture output");
-    await t.mutation(internal.execution.invocations.retainOutput, {
+    await retainFixtureOutput(t, {
         invocationId,
         expectedGeneration: 4,
         responseTextId,

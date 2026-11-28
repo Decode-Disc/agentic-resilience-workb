@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { agentToolSchemas } from "@convex/execution/agentDefinition";
-import { piToolMetadata } from "@convex/integrations/modelInput";
+import { piToolMetadata } from "@convex/integrations/piModelAdapter";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { fromJSONSchema } from "zod";
 import {

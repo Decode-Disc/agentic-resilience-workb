@@ -1,6 +1,8 @@
+import { requireFixtureScope } from "./conversationFixtureAuthority";
+
+export { requireFixtureScope } from "./conversationFixtureAuthority";
+
 import { internal } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
-import type { QueryCtx } from "@convex/_generated/server";
 import { executionError } from "@convex/execution/errors";
 import type { AgentOperationDefinition } from "@convex/execution/executionProtocol";
 import { operationReuseIdentity } from "@convex/execution/missionData";
@@ -9,28 +11,6 @@ import {
     operationResultValidator,
 } from "@convex/execution/operationResults";
 import { v } from "convex/values";
-import {
-    localBrowserFixturesEnabled,
-    requireBrowserFixtureContext,
-    requireBrowserTestRunOwner,
-} from "./browserFixtureAccess";
-export async function requireFixtureScope(
-    ctx: QueryCtx,
-    runId: Id<"researchRuns">,
-) {
-    if (!localBrowserFixturesEnabled())
-        throw executionError("simulation_not_authorized");
-    const run = await ctx.db.get(runId);
-    if (run?.purpose !== "browser_test")
-        throw executionError("simulation_not_authorized");
-    const visitor = await requireBrowserTestRunOwner(ctx, run);
-    const contextId = await requireBrowserFixtureContext(ctx, visitor);
-    if (
-        run.ownerVisitorId !== visitor._id ||
-        run.browserTestContextId !== contextId
-    )
-        throw executionError("simulation_not_authorized");
-}
 
 export function fixtureResult(value: number) {
     if (!Number.isSafeInteger(value) || !Number.isSafeInteger(value * 2))

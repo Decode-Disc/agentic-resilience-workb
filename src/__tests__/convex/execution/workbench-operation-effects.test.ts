@@ -10,6 +10,10 @@ import schema from "@convex/schema";
 import { convexTest } from "convex-test";
 import { afterEach, assert, beforeEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
+import {
+    claimFixtureOperation,
+    dispatchFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
 import { admitMethodComparison } from "@/__tests__/setup/qualification-method-comparison";
 import { createAdmittedPreflight } from "@/__tests__/setup/research-launch";
 import {
@@ -75,7 +79,7 @@ test.each([
     const before = await client.query(api.framing.get, { runId });
     if (version === 1)
         await t.run((ctx) => ctx.db.patch(requestId, { operationVersion: 1 }));
-    const outcome = await t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -154,7 +158,7 @@ test("a Workbench proposal beyond documentary capacity is refused with guidance 
     });
     const before = await client.query(api.framing.get, { runId });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -239,7 +243,7 @@ test("a committed research Resume is adopted as success", async () => {
         cause: "fixture",
         input: { kind: "control_research", action: "resume", messageId },
     });
-    const outcome = await t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -319,7 +323,7 @@ test("a superseded research-control request cannot resume a newer analyst pause"
         cause: "analyst_followup",
         input: { kind: "control_research", action: "resume", messageId },
     });
-    const claimed = await t.mutation(internal.execution.operations.claim, {
+    const claimed = await claimFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -388,7 +392,7 @@ test("a historical framing caller can acknowledge and replay a saved adjustment"
         },
     });
     const args = { requestId, expectedGeneration: 1 };
-    await t.mutation(internal.execution.operations.claim, args);
+    await claimFixtureOperation(t, args);
 
     // The historical worker encodes the numeric RPC result as the revision.
     const revision = await t.mutation(
@@ -452,7 +456,7 @@ test("an applied framing receipt is adopted after dispatch is interrupted withou
             content: { scope: "Claims", questions: [] },
         },
     });
-    await t.mutation(internal.execution.operations.claim, {
+    await claimFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -461,7 +465,7 @@ test("an applied framing receipt is adopted after dispatch is interrupted withou
         expectedGeneration: 1,
     });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -561,7 +565,7 @@ test.each([
         input: { kind: "control_research", action: "resume", messageId },
     });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId: refusedId,
             expectedGeneration: 1,
         }),
@@ -586,7 +590,7 @@ test.each([
     });
     if (version === 1)
         await t.run((ctx) => ctx.db.patch(requestId, { operationVersion: 1 }));
-    const outcome = await t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -606,7 +610,7 @@ test.each([
     }
     expect(outcome).toMatchObject({ kind: "success" });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -642,7 +646,7 @@ test("an edit between claim and framing effect returns a refusal without overwri
     });
     expect(
         (
-            await t.mutation(internal.execution.operations.claim, {
+            await claimFixtureOperation(t, {
                 requestId,
                 expectedGeneration: 1,
             })
@@ -696,7 +700,7 @@ test("a committed pause remains successful after its documentary checkpoint sett
         cause: "fixture",
         input: { kind: "control_research", action: "pause", messageId },
     });
-    await t.mutation(internal.execution.operations.claim, {
+    await claimFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -706,7 +710,7 @@ test("a committed pause remains successful after its documentary checkpoint sett
     });
     await t.mutation(internal.execution.researchControl.checkpoint, { runId });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -730,7 +734,7 @@ test("a superseded framing receipt settles the request without applying the old 
             content: { scope: "Agent scope", questions: [] },
         },
     });
-    await t.mutation(internal.execution.operations.claim, {
+    await claimFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -745,7 +749,7 @@ test("a superseded framing receipt settles the request without applying the old 
         content: { scope: "New analyst scope", questions: [] },
     });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -791,7 +795,7 @@ test("the current framing operation preserves analyst authority", async () => {
             content: { scope: "Model overwrite", questions: [] },
         },
     });
-    await t.mutation(internal.execution.operations.claim, {
+    await claimFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -877,7 +881,7 @@ test.each([
             interpretedNeed: "Switching terms.",
         },
     });
-    const result = await t.action(internal.execution.operations.dispatch, {
+    const result = await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -889,7 +893,7 @@ test.each([
         adoptedAt: expect.any(Number),
     });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -930,7 +934,7 @@ test("documentary receipt recovery retains the commit and fences adoption after 
             interpretedNeed: "Switching terms.",
         },
     });
-    await t.mutation(internal.execution.operations.claim, {
+    await claimFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -1046,7 +1050,7 @@ test.each(
         input,
     });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -1117,7 +1121,7 @@ test("documentary follow-up links existing work at full need capacity", async ()
             },
         });
     const dispatch = (requestId: Awaited<ReturnType<typeof request>>) =>
-        t.action(internal.execution.operations.dispatch, {
+        dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 1,
         });

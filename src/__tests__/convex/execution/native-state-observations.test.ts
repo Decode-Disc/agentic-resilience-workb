@@ -32,6 +32,10 @@ import { afterEach, assert, beforeEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import {
+    beginFixtureInvocation,
+    dispatchFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
+import {
     nativePiFixtureRoute,
     nativeTextReply,
 } from "@/__tests__/setup/pi-native";
@@ -272,6 +276,10 @@ test.each([
     );
     expect(interrupted).toBe(true);
     expect(requests).toHaveLength(1);
+    const wake = (await f.t.run((ctx) => ctx.db.get(active.missionId)))
+        ?.piWakeAt;
+    assert(wake !== undefined && wake > Date.now());
+    vi.advanceTimersByTime(wake - Date.now());
     await f.t.finishAllScheduledFunctions(
         () => vi.advanceTimersByTime(10),
         500,
@@ -1024,7 +1032,7 @@ test("a native agent can recover an exact application observation by its immutab
             input: { kind: "consult_mission_state", reference: event._id },
         },
     );
-    const result = await f.t.action(internal.execution.operations.dispatch, {
+    const result = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -1631,7 +1639,7 @@ test("native reopen and compaction preserve Sources assessment authorship and co
             nodeActionGenerationDeadline(Date.now()),
         ),
     );
-    const source = await f.t.mutation(internal.execution.invocations.begin, {
+    const source = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 4,
         taskKey: "returned-source-assessment",
@@ -1919,7 +1927,7 @@ test("a dossier observation reference cannot expose another dossier through miss
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 1,
         }),

@@ -72,6 +72,7 @@ import {
     browserBatteryPath,
     candidateHash,
     compactFramingReplayDocuments,
+    defaultPreflightCacheRoot,
     prepareFramingReplay,
     prepareSourcesReplay,
     preserveQualificationCandidate,
@@ -2123,8 +2124,15 @@ async function executeCampaign(
                 candidateHash(fingerprints()),
             );
             mkdirSync(validationRoot, { recursive: true, mode: 0o700 });
-            const candidate = preserveQualificationCandidate(validationRoot);
-            await verifyQualificationCandidate(validationRoot, candidate);
+            const candidate = preserveQualificationCandidate(validationRoot, {
+                preserveCode: false,
+            });
+            await verifyQualificationCandidate(
+                validationRoot,
+                candidate,
+                undefined,
+                { sharedCacheRoot: defaultPreflightCacheRoot() },
+            );
         }
     }
     const publication = await client.query(
@@ -2409,7 +2417,12 @@ async function executeCampaign(
             candidateHash(current),
             "Candidate changed before validation",
         );
-        await verifyQualificationCandidate(lotRoot, validatedFingerprints);
+        await verifyQualificationCandidate(
+            lotRoot,
+            validatedFingerprints,
+            undefined,
+            { sharedCacheRoot: defaultPreflightCacheRoot() },
+        );
         if (manifest.mode === "live") {
             assert(adminCode);
             await withQualificationAdministrator(

@@ -1,3 +1,4 @@
+import { beginFixtureInvocation } from "@/__tests__/setup/pi-mission";
 import "@convex/execution/agentCatalog";
 import { internal } from "@convex/_generated/api";
 import type { SourcesPreparation } from "@convex/domain/sourcesContracts";
@@ -14,7 +15,7 @@ afterEach(() => {
 
 test("a completion using another definition's schema receives field feedback before fresh completion", async () => {
     const f = await seedCapturedSources();
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 4,
         taskKey: "wrong-completion-schema",
@@ -55,7 +56,7 @@ test("a completion using another definition's schema receives field feedback bef
             response,
         }),
     ).toEqual(refused);
-    const next = await f.t.mutation(internal.execution.invocations.begin, {
+    const next = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 4,
         taskKey: "fresh-completion-schema",
@@ -90,7 +91,7 @@ test.each([
     800, 1000,
 ])("an oversized need array receives bounded correction without rewriting its response: %s", async (rowCount) => {
     const f = await seedCapturedSources();
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 4,
         taskKey: "excess-need-feedback",
@@ -527,7 +528,7 @@ test("native completion refuses feedback that only fits before its tool wrapper"
     expect(() =>
         renderCompletionToolRefusal("completion_correction_required", feedback),
     ).toThrow("operation_result_capacity");
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 4,
         taskKey: "refusal-wrapper-capacity",

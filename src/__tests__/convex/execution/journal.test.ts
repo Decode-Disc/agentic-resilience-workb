@@ -22,11 +22,17 @@ import {
     TEXT_FRAGMENT_CHARACTERS,
 } from "@convex/resourcePolicy";
 import schema from "@convex/schema";
-import { makeFunctionReference } from "convex/server";
 import { getDocumentSize } from "convex/values";
 import { convexTest } from "convex-test";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedHistoryMission } from "@/__tests__/setup/execution-history";
+import {
+    beginFixtureInvocation,
+    recordFixtureAttempt,
+    retainFixtureOutput,
+    retainFixtureRequest,
+    stageFixtureRequest,
+} from "@/__tests__/setup/pi-mission";
 import {
     readHistoryEvent,
     readRetainedBody,
@@ -196,7 +202,7 @@ test.each([
     "refused",
 ] as const)("fragmented %s history preserves its normalized application observation", async (outcome) => {
     const f = await seedHistoryMission();
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 1,
         taskKey: "fragmented-observation",
@@ -207,7 +213,7 @@ test.each([
         outcome === "returned"
             ? { kind: "operations" as const, requests: [] }
             : { kind: "complete" as const, captureIds: [] };
-    await f.t.mutation(internal.execution.invocations.retainOutput, {
+    await retainFixtureOutput(f.t, {
         invocationId: begun.invocationId,
         expectedGeneration: 1,
         responseJson: JSON.stringify(response),
@@ -255,7 +261,7 @@ test.each([
 
 test("older_event_never_acquires_a_later_reply", async () => {
     const f = await seedHistoryMission();
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 1,
         taskKey: "immutable-parts",
@@ -305,7 +311,7 @@ test("older_event_never_acquires_a_later_reply", async () => {
 
 test("terminal metadata cannot acquire a reply retained after its event", async () => {
     const f = await seedHistoryMission();
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 1,
         taskKey: "terminal-metadata",
@@ -340,7 +346,7 @@ test("terminal metadata cannot acquire a reply retained after its event", async 
 
 test("a recorded invocation part without its immutable payload is an integrity failure", async () => {
     const f = await seedHistoryMission();
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 1,
         taskKey: "missing-recorded-part",
@@ -514,7 +520,7 @@ test("new invocations identify their journal version without expanding continuat
         definitionId: "saved_material_inspection_v1",
         requestKey: "journal-version",
     });
-    const begun = await t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(t, {
         missionId,
         expectedGeneration: 4,
         taskKey: "first",
@@ -568,7 +574,7 @@ async function oneShotFixture(
         operationKey: `${preparation.operationKey}:step:source_preparation:input:${inputHash}:attempt:1`,
         attempt: 1,
     };
-    const receipt = await t.mutation(internal.providerCalls.recordAttempt, {
+    const receipt = await recordFixtureAttempt(t, {
         ...attempt,
         status: "started",
     });
@@ -627,16 +633,19 @@ test.each([
 ])("an unfinished documentary stream requests reconciliation with or without a known cost (%s)", async (reportedCost) => {
     const { t, invocationId, attempt, providerCallId, runId } =
         await oneShotFixture(undefined, "source_documentary_control");
-    await t.mutation(internal.execution.invocations.retainRequest, {
+    await retainFixtureRequest(t, {
         invocationId,
         expectedGeneration: 3,
         requestJson: '{"model":"fixture"}',
     });
-    await t.mutation(internal.providerCalls.observeGeneration, {
-        invocationId,
-        generationId: "gen-controlled-incomplete",
-        httpStatus: 200,
-    });
+    await t.mutation(
+        internal.execution.providerCallReceipts.observeGeneration,
+        {
+            invocationId,
+            generationId: "gen-controlled-incomplete",
+            httpStatus: 200,
+        },
+    );
     await t.run((ctx) =>
         ctx.db.patch(runId, {
             executionGeneration: 4,
@@ -729,16 +738,6 @@ test("an invalid one-shot finalization rolls back its receipt and reply snapshot
     ).toHaveLength(0);
 });
 
-const retainRequest = makeFunctionReference<
-    "mutation",
-    {
-        invocationId: Id<"agentInvocations">;
-        expectedGeneration: number;
-        requestJson: string;
-    },
-    { kind: "ready" | "blocked"; code?: string }
->("execution/invocations:retainRequest");
-
 test("prepared requests persist once with immutable content and a dossier event", async () => {
     const { t, args } = await seedInspectedEvidence();
     const missionId = await t.mutation(internal.execution.missions.start, {
@@ -748,7 +747,7 @@ test("prepared requests persist once with immutable content and a dossier event"
         definitionId: "saved_material_inspection_v1",
         requestKey: "immutable-journal",
     });
-    const begun = await t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(t, {
         missionId,
         expectedGeneration: 4,
         taskKey: "first",
@@ -763,8 +762,8 @@ test("prepared requests persist once with immutable content and a dossier event"
             input: { prompt: "Exact input" },
         }),
     };
-    expect(await t.mutation(retainRequest, input)).toEqual({ kind: "ready" });
-    expect(await t.mutation(retainRequest, input)).toEqual({ kind: "ready" });
+    expect(await retainFixtureRequest(t, input)).toEqual({ kind: "ready" });
+    expect(await retainFixtureRequest(t, input)).toEqual({ kind: "ready" });
     const payloads = await t.run((ctx) =>
         ctx.db.query("agentInvocationPayloads").collect(),
     );
@@ -780,7 +779,7 @@ test("prepared requests persist once with immutable content and a dossier event"
         input: { prompt: "Exact input" },
     });
     await expect(
-        t.mutation(retainRequest, {
+        retainFixtureRequest(t, {
             ...input,
             requestJson: JSON.stringify({
                 version: 1,
@@ -802,17 +801,14 @@ test("prepared requests persist once with immutable content and a dossier event"
 
 test("oversized request snapshots retain an explicit incomplete marker without an excerpt", async () => {
     const { t, invocationId } = await oneShotFixture();
-    const result = await t.mutation(
-        internal.execution.invocations.retainRequest,
-        {
-            invocationId,
-            expectedGeneration: 3,
-            requestJson: JSON.stringify({
-                version: 1,
-                text: "x".repeat(512 * 1024),
-            }),
-        },
-    );
+    const result = await retainFixtureRequest(t, {
+        invocationId,
+        expectedGeneration: 3,
+        requestJson: JSON.stringify({
+            version: 1,
+            text: "x".repeat(512 * 1024),
+        }),
+    });
     expect(result).toEqual({
         kind: "blocked",
         code: "journal_request_capacity",
@@ -944,7 +940,7 @@ test("one-shot settlement links a large result and provider reply without hydrat
 
 test("dispatch authority is checked again after request persistence", async () => {
     const { t, runId, invocationId } = await oneShotFixture();
-    await t.mutation(internal.execution.invocations.retainRequest, {
+    await retainFixtureRequest(t, {
         invocationId,
         expectedGeneration: 3,
         requestJson: '{"version":1,"input":{}}',
@@ -976,7 +972,7 @@ test("dispatch authority is checked again after request persistence", async () =
 
 test("request staging refuses a manifest that would exceed the database array capacity", async () => {
     const { t, missionId } = await seedHistoryMission();
-    const begun = await t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(t, {
         missionId,
         expectedGeneration: 1,
         taskKey: "oversized-request-manifest",
@@ -987,7 +983,7 @@ test("request staging refuses a manifest that would exceed the database array ca
     const content = "x".repeat(TEXT_FRAGMENT_CHARACTERS);
     const hash = sha256Hex(content);
     await expect(
-        t.mutation(internal.execution.invocationLifecycle.stageRequest, {
+        stageFixtureRequest(t, {
             invocationId: begun.invocationId,
             expectedGeneration: 1,
             fragment: {
@@ -1017,7 +1013,7 @@ test("fragmented requests publish only after all exact fragments and refuse conf
         "@convex/execution/retainedText"
     );
     const { t, missionId } = await seedHistoryMission();
-    const begun = await t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(t, {
         missionId,
         expectedGeneration: 1,
         taskKey: "large-request",
@@ -1033,29 +1029,21 @@ test("fragmented requests publish only after all exact fragments and refuse conf
         ...args,
         fragment: { ...manifest, index: 0, content: parts[0] ?? "" },
     };
-    const textId = await t.mutation(
-        internal.execution.invocationLifecycle.stageRequest,
-        first,
-    );
-    expect(
-        await t.mutation(
-            internal.execution.invocationLifecycle.stageRequest,
-            first,
-        ),
-    ).toBe(textId);
+    const textId = await stageFixtureRequest(t, first);
+    expect(await stageFixtureRequest(t, first)).toBe(textId);
     await expect(
-        t.mutation(internal.execution.invocations.retainRequest, {
+        retainFixtureRequest(t, {
             ...args,
             textId,
         }),
     ).rejects.toThrow("retained_text_incomplete");
     for (let index = 1; index < parts.length; index++)
-        await t.mutation(internal.execution.invocationLifecycle.stageRequest, {
+        await stageFixtureRequest(t, {
             ...args,
             fragment: { ...manifest, index, content: parts[index] ?? "" },
         });
     expect(
-        await t.mutation(internal.execution.invocations.retainRequest, {
+        await retainFixtureRequest(t, {
             ...args,
             textId,
         }),
@@ -1093,7 +1081,7 @@ test("fragmented requests publish only after all exact fragments and refuse conf
     } while (offset < totalCharacters);
     expect(JSON.parse(recovered).invocation.value).toEqual(JSON.parse(json));
     await expect(
-        t.mutation(internal.execution.invocationLifecycle.stageRequest, {
+        stageFixtureRequest(t, {
             ...first,
             fragment: { ...first.fragment, content: "Changed" },
         }),
@@ -1105,7 +1093,7 @@ test("a false complete-content hash cannot publish even when individual fragment
         "@convex/execution/retainedText"
     );
     const f = await seedHistoryMission();
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 1,
         taskKey: "false-hash",
@@ -1114,7 +1102,7 @@ test("a false complete-content hash cannot publish even when individual fragment
     assert(begun.kind === "ready");
     const { manifest, parts } = retainedTextParts("{}");
     await expect(
-        f.t.mutation(internal.execution.invocationLifecycle.stageRequest, {
+        stageFixtureRequest(f.t, {
             invocationId: begun.invocationId,
             expectedGeneration: 1,
             fragment: {
@@ -1129,7 +1117,7 @@ test("a false complete-content hash cannot publish even when individual fragment
 
 test("a confirmed native observable reply retains complete large content before adoption", async () => {
     const f = await seedHistoryMission();
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 1,
         taskKey: "large-reply",
@@ -1154,8 +1142,7 @@ test("a confirmed native observable reply retains complete large content before 
             },
         );
     assert(observableReplyTextId);
-    const retain = internal.execution.invocationLifecycle.retainOutput;
-    await f.t.mutation(retain, {
+    await retainFixtureOutput(f.t, {
         ...args,
         responseJson: JSON.stringify({ kind: "operations", requests: [] }),
         observableReplyTextId,
@@ -1194,7 +1181,7 @@ test("a confirmed native observable reply retains complete large content before 
 
 test("recovery retention leaves document capacity for bounded lifecycle results", async () => {
     const f = await seedHistoryMission();
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 1,
         taskKey: "recovery-headroom",
@@ -1216,7 +1203,7 @@ test("recovery retention leaves document capacity for bounded lifecycle results"
         ),
     );
     assert(rawOutputTextId);
-    await f.t.mutation(internal.execution.invocations.retainOutput, {
+    await retainFixtureOutput(f.t, {
         invocationId: begun.invocationId,
         expectedGeneration: 1,
         responseJson: JSON.stringify({ kind: "operations", requests: [] }),
@@ -1247,17 +1234,20 @@ test("recovery retention leaves document capacity for bounded lifecycle results"
 
 test("one-shot provider observations use the admitted preparation hash and reject a changed receipt identity", async () => {
     const f = await oneShotFixture(sha256Hex("domain-logical-input"));
-    await f.t.mutation(internal.execution.invocations.retainRequest, {
+    await retainFixtureRequest(f.t, {
         invocationId: f.invocationId,
         expectedGeneration: 3,
         requestJson: '{"input":{"model":"test"}}',
         effectiveMaxOutputTokens: 1024,
     });
-    await f.t.mutation(internal.providerCalls.observeGeneration, {
-        invocationId: f.invocationId,
-        generationId: "one-shot-generation",
-        httpStatus: 200,
-    });
+    await f.t.mutation(
+        internal.execution.providerCallReceipts.observeGeneration,
+        {
+            invocationId: f.invocationId,
+            generationId: "one-shot-generation",
+            httpStatus: 200,
+        },
+    );
     expect(await f.t.run((ctx) => ctx.db.get(f.providerCallId))).toMatchObject({
         status: "started",
         providerObservation: { generationId: "one-shot-generation" },
@@ -1268,10 +1258,13 @@ test("one-shot provider observations use the admitted preparation hash and rejec
         }),
     );
     await expect(
-        f.t.mutation(internal.providerCalls.observeGeneration, {
-            invocationId: f.invocationId,
-            requestId: "foreign-receipt-observation",
-        }),
+        f.t.mutation(
+            internal.execution.providerCallReceipts.observeGeneration,
+            {
+                invocationId: f.invocationId,
+                requestId: "foreign-receipt-observation",
+            },
+        ),
     ).rejects.toThrow("Invalid provider observation");
     expect(
         (await f.t.run((ctx) => ctx.db.get(f.providerCallId)))

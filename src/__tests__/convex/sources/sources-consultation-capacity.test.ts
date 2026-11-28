@@ -11,6 +11,7 @@ import { SIMULATION_MODEL_ROUTE } from "@convex/integrations/modelRouting";
 import { SOURCES_HANDOFF_READ_CAPACITY } from "@convex/resourcePolicy";
 import { getDocumentSize } from "convex/values";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import { dispatchFixtureOperation } from "@/__tests__/setup/pi-mission";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 
 afterEach(() => {
@@ -224,7 +225,7 @@ test.each([
             input: { kind: "consult_mission_state" },
         },
     );
-    const outcome = await f.t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });

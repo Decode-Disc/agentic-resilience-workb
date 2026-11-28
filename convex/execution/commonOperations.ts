@@ -21,6 +21,21 @@ import {
     operationResultValidator,
 } from "./operationResults";
 
+const executeHistoryRead: Extract<
+    AgentOperationDefinition,
+    { effectKind: "read" }
+>["execute"] = async (ctx, args) => {
+    if (!args.requestId)
+        return {
+            outcome: { kind: "refused", code: "request_unavailable" },
+        };
+    const result = await ctx.runQuery(internal.execution.history.read, {
+        requestId: args.requestId,
+        expectedGeneration: args.expectedGeneration,
+    });
+    return { ...result, outcome: observeOperationOutcome(result.outcome) };
+};
+
 /** Read policies and execution are the same for native callers and generated tools. */
 export const consultMissionStateOperation: Extract<
     AgentOperationDefinition,
@@ -53,21 +68,31 @@ export const consultMissionStateOperation: Extract<
         };
     },
     pin: pinHistoryRead,
-    async execute(ctx, args) {
-        if (!args.requestId)
-            return {
-                outcome: { kind: "refused", code: "request_unavailable" },
-            };
-        const result = await ctx.runQuery(internal.execution.history.read, {
-            requestId: args.requestId,
-            expectedGeneration: args.expectedGeneration,
-        });
-        return { ...result, outcome: observeOperationOutcome(result.outcome) };
-    },
+    execute: executeHistoryRead,
+    executeInTransaction: executeHistoryRead,
     validateOutcome(_request, outcome) {
         return outcome;
     },
 };
+const executeRunStateRead: Extract<
+    AgentOperationDefinition,
+    { effectKind: "read" }
+>["execute"] = async (ctx, args) => {
+    if (!args.runId)
+        return { outcome: { kind: "refused", code: "not_authorized" } };
+    const value = await ctx.runQuery(
+        internal.execution.operations.readRunState,
+        {
+            runId: args.runId,
+            expectedGeneration: args.expectedGeneration,
+            missionId: args.missionId,
+        },
+    );
+    return {
+        outcome: { kind: "success", value },
+    };
+};
+
 export const consultRunStateOperation: Extract<
     AgentOperationDefinition,
     { effectKind: "read" }
@@ -100,21 +125,8 @@ export const consultRunStateOperation: Extract<
               }
             : { kind: "unavailable", code: "not_authorized" };
     },
-    async execute(ctx, args) {
-        if (!args.runId)
-            return { outcome: { kind: "refused", code: "not_authorized" } };
-        const value = await ctx.runQuery(
-            internal.execution.operations.readRunState,
-            {
-                runId: args.runId,
-                expectedGeneration: args.expectedGeneration,
-                missionId: args.missionId,
-            },
-        );
-        return {
-            outcome: { kind: "success", value },
-        };
-    },
+    execute: executeRunStateRead,
+    executeInTransaction: executeRunStateRead,
     validateOutcome(_request, outcome) {
         return outcome;
     },

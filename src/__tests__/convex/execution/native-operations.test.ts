@@ -1,6 +1,7 @@
 import { internal } from "@convex/_generated/api";
 import { afterEach, expect, test, vi } from "vitest";
 import { seedConversation } from "@/__tests__/setup/agent-harness";
+import { dispatchFixtureOperation } from "@/__tests__/setup/pi-mission";
 import {
     seedInspectedEvidence,
     seedSourcePreparation,
@@ -25,7 +26,7 @@ test("native dossier consultation uses the persisted dispatcher without creating
         internal.execution.operations.enqueueNative,
         input,
     );
-    const outcome = await f.t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 3,
     });
@@ -53,7 +54,7 @@ test("native dossier consultation uses the persisted dispatcher without creating
         { ...input, input: { kind: "check_fixture_value", index: 0 } },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId: refusedId,
             expectedGeneration: 3,
         }),
@@ -87,7 +88,7 @@ test("reused operations keep the new caller's causal reference", async () => {
         internal.execution.operations.enqueueNative,
         input,
     );
-    await f.t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 3,
     });
@@ -137,7 +138,7 @@ test("confirmed native results survive an authorized generation resume without a
         cause: "initial",
         input,
     });
-    const initial = await t.action(internal.execution.operations.dispatch, {
+    const initial = await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -156,7 +157,7 @@ test("confirmed native results survive an authorized generation resume without a
         }),
     ).toBe(requestId);
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 5,
         }),
@@ -185,7 +186,7 @@ test("confirmed native results survive an authorized generation resume without a
         outcome: initial,
     });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 4,
         }),
@@ -204,7 +205,7 @@ test("a registered domain operation runs natively through its same policy and re
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 3,
         }),
@@ -251,7 +252,7 @@ test("a native deferred operation expires without requiring an artificial durabl
     await f.t.run((ctx) =>
         ctx.db.patch(requestId, { deadlineAt: Date.now() + 10 }),
     );
-    await f.t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 3,
     });

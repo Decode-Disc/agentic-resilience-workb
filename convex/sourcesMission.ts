@@ -1,3 +1,8 @@
+export {
+    requestSourcesSettlement,
+    sourcesSettlementBlock,
+} from "./domain/sourcesSettlement";
+
 import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import {
@@ -47,12 +52,11 @@ import {
 import {
     authorizedDiscovery,
     captureExaminationValidator,
-    documentaryContributionValidator,
     type DocumentaryControlV2,
+    documentaryContributionValidator,
     documentaryControlV2Validator,
     documentaryNeedValidator,
     documentaryStatusValidator,
-    documentarySubmissionResult,
     documentarySubmissionValue,
     documentaryUseOrder,
     preparedMaterialInspectionValidator,
@@ -61,13 +65,13 @@ import {
     sourcesEnvelopeValidator,
     sourcesOperationValidator,
 } from "@convex/domain/sourcesContracts";
+import { documentarySubmissionResult } from "@convex/domain/sourcesOperationResults";
 import {
     documentaryQuotationMatches,
     materializeDocumentaryEvidence,
 } from "@convex/domain/sourceUsage";
 import {
     isResumableResearchPause,
-    isSourcesSettlementPause,
     supportsResearchControl,
 } from "@convex/domain/transitions";
 import {
@@ -78,7 +82,6 @@ import {
     getAgentDefinition,
     getNativeOperation,
 } from "@convex/execution/agentCatalog";
-import type { AuditActor } from "@convex/execution/approvalContracts";
 import {
     requireDossierAuthority,
     requireMissionObservationAuthority,
@@ -95,11 +98,7 @@ import { recordContextObservation } from "@convex/execution/journal";
 import { missionObjectiveKey } from "@convex/execution/missionData";
 import { operationSuccess } from "@convex/execution/operationResults";
 import { registerOperationWaitEvent } from "@convex/execution/operations";
-import {
-    notifyResearchControlWaits,
-    recordResearchObservation,
-    suspendInterruptedResearch,
-} from "@convex/execution/researchControl";
+import { suspendInterruptedResearch } from "@convex/execution/researchControlCore";
 import {
     completeRetainedText,
     retainedTextRange,
@@ -1630,55 +1629,6 @@ export const finish = internalMutation({
         return null;
     },
 });
-
-export async function sourcesSettlementBlock(
-    ctx: QueryCtx,
-    run: Doc<"researchRuns">,
-): Promise<string | null> {
-    if (!isSourcesSettlementPause(run) || !run.sourcePreparationId)
-        return "stale_execution";
-    const preparation = await ctx.db.get(run.sourcePreparationId);
-    if (
-        preparation?.status !== "started" ||
-        preparation.settlementRequestedAt !== undefined
-    )
-        return "stale_execution";
-    return null;
-}
-
-export async function requestSourcesSettlement(
-    ctx: MutationCtx,
-    { run, actor }: { run: Doc<"researchRuns">; actor: AuditActor },
-): Promise<void> {
-    const block = await sourcesSettlementBlock(ctx, run);
-    if (block) throw executionError(block);
-    if (!run.sourcePreparationId) throw executionError("stale_execution");
-    let eventActor: NonNullable<Doc<"agentExecutionEvents">["actor"]> = {
-        type: "system",
-    };
-    if (actor.type === "visitor") {
-        const visitorId = ctx.db.normalizeId("visitors", actor.visitorId);
-        if (!visitorId) throw executionError("not_authorized");
-        eventActor = { type: "visitor", visitorId };
-    }
-    const mission = await readSourcesMission(ctx, run);
-    await ctx.db.patch(run.sourcePreparationId, {
-        settlementRequestedAt: Date.now(),
-    });
-    if (mission?.status === "blocked") {
-        // Settlement eligibility comes from the recorded decision; preserve the actual stop reason.
-        await ctx.runMutation(internal.execution.handoffs.finishChild, {
-            missionId: mission._id,
-        });
-    }
-    await notifyResearchControlWaits(ctx, run._id);
-    await recordResearchObservation(
-        ctx,
-        run._id,
-        "sources_settlement_requested",
-        eventActor,
-    );
-}
 
 async function activeCaptureQualification(
     ctx: QueryCtx,

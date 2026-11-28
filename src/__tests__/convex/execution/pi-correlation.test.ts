@@ -1,16 +1,20 @@
 import { internal } from "@convex/_generated/api";
 import type { QueryCtx } from "@convex/_generated/server";
-import { operation } from "@convex/execution/piControl";
+import { operation } from "@convex/execution/piControlReads";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { afterEach, expect, test, vi } from "vitest";
-import { seedPiMission } from "@/__tests__/setup/pi-mission";
+import {
+    beginFixtureInvocation,
+    dispatchFixtureOperation,
+    seedPiMission,
+} from "@/__tests__/setup/pi-mission";
 
 const registeredOperation = operation as typeof operation & {
     _handler(
         ctx: QueryCtx,
-        args: FunctionArgs<typeof internal.execution.piControl.operation>,
+        args: FunctionArgs<typeof internal.execution.piControlReads.operation>,
     ): Promise<
-        FunctionReturnType<typeof internal.execution.piControl.operation>
+        FunctionReturnType<typeof internal.execution.piControlReads.operation>
     >;
 };
 
@@ -47,13 +51,13 @@ test.each([
                 },
             );
             expect(
-                await t.action(internal.execution.operations.dispatch, {
+                await dispatchFixtureOperation(t, {
                     requestId,
                     expectedGeneration: 4,
                 }),
             ).toMatchObject({ kind: "success" });
         }
-    const begun = await t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(t, {
         missionId,
         expectedGeneration: 4,
         taskKey: "tool-batch",
@@ -98,7 +102,7 @@ test.each([
         }
     });
     expect(
-        await t.query(internal.execution.piControl.operation, {
+        await t.query(internal.execution.piControlReads.operation, {
             missionId,
             expectedGeneration: 4,
             callId: "missing",

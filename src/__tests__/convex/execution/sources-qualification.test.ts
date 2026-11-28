@@ -15,6 +15,11 @@ import { type FunctionReturnType, makeFunctionReference } from "convex/server";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import {
+    authorizeFixtureDispatch,
+    recordFixtureAttempt,
+    retainFixtureRequest,
+} from "@/__tests__/setup/pi-mission";
+import {
     seedCapturedSources,
     startSourcesOperation,
 } from "@/__tests__/setup/sources-mission";
@@ -57,15 +62,12 @@ test.each([
     ).toMatchObject({
         authority: { resourcePolicy: RESOURCE_POLICY_VERSION, deadlineAt },
     });
-    const started = await f.t.mutation(
-        internal.providerCalls.recordAttempt,
-        input,
-    );
+    const started = await recordFixtureAttempt(f.t, input);
     expect(started.shouldExecute).toBe(true);
     expect(
         await f.t.run((ctx) => ctx.db.get(started.providerCallId)),
     ).toMatchObject({ leaseExpiresAt: deadlineAt + MODEL_SETTLEMENT_GRACE_MS });
-    await f.t.mutation(internal.execution.invocationLifecycle.retainRequest, {
+    await retainFixtureRequest(f.t, {
         ...args,
         requestJson: '{"model":"frozen-fixture"}',
     });
@@ -128,10 +130,7 @@ test.each([
         ),
     ).toEqual(beforeOperations);
     await expect(
-        f.t.mutation(
-            internal.providerCalls.recordAttempt,
-            await f.attempt("after-research-cutoff"),
-        ),
+        recordFixtureAttempt(f.t, await f.attempt("after-research-cutoff")),
     ).rejects.toThrow("paid_work_disabled");
     expect(
         await f.t.run((ctx) =>
@@ -223,7 +222,7 @@ test("new structured preparation reserves its admitted model ceiling before disp
     });
     assert(preparation);
     const inputHash = sha256Hex("structured-reservation");
-    const call = await f.t.mutation(internal.providerCalls.recordAttempt, {
+    const call = await recordFixtureAttempt(f.t, {
         runId: f.runId,
         corpusRevisionId: f.corpusRevisionId,
         preparationId: f.preparationId,
@@ -246,14 +245,14 @@ test("new structured preparation reserves its admitted model ceiling before disp
         internal.execution.invocationLifecycle.beginOneShot,
         { providerCallId: call.providerCallId, inputJson: "{}" },
     );
-    await f.t.mutation(internal.execution.invocationLifecycle.retainRequest, {
+    await retainFixtureRequest(f.t, {
         invocationId,
         expectedGeneration: 4,
         requestJson: '{"model":"z-ai/glm-5.3-flash"}',
         effectiveMaxOutputTokens: 20001,
     });
     await expect(
-        f.t.query(internal.execution.invocationLifecycle.authorizeDispatch, {
+        authorizeFixtureDispatch(f.t, {
             invocationId,
             expectedGeneration: 4,
         }),
@@ -302,7 +301,7 @@ test.each([
     assert(preparation);
     const inputHash = sha256Hex("old-structured-envelope");
     await expect(
-        f.t.mutation(internal.providerCalls.recordAttempt, {
+        recordFixtureAttempt(f.t, {
             runId: f.runId,
             corpusRevisionId: f.corpusRevisionId,
             preparationId: f.preparationId,
@@ -471,21 +470,16 @@ async function fixture() {
 test("the Sources grant admits live reasoning and preparation-bound search, preserving replay", async () => {
     const f = await fixture();
     const input = await f.attempt("reasoning");
-    const first = await f.t.mutation(
-        internal.providerCalls.recordAttempt,
-        input,
-    );
+    const first = await recordFixtureAttempt(f.t, input);
     expect(first.shouldExecute).toBe(true);
-    expect(
-        await f.t.mutation(internal.providerCalls.recordAttempt, input),
-    ).toMatchObject({
+    expect(await recordFixtureAttempt(f.t, input)).toMatchObject({
         providerCallId: first.providerCallId,
         shouldExecute: false,
     });
     const discovery = await f.search("targeted search");
-    expect(
-        await f.t.mutation(internal.providerCalls.recordAttempt, discovery),
-    ).toMatchObject({ shouldExecute: true });
+    expect(await recordFixtureAttempt(f.t, discovery)).toMatchObject({
+        shouldExecute: true,
+    });
     const rows = await f.t.run((ctx) =>
         ctx.db
             .query("providerCalls")
@@ -525,10 +519,7 @@ test("independent qualification pins admit Sources reasoning and native preparat
         }),
     ).resolves.toBeNull();
     expect(
-        await f.t.mutation(
-            internal.providerCalls.recordAttempt,
-            await f.attempt("distinct-sources"),
-        ),
+        await recordFixtureAttempt(f.t, await f.attempt("distinct-sources")),
     ).toMatchObject({ shouldExecute: true });
     await f.t.run(async (ctx) => {
         const run = await ctx.db.get(f.runId);
@@ -559,15 +550,9 @@ test("a reduced Sources model allowance is enforced before another attempt is re
             },
         });
     });
-    await f.t.mutation(
-        internal.providerCalls.recordAttempt,
-        await f.attempt("within-remainder"),
-    );
+    await recordFixtureAttempt(f.t, await f.attempt("within-remainder"));
     await expect(
-        f.t.mutation(
-            internal.providerCalls.recordAttempt,
-            await f.attempt("over-remainder"),
-        ),
+        recordFixtureAttempt(f.t, await f.attempt("over-remainder")),
     ).rejects.toThrow("qualification_budget_exhausted");
     const calls = await f.t.run((ctx) =>
         ctx.db
@@ -581,15 +566,9 @@ test("a reduced Sources model allowance is enforced before another attempt is re
 test("twenty model admissions exhaust one dossier and a sibling's known overcharge stops the lot", async () => {
     const f = await fixture();
     for (let i = 0; i < 20; i++)
-        await f.t.mutation(
-            internal.providerCalls.recordAttempt,
-            await f.attempt(`reasoning-${i}`),
-        );
+        await recordFixtureAttempt(f.t, await f.attempt(`reasoning-${i}`));
     await expect(
-        f.t.mutation(
-            internal.providerCalls.recordAttempt,
-            await f.attempt("twenty-first"),
-        ),
+        recordFixtureAttempt(f.t, await f.attempt("twenty-first")),
     ).rejects.toThrow("qualification_budget_exhausted");
     await f.t.run(async (ctx) => {
         const row = await ctx.db
@@ -600,10 +579,7 @@ test("twenty model admissions exhaust one dossier and a sibling's known overchar
         await ctx.db.patch(row._id, { runId: f.secondId, reportedCost: 0.5 });
     });
     await expect(
-        f.t.mutation(
-            internal.providerCalls.recordAttempt,
-            await f.attempt("sibling-overcharge"),
-        ),
+        recordFixtureAttempt(f.t, await f.attempt("sibling-overcharge")),
     ).rejects.toThrow("qualification_budget_exhausted");
 });
 
@@ -626,8 +602,8 @@ test.each([
             reason: "qualification test",
         });
     if (condition === "unknown") {
-        const admitted = await f.t.mutation(
-            internal.providerCalls.recordAttempt,
+        const admitted = await recordFixtureAttempt(
+            f.t,
             await f.attempt("uncertain"),
         );
         await f.t.run((ctx) =>
@@ -637,9 +613,7 @@ test.each([
             }),
         );
     }
-    await expect(
-        f.t.mutation(internal.providerCalls.recordAttempt, input),
-    ).rejects.toThrow(
+    await expect(recordFixtureAttempt(f.t, input)).rejects.toThrow(
         condition === "unknown"
             ? "qualification_budget_exhausted"
             : "paid_work_disabled",
@@ -653,18 +627,11 @@ test("search and acquisition admissions stop before exceeding each dossier's sha
     const f = await fixture();
     for (let i = 0; i < 2; i++)
         expect(
-            (
-                await f.t.mutation(
-                    internal.providerCalls.recordAttempt,
-                    await f.search(`search-${i}`),
-                )
-            ).shouldExecute,
+            (await recordFixtureAttempt(f.t, await f.search(`search-${i}`)))
+                .shouldExecute,
         ).toBe(true);
     await expect(
-        f.t.mutation(
-            internal.providerCalls.recordAttempt,
-            await f.search("search-over"),
-        ),
+        recordFixtureAttempt(f.t, await f.search("search-over")),
     ).rejects.toThrow("qualification_budget_exhausted");
     const captureAttempt = (i: number) => ({
         runId: f.runId,
@@ -683,16 +650,11 @@ test("search and acquisition admissions stop before exceeding each dossier's sha
     });
     for (let i = 0; i < 6; i++)
         expect(
-            (
-                await f.t.mutation(
-                    internal.providerCalls.recordAttempt,
-                    captureAttempt(i),
-                )
-            ).shouldExecute,
+            (await recordFixtureAttempt(f.t, captureAttempt(i))).shouldExecute,
         ).toBe(true);
-    await expect(
-        f.t.mutation(internal.providerCalls.recordAttempt, captureAttempt(6)),
-    ).rejects.toThrow("qualification_budget_exhausted");
+    await expect(recordFixtureAttempt(f.t, captureAttempt(6))).rejects.toThrow(
+        "qualification_budget_exhausted",
+    );
     expect(
         await f.t.run((ctx) => ctx.db.query("providerCalls").collect()),
     ).toHaveLength(8);
@@ -707,7 +669,7 @@ test("native documentary control rechecks its exact model and revocable context 
     const preparation = await f.t.run((ctx) => ctx.db.get(f.preparationId));
     assert(preparation);
     const inputHash = sha256Hex("native control");
-    const call = await f.t.mutation(internal.providerCalls.recordAttempt, {
+    const call = await recordFixtureAttempt(f.t, {
         runId: f.runId,
         corpusRevisionId: f.corpusRevisionId,
         preparationId: f.preparationId,
@@ -727,21 +689,21 @@ test("native documentary control rechecks its exact model and revocable context 
         internal.execution.invocationLifecycle.beginOneShot,
         { providerCallId: call.providerCallId, inputJson: "{}" },
     );
-    await f.t.mutation(internal.execution.invocationLifecycle.retainRequest, {
+    await retainFixtureRequest(f.t, {
         invocationId,
         expectedGeneration: 4,
         requestJson: '{"model":"z-ai/glm-5.3-flash"}',
         effectiveMaxOutputTokens: 8192,
     });
     await expect(
-        f.t.query(internal.execution.invocationLifecycle.authorizeDispatch, {
+        authorizeFixtureDispatch(f.t, {
             invocationId,
             expectedGeneration: 4,
         }),
     ).resolves.toBeNull();
     await f.t.run((ctx) => ctx.db.patch(f.contextId, { status: "closed" }));
     await expect(
-        f.t.query(internal.execution.invocationLifecycle.authorizeDispatch, {
+        authorizeFixtureDispatch(f.t, {
             invocationId,
             expectedGeneration: 4,
         }),
@@ -922,14 +884,8 @@ test("Sources inspection retains technical receipts in addition to the model all
         ctx.db.patch(f.runId, { reservationKey: "browser:all-receipts" }),
     );
     for (let index = 0; index < 20; index++)
-        await f.t.mutation(
-            internal.providerCalls.recordAttempt,
-            await f.attempt(`model-${index}`),
-        );
-    await f.t.mutation(
-        internal.providerCalls.recordAttempt,
-        await f.search("documentary-search"),
-    );
+        await recordFixtureAttempt(f.t, await f.attempt(`model-${index}`));
+    await recordFixtureAttempt(f.t, await f.search("documentary-search"));
     const result = await f.t.query(
         internal.execution.fixtures.inspectWorkbench,
         { runId: f.runId, fixtureKey: "all-receipts" },

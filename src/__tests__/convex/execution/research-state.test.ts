@@ -13,6 +13,7 @@ import { getDocumentSize, type Value } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
+import { dispatchFixtureOperation } from "@/__tests__/setup/pi-mission";
 import { seedResearchStateScenario } from "@/__tests__/setup/research-state";
 import { readRetainedBody } from "@/__tests__/setup/retained-history";
 
@@ -305,7 +306,7 @@ async function dispatchState(
             input: { kind: "consult_run_state" },
         },
     );
-    const outcome = await f.t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -348,7 +349,7 @@ test("completed version-one read replays its original receipt", async () => {
     const before = await f.t.run((ctx) => ctx.db.get(requestId));
     const business = await businessSnapshot(f);
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -386,7 +387,7 @@ test("pending version-one read reports operation version conflict", async () => 
     });
     const before = await businessSnapshot(f);
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -500,13 +501,10 @@ test("registered consultation preserves full labels or explicitly reports result
                 input: { kind: "consult_run_state" },
             },
         );
-        const outcome = await f.t.action(
-            internal.execution.operations.dispatch,
-            {
-                requestId,
-                expectedGeneration: 1,
-            },
-        );
+        const outcome = await dispatchFixtureOperation(f.t, {
+            requestId,
+            expectedGeneration: 1,
+        });
         if (length === 100) {
             assert(outcome.kind === "success");
             expect(
@@ -519,7 +517,7 @@ test("registered consultation preserves full labels or explicitly reports result
                 code: "operation_result_capacity",
             });
             expect(
-                await f.t.action(internal.execution.operations.dispatch, {
+                await dispatchFixtureOperation(f.t, {
                     requestId,
                     expectedGeneration: 1,
                 }),
@@ -1791,7 +1789,7 @@ test("completed version-two consultation replays byte-identically, pending versi
     const before = await f.t.run((ctx) => ctx.db.get(requestId));
     const business = await businessSnapshot(f);
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -1801,7 +1799,7 @@ test("completed version-two consultation replays byte-identically, pending versi
 
     // Revoked authority still rejects replay of completed v2 receipt
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 99,
         }),
@@ -1839,7 +1837,7 @@ test("completed version-two consultation replays byte-identically, pending versi
         });
     });
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId: pendingV2Id,
             expectedGeneration: 1,
         }),

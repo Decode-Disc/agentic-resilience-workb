@@ -1,4 +1,5 @@
 import { internal } from "@convex/_generated/api";
+import { currentVersions } from "@convex/execution/agentAuthorityCatalog";
 import {
     assertOperationContract,
     registeredAgentDefinitions,
@@ -12,6 +13,7 @@ import { commonOperationSuccessValidator } from "@convex/execution/operationCont
 import { validate } from "convex-helpers/validators";
 import { afterEach, expect, expectTypeOf, test, vi } from "vitest";
 import { seedHistoryMission } from "@/__tests__/setup/execution-history";
+import { dispatchFixtureOperation } from "@/__tests__/setup/pi-mission";
 
 afterEach(() => {
     vi.restoreAllMocks();
@@ -67,6 +69,11 @@ test("scheduled effects require one valid server-owned action target", () => {
         { ...scheduled, scheduledAction: {} },
         { ...scheduled, execute: commonOperations.consult_run_state.execute },
         {
+            ...scheduled,
+            executeInTransaction: commonOperations.consult_run_state.execute,
+        },
+        { ...commonOperations.consult_run_state, executeInTransaction: true },
+        {
             ...commonOperations.consult_run_state,
             scheduledAction: scheduled?.scheduledAction,
         },
@@ -83,9 +90,11 @@ test("scheduled effects require one valid server-owned action target", () => {
 test("read_cannot_wait_or_receive_mutation_capabilities", async () => {
     const operation = commonOperations.consult_run_state;
     type Read = typeof operation;
-    expectTypeOf<Parameters<Read["execute"]>[0]>().not.toHaveProperty(
-        "runMutation",
-    );
+    type LocalRead = NonNullable<Read["executeInTransaction"]>;
+    expectTypeOf<Parameters<LocalRead>[0]>().toEqualTypeOf<
+        Parameters<Read["execute"]>[0]
+    >();
+    expectTypeOf<Parameters<LocalRead>[0]>().not.toHaveProperty("runMutation");
     expectTypeOf<
         Extract<
             Awaited<ReturnType<Read["execute"]>>["outcome"],
@@ -118,7 +127,7 @@ test("read_cannot_wait_or_receive_mutation_capabilities", async () => {
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -139,4 +148,22 @@ test("common_success_does_not_depend_on_inspection_metadata", () => {
             captureId: "made-up",
         }),
     ).toBe(false);
+});
+
+test("calibration rejects an authority catalogue with a divergent current version", () => {
+    const current = currentVersions.workbench_v1;
+    Reflect.set(currentVersions, "workbench_v1", current + 1);
+    try {
+        expect(() => registeredAgentDefinitions()).toThrow(
+            "definition_version_conflict",
+        );
+    } finally {
+        Reflect.set(currentVersions, "workbench_v1", current);
+    }
+    expect(registeredAgentDefinitions()).toContainEqual(
+        expect.objectContaining({
+            id: "workbench_v1",
+            version: current,
+        }),
+    );
 });

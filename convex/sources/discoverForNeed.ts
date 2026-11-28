@@ -5,7 +5,7 @@ import { internal } from "@convex/_generated/api";
 import type { ActionCtx } from "@convex/_generated/server";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import { preparationFailureCode } from "@convex/domain/sourcePreparationAuthority";
-import { discoveryResult } from "@convex/domain/sourcesContracts";
+import { discoveryResult } from "@convex/domain/sourcesOperationResults";
 import { executionFailureCode } from "@convex/execution/errors";
 import type { operationOutcomeValidator } from "@convex/execution/executionProtocol";
 import { operationSuccess } from "@convex/execution/operationResults";

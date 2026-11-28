@@ -3,6 +3,7 @@ import { completeSources } from "@convex/domain/sources";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { scopedFixtureControl } from "@/__tests__/setup/model-stream";
+import { beginFixtureInvocation } from "@/__tests__/setup/pi-mission";
 import {
     dispatchSourcesOperation,
     seedCapturedSources,
@@ -20,7 +21,7 @@ afterEach(() => {
 test("a fresh contextual read advances Sources once and repeats only increment the diagnostic", async () => {
     const f = await seedCapturedSources();
     for (let turn = 0; turn < 4; turn++) {
-        const begun = await f.t.mutation(internal.execution.invocations.begin, {
+        const begun = await beginFixtureInvocation(f.t, {
             missionId: f.missionId,
             expectedGeneration: 4,
             taskKey: `read-${turn}`,

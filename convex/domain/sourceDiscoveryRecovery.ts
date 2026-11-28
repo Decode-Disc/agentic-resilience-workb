@@ -1,18 +1,18 @@
 import type { DataModel, Doc, Id } from "@convex/_generated/dataModel";
 import type { GenericDatabaseReader } from "convex/server";
 import { v } from "convex/values";
+import { sha256Hex } from "./hashing";
 import type { ResearchPlanQuery } from "./researchPlan";
 import { buildResearchPlan, type CoveragePreset } from "./researchPlan";
-import { sha256Hex } from "./sourcePassages";
+import { sourceCoverageRoleValidator } from "./sourceCoverageRole";
 import { sourcePreparationError } from "./sourcePreparationAuthority";
 import {
     FAMILY_BY_ROLE,
-    sourceCoverageRoleValidator,
-    sourceFamilyValidator,
     SOURCE_FAMILIES,
     type SourceCoverageRole,
     type SourceFamily,
     type SourceSelectionCompany,
+    sourceFamilyValidator,
 } from "./sourceSelectionPolicy";
 
 export const coverageRoleValidator = sourceCoverageRoleValidator;

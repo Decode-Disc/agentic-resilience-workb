@@ -2,6 +2,7 @@ import { internal } from "@convex/_generated/api";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { modelOperationOutcome } from "@convex/execution/agentDefinition";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import { beginFixtureInvocation } from "@/__tests__/setup/pi-mission";
 import {
     dispatchSourcesOperation,
     recordDocumentaryRead,
@@ -247,7 +248,7 @@ test("Sources normalization refusal preserves qualification_observation_unavaila
             },
         });
     });
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 4,
         taskKey: "sources-normalization-refusal",

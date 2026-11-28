@@ -3,9 +3,15 @@ import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import type { publicReadResultValidator } from "@convex/domain/workbenchContracts";
 import { MAX_EXA_TEXT_CHARACTERS } from "@convex/resourcePolicy";
 import { requestPinnedPublicSource } from "@convex/sourceActions";
+import { getFunctionName } from "convex/server";
 import type { Infer } from "convex/values";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import rateLimiterTest from "@/__tests__/convex/integrations/rate-limiter-test-register.js";
+import {
+    claimFixturePiLease,
+    dispatchFixtureOperation,
+    recordFixtureAttempt,
+} from "@/__tests__/setup/pi-mission";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 
@@ -158,7 +164,7 @@ async function enqueueLookup(
 type Lookup = Awaited<ReturnType<typeof enqueueLookup>>;
 
 function dispatchLookup(f: Lookup) {
-    return f.t.action(internal.execution.operations.dispatch, {
+    return dispatchFixtureOperation(f.t, {
         requestId: f.requestId,
         expectedGeneration: 1,
     });
@@ -198,7 +204,7 @@ async function adoptLookup(f: Lookup) {
             },
         },
     );
-    return f.t.action(internal.execution.operations.dispatch, {
+    return dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -366,7 +372,7 @@ test("private supplied link retains a known non-dispatch receipt", async () => {
     const { requestId } = f;
     const beforeRequests = vi.mocked(requestPinnedPublicSource).mock.calls
         .length;
-    const result = await f.t.action(internal.execution.operations.dispatch, {
+    const result = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -400,7 +406,7 @@ test("a provider HTTP refusal retains the known response and typed error", async
         vi.fn(async () => new Response(null, { status: 429 })),
     );
     const f = await enqueueLookup("licensing requirements");
-    const outcome = await f.t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(f.t, {
         requestId: f.requestId,
         expectedGeneration: 1,
     });
@@ -488,7 +494,7 @@ test("public discovery returns dated leads without reading and deduplicates fact
             messageId: f.messageId,
         },
     });
-    const second = await f.t.action(internal.execution.operations.dispatch, {
+    const second = await dispatchFixtureOperation(f.t, {
         requestId: secondId,
         expectedGeneration: 1,
     });
@@ -648,7 +654,7 @@ test("selected publication opens only the chosen retained discovery destination"
             messageId: f.messageId,
         },
     });
-    const read = await f.t.action(internal.execution.operations.dispatch, {
+    const read = await dispatchFixtureOperation(f.t, {
         requestId: readId,
         expectedGeneration: 1,
     });
@@ -732,10 +738,10 @@ test("selected publication continues the retained representation to its decisive
                 },
             },
         );
-        const outcome = await f.t.action(
-            internal.execution.operations.dispatch,
-            { requestId: readId, expectedGeneration: 1 },
-        );
+        const outcome = await dispatchFixtureOperation(f.t, {
+            requestId: readId,
+            expectedGeneration: 1,
+        });
         assert(outcome.kind === "success", JSON.stringify(outcome));
         const page = JSON.parse(outcome.valueJson);
         expect(page.document).toMatchObject({
@@ -748,7 +754,7 @@ test("selected publication continues the retained representation to its decisive
         content += page.reference.excerpt;
         expect(page.range.end).toBe(content.length);
         expect(
-            await f.t.action(internal.execution.operations.dispatch, {
+            await dispatchFixtureOperation(f.t, {
                 requestId: readId,
                 expectedGeneration: 1,
             }),
@@ -873,7 +879,7 @@ test("selected publication refuses invalid locators and retains prior readings a
         );
         return {
             requestId,
-            outcome: await f.t.action(internal.execution.operations.dispatch, {
+            outcome: await dispatchFixtureOperation(f.t, {
                 requestId,
                 expectedGeneration: 1,
             }),
@@ -900,7 +906,7 @@ test("selected publication refuses invalid locators and retains prior readings a
         (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
     ).toEqual(progress);
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId: first.requestId,
             expectedGeneration: 1,
         }),
@@ -960,7 +966,7 @@ test("selected publication settles a late acquisition but cannot adopt it after 
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -1022,7 +1028,7 @@ test("selected publication ledger refuses a different destination before reservi
         { requestId, expectedGeneration: 1 },
     );
     await expect(
-        f.t.mutation(internal.providerCalls.recordAttempt, {
+        recordFixtureAttempt(f.t, {
             missionId: authority.missionId,
             runId: authority.runId,
             workflowVersion: authority.workflowVersion,
@@ -1091,10 +1097,10 @@ test("selected publication and supplied publication share passage progress acros
             },
         );
         readIds.push(requestId);
-        const result = await f.t.action(
-            internal.execution.operations.dispatch,
-            { requestId, expectedGeneration: 1 },
-        );
+        const result = await dispatchFixtureOperation(f.t, {
+            requestId,
+            expectedGeneration: 1,
+        });
         assert(result.kind === "success", JSON.stringify(result));
         expect(JSON.parse(result.valueJson)).toMatchObject({
             readId: requestId,
@@ -1153,7 +1159,7 @@ test("selected publication continues past a blank first extent and attributes a 
         cause: "blank-extent",
         input: { kind: "read_public_context", messageId: f.messageId, target },
     });
-    const first = await f.t.action(internal.execution.operations.dispatch, {
+    const first = await dispatchFixtureOperation(f.t, {
         requestId: firstId,
         expectedGeneration: 1,
     });
@@ -1176,7 +1182,7 @@ test("selected publication continues past a blank first extent and attributes a 
             continuation: firstId,
         },
     });
-    const second = await f.t.action(internal.execution.operations.dispatch, {
+    const second = await dispatchFixtureOperation(f.t, {
         requestId: secondId,
         expectedGeneration: 1,
     });
@@ -1202,7 +1208,7 @@ test("selected publication continues past a blank first extent and attributes a 
             continuation: secondId,
         },
     });
-    const third = await f.t.action(internal.execution.operations.dispatch, {
+    const third = await dispatchFixtureOperation(f.t, {
         requestId: thirdId,
         expectedGeneration: 1,
     });
@@ -1272,7 +1278,7 @@ test.each([
         cause: "retained-read",
         input: { kind: "read_public_context", messageId: f.messageId, target },
     });
-    const first = await f.t.action(internal.execution.operations.dispatch, {
+    const first = await dispatchFixtureOperation(f.t, {
         requestId: firstId,
         expectedGeneration: 1,
     });
@@ -1318,7 +1324,7 @@ test.each([
         },
     });
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId: nextId,
             expectedGeneration: 1,
         }),
@@ -1371,7 +1377,7 @@ test("selected publication reports acquisition truncation separately from the re
             target: { kind: "candidate", searchId: f.requestId, index: 0 },
         },
     });
-    const result = await f.t.action(internal.execution.operations.dispatch, {
+    const result = await dispatchFixtureOperation(f.t, {
         requestId: readId,
         expectedGeneration: 1,
     });
@@ -1457,7 +1463,7 @@ test.each([
             },
         },
     );
-    const result = await f.t.action(internal.execution.operations.dispatch, {
+    const result = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -1483,7 +1489,7 @@ test.each([
         (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
     ).toHaveLength(1);
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -1547,7 +1553,7 @@ test("selected publication reuses the known SEC filing date without fetching sub
             },
         },
     );
-    const result = await f.t.action(internal.execution.operations.dispatch, {
+    const result = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -1616,7 +1622,7 @@ test("selected publication exhausts the reading grant without losing an earlier 
         );
         results.push({
             requestId,
-            outcome: await f.t.action(internal.execution.operations.dispatch, {
+            outcome: await dispatchFixtureOperation(f.t, {
                 requestId,
                 expectedGeneration: 1,
             }),
@@ -1629,7 +1635,7 @@ test("selected publication exhausts the reading grant without losing an earlier 
     });
     assert(results[0]);
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId: results[0].requestId,
             expectedGeneration: 1,
         }),
@@ -1692,7 +1698,7 @@ test("selected publication settles an in-flight response after cancellation with
             },
         },
     );
-    const result = await f.t.action(internal.execution.operations.dispatch, {
+    const result = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -1769,7 +1775,7 @@ test.each([
         await held;
         return [{ address: "93.184.216.34", family: 4 }];
     });
-    const dispatch = f.t.action(internal.execution.operations.dispatch, {
+    const dispatch = dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -1862,7 +1868,7 @@ test("conditional questions share one retained passage in the actual mission con
             target: { kind: "candidate", searchId: f.requestId, index: 0 },
         },
     });
-    const reading = await f.t.action(internal.execution.operations.dispatch, {
+    const reading = await dispatchFixtureOperation(f.t, {
         requestId: readId,
         expectedGeneration: 1,
     });
@@ -1895,7 +1901,7 @@ test("conditional questions share one retained passage in the actual mission con
         },
     });
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId: editId,
             expectedGeneration: 1,
         }),
@@ -2156,7 +2162,7 @@ test.each([
             },
         },
     );
-    const result = await f.t.action(internal.execution.operations.dispatch, {
+    const result = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -2258,10 +2264,10 @@ test("a dateline split across public read pages remains dated without reacquisit
                 },
             },
         );
-        const outcome = await f.t.action(
-            internal.execution.operations.dispatch,
-            { requestId: readId, expectedGeneration: 1 },
-        );
+        const outcome = await dispatchFixtureOperation(f.t, {
+            requestId: readId,
+            expectedGeneration: 1,
+        });
         assert(outcome.kind === "success", JSON.stringify(outcome));
         last = JSON.parse(outcome.valueJson);
         assert(last?.reference);
@@ -2338,7 +2344,7 @@ test.each([
             continuation: f.requestId,
         },
     });
-    const second = await f.t.action(internal.execution.operations.dispatch, {
+    const second = await dispatchFixtureOperation(f.t, {
         requestId: readId,
         expectedGeneration: 1,
     });
@@ -2351,4 +2357,75 @@ test.each([
         ),
     ).toEqual(expect.arrayContaining(["2025-04-09", "2025-04-10"]));
     expect(reading.eventAt).toBeUndefined();
+});
+
+test("an expired writer cannot send public discovery after claiming the operation", async () => {
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    const fetchResult = vi.fn(async () =>
+        Response.json({ results: [], costDollars: { total: 0 } }),
+    );
+    vi.stubGlobal("fetch", fetchResult);
+    const { t, missionId, requestId } = await enqueueLookup(
+        "recent announcement",
+        1,
+        "search_public_context",
+    );
+    const piLease = await claimFixturePiLease(t, missionId, 1);
+    const outcome = await t.action((ctx) =>
+        ctx.runAction(internal.execution.operations.dispatch, {
+            requestId,
+            expectedGeneration: 1,
+            piLease,
+        }),
+    );
+    // The real dispatch proves this setup has the provider authority the expiry case needs.
+    expect(outcome.kind).toBe("success");
+
+    const next = await enqueueLookup(
+        "another announcement",
+        1,
+        "search_public_context",
+    );
+    const lease = await claimFixturePiLease(next.t, next.missionId, 1);
+    fetchResult.mockClear();
+    const stalled = await next.t.action(async (ctx) => {
+        const { _handler: execute } = (
+            await import("@convex/execution/operations")
+        ).dispatch as typeof import("@convex/execution/operations").dispatch & {
+            _handler: (
+                ctx: import("@convex/_generated/server").ActionCtx,
+                args: {
+                    requestId: typeof next.requestId;
+                    expectedGeneration: number;
+                    piLease: typeof lease;
+                },
+            ) => Promise<unknown>;
+        };
+        return execute(
+            {
+                ...ctx,
+                runMutation: async (reference, ...args) => {
+                    const result = await ctx.runMutation(reference, ...args);
+                    if (
+                        getFunctionName(reference) ===
+                        getFunctionName(internal.execution.operations.claim)
+                    )
+                        await next.t.run((tx) =>
+                            tx.db.patch(lease.sessionId, {
+                                leaseUntil: Date.now(),
+                            }),
+                        );
+                    return result;
+                },
+            },
+            {
+                requestId: next.requestId,
+                expectedGeneration: 1,
+                piLease: lease,
+            },
+        );
+    });
+    expect(stalled).toMatchObject({ code: "pi_writer_fenced" });
+    expect(fetchResult).not.toHaveBeenCalled();
+    expect(await providerReceipts(next)).toEqual([]);
 });

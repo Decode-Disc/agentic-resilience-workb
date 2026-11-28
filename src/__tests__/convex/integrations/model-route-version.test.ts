@@ -15,15 +15,21 @@ test("new Workbench requests leave provider selection to OpenRouter", () => {
 });
 
 afterEach(() => {
-    vi.doUnmock("@earendil-works/pi-ai/utils/version");
+    vi.doUnmock("@convex/integrations/piInputProfileCatalog.json");
     vi.resetModules();
 });
 
-test("changing the installed serializer version invalidates a prepared model fingerprint", async () => {
+test("changing the recorded serializer version invalidates a prepared model fingerprint", async () => {
     const original = await import("@convex/integrations/modelRouting");
     const before = original.modelConfigurationKey({ contextWindow: 131072 });
-    vi.doMock("@earendil-works/pi-ai/utils/version", () => ({
-        PI_AI_VERSION: "changed-sdk-version",
+    const metadata = (
+        await import("@convex/integrations/piInputProfileCatalog.json")
+    ).default;
+    vi.doMock("@convex/integrations/piInputProfileCatalog.json", () => ({
+        default: {
+            ...metadata,
+            versions: { ...metadata.versions, "pi-ai": "changed-sdk-version" },
+        },
     }));
     vi.resetModules();
     const changed = await import("@convex/integrations/modelRouting");

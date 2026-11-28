@@ -10,6 +10,10 @@ import type { Infer } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import {
+    beginFixtureInvocation,
+    dispatchFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
+import {
     nativePiFixtureRoute,
     nativeTextReply,
     nativeToolReply,
@@ -101,7 +105,7 @@ test("framing refusal identifies a scope anchor mismatch and permits a corrected
             },
         },
     });
-    const refused = await t.action(internal.execution.operations.dispatch, {
+    const refused = await dispatchFixtureOperation(t, {
         requestId: rejectedId,
         expectedGeneration: 1,
     });
@@ -131,7 +135,7 @@ test("framing refusal identifies a scope anchor mismatch and permits a corrected
         },
     });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -143,7 +147,7 @@ test("framing refusal identifies a scope anchor mismatch and permits a corrected
     expect((await t.run((ctx) => ctx.db.get(rejectedId)))?.outcome).toEqual(
         refused,
     );
-    await t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -175,7 +179,7 @@ test("framing refusal identifies an invented analyst event without changing the 
         },
     });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -241,7 +245,7 @@ test.each([
         },
     });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -259,7 +263,7 @@ test.each([
     const { t, client, runId, missionId } = await activeWorkbench(
         "Rewrite the switching question.",
     );
-    const invocation = await t.mutation(internal.execution.invocations.begin, {
+    const invocation = await beginFixtureInvocation(t, {
         missionId,
         expectedGeneration: 1,
         taskKey: "invalid-edit",
@@ -280,12 +284,12 @@ test.each([
     const requestId = finish.requestIds[0];
     assert(requestId);
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 1,
         }),
     ).toMatchObject({ kind: "refused", code: "invalid_operation_input" });
-    const final = await t.mutation(internal.execution.invocations.begin, {
+    const final = await beginFixtureInvocation(t, {
         missionId,
         expectedGeneration: 1,
         taskKey: "final-promise",
@@ -326,7 +330,7 @@ async function respond(
     >["response"],
 ) {
     const { t, missionId } = fixture;
-    const invocation = await t.mutation(internal.execution.invocations.begin, {
+    const invocation = await beginFixtureInvocation(t, {
         missionId,
         expectedGeneration: 1,
         taskKey,
@@ -405,7 +409,7 @@ test.each([
     const correctedId = corrected.requestIds[0];
     assert(correctedId);
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId: correctedId,
             expectedGeneration: 1,
         }),
@@ -503,7 +507,7 @@ test.each([
         },
     });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -555,7 +559,7 @@ test("a preservation command expires with its response and does not block a late
         },
     });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -656,7 +660,7 @@ test("a control message cannot cause a framing write while a separate active edi
             },
         );
         expect(
-            await t.action(internal.execution.operations.dispatch, {
+            await dispatchFixtureOperation(t, {
                 requestId,
                 expectedGeneration: 1,
             }),
@@ -728,7 +732,7 @@ test.each([
         },
     });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -777,7 +781,7 @@ test("retained v4 refuses a forced structured open proposal rather than saving u
         },
     });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -887,7 +891,7 @@ test.each([
         },
     });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -1071,7 +1075,7 @@ test.each([
             },
         );
         expect(
-            await f.t.action(internal.execution.operations.dispatch, {
+            await dispatchFixtureOperation(f.t, {
                 requestId,
                 expectedGeneration: 1,
             }),
@@ -1113,7 +1117,7 @@ test.each([
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId: minimalId,
             expectedGeneration: 1,
         }),
@@ -1143,7 +1147,7 @@ test.each([
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId: insufficientId,
             expectedGeneration: 1,
         }),
@@ -1234,7 +1238,7 @@ test("initial open framing refuses missing activityExcerpt instead of replacing 
             },
         );
         expect(
-            await t.action(internal.execution.operations.dispatch, {
+            await dispatchFixtureOperation(t, {
                 requestId: refusedId,
                 expectedGeneration: 1,
             }),
@@ -1268,7 +1272,7 @@ test("initial open framing refuses missing activityExcerpt instead of replacing 
         },
     });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId: acceptedId,
             expectedGeneration: 1,
         }),
@@ -1283,16 +1287,13 @@ test("initial open framing refuses missing activityExcerpt instead of replacing 
 test("discriminated union operation inputs report the failing nested field rather than the union kind", async () => {
     const f = await activeWorkbench("Investigate estimate review.", 6);
     const definition = getAgentDefinition("workbench_v1", 6);
-    const framingBegun = await f.t.mutation(
-        internal.execution.invocations.begin,
-        {
-            missionId: f.missionId,
-            expectedGeneration: 1,
-            taskKey: "union-feedback-framing",
-            provenance: "simulation",
-            nativeInput: await workbenchAdmissionInput(f.t, f.missionId),
-        },
-    );
+    const framingBegun = await beginFixtureInvocation(f.t, {
+        missionId: f.missionId,
+        expectedGeneration: 1,
+        taskKey: "union-feedback-framing",
+        provenance: "simulation",
+        nativeInput: await workbenchAdmissionInput(f.t, f.missionId),
+    });
     assert(framingBegun.kind === "ready");
     const framingFinish = await f.t.mutation(
         internal.execution.invocations.finish,
@@ -1369,10 +1370,10 @@ test("discriminated union operation inputs report the failing nested field rathe
     );
     const [badReadId, missingSearchId, bogusKindId] = framingFinish.requestIds;
     assert(badReadId && missingSearchId && bogusKindId);
-    const badReadOutcome = await f.t.action(
-        internal.execution.operations.dispatch,
-        { requestId: badReadId, expectedGeneration: 1 },
-    );
+    const badReadOutcome = await dispatchFixtureOperation(f.t, {
+        requestId: badReadId,
+        expectedGeneration: 1,
+    });
     expect(badReadOutcome).toMatchObject({
         kind: "refused",
         code: "invalid_operation_input",
@@ -1390,7 +1391,7 @@ test("discriminated union operation inputs report the failing nested field rathe
         },
     });
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId: missingSearchId,
             expectedGeneration: 1,
         }),
@@ -1403,7 +1404,7 @@ test("discriminated union operation inputs report the failing nested field rathe
         },
     });
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId: bogusKindId,
             expectedGeneration: 1,
         }),
@@ -1415,16 +1416,13 @@ test("discriminated union operation inputs report the failing nested field rathe
             expected: "candidate | supplied",
         },
     });
-    const finishTurnBegun = await f.t.mutation(
-        internal.execution.invocations.begin,
-        {
-            missionId: f.missionId,
-            expectedGeneration: 1,
-            taskKey: "union-feedback-finish-turn",
-            provenance: "simulation",
-            nativeInput: await workbenchAdmissionInput(f.t, f.missionId),
-        },
-    );
+    const finishTurnBegun = await beginFixtureInvocation(f.t, {
+        missionId: f.missionId,
+        expectedGeneration: 1,
+        taskKey: "union-feedback-finish-turn",
+        provenance: "simulation",
+        nativeInput: await workbenchAdmissionInput(f.t, f.missionId),
+    });
     assert(finishTurnBegun.kind === "ready");
     await f.t.mutation(internal.execution.invocations.finish, {
         invocationId: finishTurnBegun.invocationId,
@@ -1456,19 +1454,13 @@ test("discriminated union operation inputs report the failing nested field rathe
         },
     );
     assert(launchedTurn);
-    const launchedBegun = await f.t.mutation(
-        internal.execution.invocations.begin,
-        {
-            missionId: launchedTurn.missionId,
-            expectedGeneration: 1,
-            taskKey: "union-feedback-source-request",
-            provenance: "simulation",
-            nativeInput: await workbenchAdmissionInput(
-                f.t,
-                launchedTurn.missionId,
-            ),
-        },
-    );
+    const launchedBegun = await beginFixtureInvocation(f.t, {
+        missionId: launchedTurn.missionId,
+        expectedGeneration: 1,
+        taskKey: "union-feedback-source-request",
+        provenance: "simulation",
+        nativeInput: await workbenchAdmissionInput(f.t, launchedTurn.missionId),
+    });
     assert(launchedBegun.kind === "ready");
     const launchedFinish = await f.t.mutation(
         internal.execution.invocations.finish,
@@ -1493,7 +1485,7 @@ test("discriminated union operation inputs report the failing nested field rathe
     const missingNeedId = launchedFinish.requestIds[0];
     assert(missingNeedId);
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId: missingNeedId,
             expectedGeneration: 1,
         }),

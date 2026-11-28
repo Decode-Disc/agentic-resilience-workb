@@ -2,6 +2,11 @@ import { api, internal } from "@convex/_generated/api";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { modelOperationOutcome } from "@convex/execution/agentDefinition";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import {
+    beginFixtureInvocation,
+    claimFixturePiLease,
+    dispatchFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 import { workbenchAdmissionInput } from "@/__tests__/setup/workbench";
 
@@ -17,7 +22,7 @@ const unfinished =
 async function preparedConversation(control = false) {
     vi.useFakeTimers();
     const f = await seedCapturedSources();
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 4,
         taskKey: "prepared-material",
@@ -105,7 +110,7 @@ async function preparedConversation(control = false) {
 
 test("Workbench can read a full prepared need and unfinished reasons beyond the context preview", async () => {
     const f = await preparedConversation();
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.turn.missionId,
         expectedGeneration: 1,
         taskKey: "consult-prepared-need",
@@ -132,7 +137,7 @@ test("Workbench can read a full prepared need and unfinished reasons beyond the 
     });
     const requestId = finished.requestIds[0];
     assert(requestId);
-    const outcome = await f.t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -292,7 +297,7 @@ test.each([
             },
         },
     );
-    const result = await f.t.action(internal.execution.operations.dispatch, {
+    const result = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -315,12 +320,12 @@ test("response review receives the exact prepared limitation already consulted b
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 1,
         }),
     ).toMatchObject({ kind: "success" });
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.turn.missionId,
         expectedGeneration: 1,
         taskKey: "explain-prepared-limit",
@@ -447,6 +452,7 @@ test.each([
         return;
     }
     const requestId = await enqueue();
+    const piLease = await claimFixturePiLease(f.t, f.turn.missionId, 1);
     if (variant === "revoked-owner")
         await f.t.run((ctx) =>
             ctx.db.patch(f.visitorId, { status: "revoked" }),
@@ -471,7 +477,8 @@ test.each([
                 },
             });
         });
-    const outcome = await f.t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(f.t, {
+        piLease,
         requestId,
         expectedGeneration: 1,
     });
@@ -490,7 +497,7 @@ test("normalization refusals preserve domain refusal codes and diagnostics for u
     const f = await preparedConversation();
     const client = f.t.withIdentity({ subject: f.userId });
     const definition = getAgentDefinition("workbench_v1");
-    const needBegun = await f.t.mutation(internal.execution.invocations.begin, {
+    const needBegun = await beginFixtureInvocation(f.t, {
         missionId: f.turn.missionId,
         expectedGeneration: 1,
         taskKey: "normalization-refusal-need",
@@ -517,13 +524,10 @@ test("normalization refusals preserve domain refusal codes and diagnostics for u
     );
     const needReqId = needFinished.requestIds[0];
     assert(needReqId);
-    const needOutcome = await f.t.action(
-        internal.execution.operations.dispatch,
-        {
-            requestId: needReqId,
-            expectedGeneration: 1,
-        },
-    );
+    const needOutcome = await dispatchFixtureOperation(f.t, {
+        requestId: needReqId,
+        expectedGeneration: 1,
+    });
     expect(needOutcome).toMatchObject({
         kind: "refused",
         code: "documentary_need_not_observed",
@@ -535,7 +539,7 @@ test("normalization refusals preserve domain refusal codes and diagnostics for u
     expect(
         JSON.parse(modelOperationOutcome(definition, needOutcome)).diagnostic,
     ).toContain("needReferences");
-    const endBegun = await f.t.mutation(internal.execution.invocations.begin, {
+    const endBegun = await beginFixtureInvocation(f.t, {
         missionId: f.turn.missionId,
         expectedGeneration: 1,
         taskKey: "normalization-end-first-turn",
@@ -604,7 +608,7 @@ test("normalization refusals preserve domain refusal codes and diagnostics for u
         },
     );
     assert(activeTurn);
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: activeTurn.missionId,
         expectedGeneration: 1,
         taskKey: "normalization-refusal-message",
@@ -643,13 +647,10 @@ test("normalization refusals preserve domain refusal codes and diagnostics for u
     });
     const messageReqId = finished.requestIds[0];
     assert(messageReqId);
-    const messageOutcome = await f.t.action(
-        internal.execution.operations.dispatch,
-        {
-            requestId: messageReqId,
-            expectedGeneration: 1,
-        },
-    );
+    const messageOutcome = await dispatchFixtureOperation(f.t, {
+        requestId: messageReqId,
+        expectedGeneration: 1,
+    });
     expect(messageOutcome).toMatchObject({
         kind: "refused",
         code: "instruction_not_observed",

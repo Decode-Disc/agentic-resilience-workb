@@ -4,6 +4,10 @@ import { agentToolSchemas } from "@convex/execution/agentDefinition";
 import { validate } from "convex-helpers/validators";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import {
+    beginFixtureInvocation,
+    dispatchFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
+import {
     seedWorkbench,
     workbenchAdmissionInput,
 } from "@/__tests__/setup/workbench";
@@ -247,16 +251,13 @@ test.each([
     const missionId = active.missionId;
     const activeMessageId = message._id;
     async function edit(content: typeof proposal, taskKey: string) {
-        const invocation = await t.mutation(
-            internal.execution.invocations.begin,
-            {
-                missionId: missionId,
-                expectedGeneration: 1,
-                taskKey,
-                provenance: "simulation",
-                nativeInput: await workbenchAdmissionInput(t, missionId),
-            },
-        );
+        const invocation = await beginFixtureInvocation(t, {
+            missionId: missionId,
+            expectedGeneration: 1,
+            taskKey,
+            provenance: "simulation",
+            nativeInput: await workbenchAdmissionInput(t, missionId),
+        });
         assert(invocation.kind === "ready");
         const result = await t.mutation(internal.execution.invocations.finish, {
             invocationId: invocation.invocationId,
@@ -280,7 +281,7 @@ test.each([
         expect(result.requestIds).toHaveLength(1);
         const requestId = result.requestIds[0];
         assert(requestId);
-        return t.action(internal.execution.operations.dispatch, {
+        return dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 1,
         });

@@ -492,7 +492,7 @@ test("native required-input profiles match the installed SDK and escaped JSON wi
         writeFileSync(path, `${JSON.stringify(expected, null, 4)}\n`);
         writeFileSync(
             "convex/integrations/piInputProfileCatalog.json",
-            `${JSON.stringify({ profileCatalog: expected.profileCatalog, generatedBy: expected.generatedBy }, null, 4)}\n`,
+            `${JSON.stringify({ profileCatalog: expected.profileCatalog, generatedBy: expected.generatedBy, versions: expected.versions }, null, 4)}\n`,
         );
         Object.assign(inputProfilesArtifact, expected);
     }
@@ -503,8 +503,12 @@ test("native required-input profiles match the installed SDK and escaped JSON wi
                 "convex/integrations/piInputProfileCatalog.json",
                 "utf8",
             ),
-        ).profileCatalog,
-    ).toBe(expected.profileCatalog);
+        ),
+    ).toEqual({
+        profileCatalog: expected.profileCatalog,
+        generatedBy: expected.generatedBy,
+        versions: expected.versions,
+    });
     const { agentInputByteLength } = await import(
         "@convex/integrations/modelInput"
     );

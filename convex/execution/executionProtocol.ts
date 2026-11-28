@@ -1,5 +1,9 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
-import type { ActionCtx, QueryCtx } from "@convex/_generated/server";
+import type {
+    ActionCtx,
+    MutationCtx,
+    QueryCtx,
+} from "@convex/_generated/server";
 import type { ModelRoute } from "@convex/integrations/modelRouting";
 import type { FunctionReference } from "convex/server";
 import {
@@ -100,12 +104,20 @@ export type OperationExecutionResult = {
     historyRead?: import("./operationContracts").HistoryReadReceipt;
 };
 export type OperationExecuteArgs = {
+    piLease?: import("./piSession").PiDispatchLease;
     missionId?: Id<"agentMissions">;
     runId?: Id<"researchRuns">;
     requestId?: Id<"agentOperationRequests">;
     expectedGeneration: number;
     input: Infer<typeof requestInputValidator>;
 };
+type ReadExecutor = (
+    ctx: Pick<ActionCtx, "runQuery">,
+    args: OperationExecuteArgs,
+) => Promise<{
+    outcome: Exclude<OperationObservationOutcome, { kind: "waiting" }>;
+    historyRead?: import("./operationContracts").HistoryReadReceipt;
+}>;
 type EffectExecutor = (
     ctx: ActionCtx,
     args: OperationExecuteArgs,
@@ -117,25 +129,22 @@ export type AgentOperationDefinition = AgentOperationContract &
               effectKind: "read";
               childMission?: never;
               scheduledAction?: never;
-              execute(
-                  ctx: Pick<ActionCtx, "runQuery">,
-                  args: OperationExecuteArgs,
-              ): Promise<{
-                  outcome: Exclude<
-                      OperationObservationOutcome,
-                      { kind: "waiting" }
-                  >;
-                  historyRead?: import("./operationContracts").HistoryReadReceipt;
-              }>;
+              execute: ReadExecutor;
+              executeInTransaction?: ReadExecutor;
           }
         | {
               effectKind: "atomic_effect";
               childMission?: never;
               scheduledAction?: never;
+              executeInTransaction?: (
+                  ctx: MutationCtx,
+                  args: OperationExecuteArgs,
+              ) => Promise<OperationExecutionResult>;
               execute: EffectExecutor;
           }
         | ({
               effectKind: "durable_effect";
+              executeInTransaction?: never;
               /** Only advisory observations may finish unavailable after an uncertain call; no effect is retried. */
               unknownOutcome?: { kind: "unavailable"; code: string };
               childMission?: never;
@@ -165,6 +174,7 @@ export type AgentOperationDefinition = AgentOperationContract &
           ))
         | {
               effectKind: "delegation";
+              executeInTransaction?: never;
               scheduledAction?: never;
               execute: EffectExecutor;
               childMission(request: Doc<"agentOperationRequests">): {
@@ -356,10 +366,7 @@ export const invocationResponseValidator = v.union(
     v.object({ kind: v.literal("blocked"), code: v.string() }),
 );
 
-/** Compaction retains native output separately from its application disposition. */
-export function successfulAuxiliaryResponse() {
-    return { kind: "operations" as const, requests: [] };
-}
+export { successfulAuxiliaryResponse } from "./auxiliaryResponse";
 
 export const invocationReplyValidator = v.object({
     response: invocationResponseValidator,

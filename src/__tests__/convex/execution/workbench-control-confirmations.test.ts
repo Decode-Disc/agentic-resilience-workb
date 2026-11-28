@@ -1,5 +1,9 @@
 import { api, internal } from "@convex/_generated/api";
 import { afterEach, assert, beforeEach, expect, test, vi } from "vitest";
+import {
+    beginFixtureInvocation,
+    dispatchFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
 import { readConversationPageWithBodies } from "@/__tests__/setup/retained-messages";
 import { activateSourcesMission } from "@/__tests__/setup/sources-mission";
 import {
@@ -74,7 +78,7 @@ test.each([
             coverageRole,
         },
     });
-    const outcome = await t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -101,7 +105,7 @@ test.each([
         executionStatus: "paused",
         executionGeneration: 2,
     });
-    const invocation = await t.mutation(internal.execution.invocations.begin, {
+    const invocation = await beginFixtureInvocation(t, {
         missionId: active.missionId,
         expectedGeneration: 1,
         taskKey: "documentary-confirmation",
@@ -166,7 +170,7 @@ test("a control and an independent question retain the explanation and the actua
         },
     );
     assert(active);
-    const invocation = await t.mutation(internal.execution.invocations.begin, {
+    const invocation = await beginFixtureInvocation(t, {
         missionId: active.missionId,
         expectedGeneration: 1,
         taskKey: "mixed-publication",
@@ -299,7 +303,7 @@ test.each([
     });
     expect(
         (
-            await t.action(internal.execution.operations.dispatch, {
+            await dispatchFixtureOperation(t, {
                 requestId,
                 expectedGeneration: 1,
             })
@@ -321,7 +325,7 @@ test.each([
         );
         expect(
             (
-                await t.action(internal.execution.operations.dispatch, {
+                await dispatchFixtureOperation(t, {
                     requestId: resumeId,
                     expectedGeneration: 1,
                 })
@@ -332,7 +336,7 @@ test.each([
         await t.mutation(internal.execution.researchControl.checkpoint, {
             runId,
         });
-    const invocation = await t.mutation(internal.execution.invocations.begin, {
+    const invocation = await beginFixtureInvocation(t, {
         nativeInput: await workbenchAdmissionInput(t, active.missionId),
         missionId: active.missionId,
         expectedGeneration: 1,

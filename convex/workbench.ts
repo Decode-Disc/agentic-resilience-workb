@@ -43,7 +43,7 @@ import {
     readApprovalFacts,
     readSourcesDecisionRequestId,
     recordCommandApproval,
-} from "@convex/execution/approvals";
+} from "@convex/execution/approvalCore";
 import {
     requireDossierAuthority,
     requireMissionAuthority,
@@ -55,31 +55,33 @@ import {
     readConversationWording,
 } from "@convex/execution/conversationBodies";
 import {
-    analystConversationTurn,
-    conversationTurnForAnalyst,
     isApprovalReceiptMessage,
     recordControlExchange,
+    requireInstructionVersion,
+} from "@convex/execution/conversationCore";
+import {
+    analystConversationTurn,
+    conversationTurnForAnalyst,
     requireConversationHistoryRun,
     requireConversationRequestKey,
-    requireInstructionVersion,
 } from "@convex/execution/conversations";
 import { executionError, executionFailureCode } from "@convex/execution/errors";
 import { missionStatusValidator } from "@convex/execution/executionProtocol";
 import { nextNativeInputSequence } from "@convex/execution/journal";
+import {
+    modelPrepared,
+    requireReasoningEffort,
+    resolveAgentModel,
+} from "@convex/execution/modelConfigurationCore";
 import { retainOperationEffect } from "@convex/execution/operations";
-import { sessionForMission } from "@convex/execution/piStore";
+import { sessionForMission } from "@convex/execution/piSession";
 import {
     pauseResearch,
     readResearchControlReadiness,
     researchControlConfirmation,
     resumeResearch,
-} from "@convex/execution/researchControl";
+} from "@convex/execution/researchControlCore";
 import { reasoningChoices } from "@convex/integrations/modelRouting";
-import {
-    modelPrepared,
-    requireReasoningEffort,
-    resolveAgentModel,
-} from "@convex/modelConfiguration";
 import { reasoningEffort } from "@convex/modelConfigurationSchema";
 import { sourceDossierCandidateLimit } from "@convex/resourceLimits";
 import {

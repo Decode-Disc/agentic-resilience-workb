@@ -3,6 +3,7 @@ import schema from "@convex/schema";
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
+import { dispatchFixtureOperation } from "@/__tests__/setup/pi-mission";
 import { createAdmittedPreflight } from "@/__tests__/setup/research-launch";
 import { activateSourcesMission } from "@/__tests__/setup/sources-mission";
 
@@ -258,7 +259,7 @@ test("Workbench retains an analyst's documentary request separately from its eve
             interpretedNeed: "Independent assessment of switching constraints",
         },
     });
-    const outcome = await t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });

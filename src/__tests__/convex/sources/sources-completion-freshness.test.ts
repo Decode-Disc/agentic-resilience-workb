@@ -1,3 +1,4 @@
+import { beginFixtureInvocation } from "@/__tests__/setup/pi-mission";
 import { startSourcesOperation } from "@/__tests__/setup/sources-mission";
 import "@convex/execution/agentCatalog";
 import { internal } from "@convex/_generated/api";
@@ -225,15 +226,12 @@ test.each([
         expectedGeneration: 4,
         outcome: { kind: "unavailable", code: "missing_configuration" },
     });
-    const invocation = await f.t.mutation(
-        internal.execution.invocations.begin,
-        {
-            missionId: f.missionId,
-            expectedGeneration: 4,
-            taskKey: "known-work-accounting",
-            provenance: "simulation",
-        },
-    );
+    const invocation = await beginFixtureInvocation(f.t, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        taskKey: "known-work-accounting",
+        provenance: "simulation",
+    });
     assert(invocation.kind === "ready");
     expect(JSON.parse(invocation.inputJson).activeWork.work).toMatchObject([
         { requestId },

@@ -1,16 +1,19 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
-import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
+import {
+    runMatchesWorkspace,
+    workspaceForVisitor,
+} from "@convex/domain/browserFixtureAccess";
+import { sha256Hex, stableStringify } from "@convex/domain/hashing";
 import {
     isResumableResearchPause,
     isSourcesSettlementPause,
 } from "@convex/domain/transitions";
 import { RESOURCE_POLICY_VERSION } from "@convex/resourcePolicy";
-import { runMatchesWorkspace, workspaceForVisitor } from "@convex/runWorkspace";
 import { validate } from "convex-helpers/validators";
-import { getAgentDefinition } from "./agentCatalog";
+import { getAgentAuthority } from "./agentAuthorityCatalog";
 import { executionError } from "./errors";
-import { retainExecutionEventPayload } from "./journal";
+import { retainExecutionEventPayload } from "./journalPayloads";
 import { missionScope, missionState } from "./missionData";
 
 export { executionError, executionFailureCode } from "./errors";
@@ -149,7 +152,7 @@ async function requireMissionAccess(
 ) {
     const mission = await ctx.db.get(missionId);
     if (!mission) throw executionError("mission_unavailable");
-    const definition = getAgentDefinition(
+    const definition = getAgentAuthority(
         mission.definitionId,
         mission.definitionVersion,
     );

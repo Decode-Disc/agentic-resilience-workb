@@ -1,6 +1,11 @@
 import { api, internal } from "@convex/_generated/api";
 import { afterEach, expect, test, vi } from "vitest";
 import { seedConversation } from "@/__tests__/setup/agent-harness";
+import {
+    beginFixtureInvocation,
+    claimFixtureOperation,
+    dispatchFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
 
 afterEach(() => {
     vi.unstubAllEnvs();
@@ -40,7 +45,7 @@ test.each([
     true,
 ])("native reuse keeps its own actor, instruction and continuation without repeating an agent effect (Steer=%s)", async (steer) => {
     const f = await mission();
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 1,
         taskKey: "original-agent-use",
@@ -63,7 +68,7 @@ test.each([
     });
     const requestId = returned.requestIds[0];
     if (!requestId) throw new Error("Expected tool request");
-    await f.t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -126,12 +131,12 @@ test.each([
         interpretedNeed: "Explain the confirmed result for this request",
     });
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 1,
         }),
     ).toEqual({ kind: "success", valueJson: '{"value":14}' });
-    const continued = await f.t.mutation(internal.execution.invocations.begin, {
+    const continued = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 1,
         taskKey: "current-use-context",
@@ -176,7 +181,7 @@ test("agent reuse of native work does not inherit the original caller's instruct
             interpretedNeed: "Initial system interpretation",
         },
     );
-    await f.t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -184,7 +189,7 @@ test("agent reuse of native work does not inherit the original caller's instruct
         internal.domain.conversationValidation.completeDeferred,
         { requestId, expectedGeneration: 1 },
     );
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 1,
         taskKey: "agent-reuses-native",
@@ -210,7 +215,7 @@ test("agent reuse of native work does not inherit the original caller's instruct
         invocationId: begun.invocationId,
         expectedGeneration: 1,
     });
-    const next = await f.t.mutation(internal.execution.invocations.begin, {
+    const next = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 1,
         taskKey: "after-agent-reuse",
@@ -251,7 +256,7 @@ test("agent reuse of native work does not inherit the original caller's instruct
 
 test("a fresh instruction can admit known undispatched work once while retaining the earlier refusal", async () => {
     const f = await mission();
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 1,
         taskKey: "before-rejected-dispatch",
@@ -289,7 +294,7 @@ test("a fresh instruction can admit known undispatched work once while retaining
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -306,7 +311,7 @@ test("a fresh instruction can admit known undispatched work once while retaining
         await f.t.mutation(internal.execution.operations.enqueue, current),
     ).toBe(requestId);
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -319,7 +324,7 @@ test("a fresh instruction can admit known undispatched work once while retaining
         await f.t.mutation(internal.execution.operations.enqueue, current),
     ).toBe(requestId);
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -361,13 +366,13 @@ test("deferred operations retain their outcome before continuation and duplicate
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 1,
         }),
     ).toMatchObject({ kind: "waiting" });
     expect(
-        await f.t.mutation(internal.execution.invocations.begin, {
+        await beginFixtureInvocation(f.t, {
             missionId: f.missionId,
             expectedGeneration: 1,
             taskKey: "too-early",
@@ -391,7 +396,7 @@ test("deferred operations retain their outcome before continuation and duplicate
             completed,
         ),
     ).toEqual(completed.outcome);
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 1,
         taskKey: "returned",
@@ -440,7 +445,7 @@ test("a business request starts a bounded Pi child and resumes with a result ref
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -472,7 +477,7 @@ test("a business request starts a bounded Pi child and resumes with a result ref
         input: { kind: "request_fixture_validation", values: [9] },
     });
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId: next,
             expectedGeneration: 1,
         }),
@@ -508,7 +513,7 @@ test("an explicit research pause retains an engaged operation while the conversa
             input: { kind: "check_fixture_value", index: 0 },
         },
     );
-    await f.t.mutation(internal.execution.operations.claim, {
+    await claimFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 3,
     });
@@ -540,7 +545,7 @@ test("an explicit research pause retains an engaged operation while the conversa
         state: { checkedIndices: [] },
     });
     expect(
-        await f.t.mutation(internal.execution.invocations.begin, {
+        await beginFixtureInvocation(f.t, {
             missionId: f.missionId,
             expectedGeneration: 1,
             taskKey: "conversation-during-pause",
@@ -574,7 +579,7 @@ test.each([
         simulation: true,
     });
     if (early)
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 1,
         });
@@ -586,7 +591,6 @@ test.each([
             )
                 break;
             await vi.advanceTimersByTimeAsync(10);
-            await f.t.finishInProgressScheduledFunctions();
         }
     }
     expect(await f.t.run((ctx) => ctx.db.get(requestId))).toMatchObject({
@@ -596,10 +600,15 @@ test.each([
         internal.domain.conversationValidation.completeDeferred,
         { requestId, expectedGeneration: 1 },
     );
-    await f.t.finishAllScheduledFunctions(
-        () => vi.advanceTimersByTime(10),
-        500,
-    );
+    for (let i = 0; i < 100; i++) {
+        if (
+            (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.status ===
+            "completed"
+        )
+            break;
+        await vi.advanceTimersByTimeAsync(10);
+    }
+    await f.t.finishInProgressScheduledFunctions();
     expect(await f.t.run((ctx) => ctx.db.get(f.missionId))).toMatchObject({
         status: "completed",
     });
@@ -623,7 +632,7 @@ test("an unanswered operation expires explicitly and a late observation cannot r
             input: { kind: "wait_fixture_result", value: 7 },
         },
     );
-    await f.t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -690,7 +699,7 @@ test("explicit resume reclaims the research slot and adopts retained work withou
             input: { kind: "check_fixture_value", index: 0 },
         },
     );
-    await f.t.mutation(internal.execution.operations.claim, {
+    await claimFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 3,
     });
@@ -761,7 +770,7 @@ test("invalid delegated scope is a retained refusal with no child or renewed all
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -801,7 +810,7 @@ test("delegation cannot take over an unfinished mission assigned to another busi
             input: { kind: "request_fixture_validation", values: [3, 7] },
         },
     );
-    const outcome = await f.t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -820,7 +829,7 @@ test("delegation cannot take over an unfinished mission assigned to another busi
 
 test("continuation includes native results and original instructions even after a model tool batch", async () => {
     const f = await mission();
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 1,
         taskKey: "agent-batch",
@@ -843,7 +852,7 @@ test("continuation includes native results and original instructions even after 
     });
     const agentRequestId = returned.requestIds[0];
     if (!agentRequestId) throw new Error("Expected tool request");
-    await f.t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(f.t, {
         requestId: agentRequestId,
         expectedGeneration: 1,
     });
@@ -858,7 +867,7 @@ test("continuation includes native results and original instructions even after 
             input: { kind: "wait_fixture_result", value: 7 },
         },
     );
-    await f.t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -870,7 +879,7 @@ test("continuation includes native results and original instructions even after 
         invocationId: begun.invocationId,
         expectedGeneration: 1,
     });
-    const continued = await f.t.mutation(internal.execution.invocations.begin, {
+    const continued = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 1,
         taskKey: "after-native-return",

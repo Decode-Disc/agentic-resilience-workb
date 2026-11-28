@@ -24,8 +24,10 @@ type NativeInput = FunctionReturnType<
 type ControlInput = FunctionReturnType<
     typeof internal.execution.piStore.pendingControlInputs
 >["entries"][number];
-/** False defers later records until an earlier analyst input has a native entry. */
-type Delivery = { sequence: number; deliver(): Promise<boolean> };
+/** A deferred steering input must enter the transcript before later records can be delivered. */
+type DeliveryStatus = "done" | "queued" | "deferred";
+type Delivery = { sequence: number; deliver(): Promise<DeliveryStatus> };
+type DeliveryResult = { hadQueued: boolean };
 
 /** Merges admitted messages and confirmed observations under the existing durable writer lease. */
 export function createNativeInputDelivery(
@@ -33,7 +35,7 @@ export function createNativeInputDelivery(
     args: { missionId: Id<"agentMissions">; expectedGeneration: number },
     storage: PiConvexStorage,
 ) {
-    let syncingInputs: Promise<void> | undefined;
+    let syncingInputs: Promise<DeliveryResult> | undefined;
     let nativeInputs: NativeInput[] = [];
     const lease = () => {
         if (!storage.lease) throw executionError("pi_writer_fenced");
@@ -155,14 +157,14 @@ export function createNativeInputDelivery(
             context,
         );
         const result = await submission.status(context);
-        if (result.status === "queued") return true;
+        if (result.status === "queued") return "queued" as const;
         if (result.status !== "done")
             throw executionError("native_control_unavailable");
         await ctx.runMutation(internal.execution.piStore.recordControlInputs, {
             ...lease(),
             messageIds: [exchange.messageId],
         });
-        return true;
+        return "done" as const;
     }
     async function synchronizeControls(root: Conversation, context: Context) {
         const snapshot = await ctx.runMutation(
@@ -204,7 +206,7 @@ export function createNativeInputDelivery(
             context,
         );
         const result = await submission.status(context);
-        if (result.status === "queued") return true;
+        if (result.status === "queued") return "queued" as const;
         if (result.status !== "done")
             throw executionError("native_observation_unavailable");
         const retained = await storage.submissionByRequest(
@@ -227,7 +229,7 @@ export function createNativeInputDelivery(
             internal.execution.piStore.recordObservationInput,
             { ...lease(), sequence: data.sequence, entryId: retained.entry },
         );
-        return true;
+        return "done" as const;
     }
     async function* observations(
         root: Conversation,
@@ -310,8 +312,10 @@ export function createNativeInputDelivery(
             internal.execution.piStore.inputSnapshot,
             lease(),
         );
+        let hadQueued = false;
         for await (const observation of observations(root, context, snapshot))
-            await observation.deliver();
+            if ((await observation.deliver()) === "queued") hadQueued = true;
+        return { hadQueued };
     }
     async function synchronize(root: Conversation, context: Context) {
         if (syncingInputs) return syncingInputs;
@@ -349,9 +353,10 @@ export function createNativeInputDelivery(
                         },
                         context,
                     );
-                    return (
-                        (await submission.status(context)).status !== "queued"
-                    );
+                    return (await submission.status(context)).status ===
+                        "queued"
+                        ? "deferred"
+                        : "done";
                 },
             }));
             for (const exchange of await controls(
@@ -363,6 +368,7 @@ export function createNativeInputDelivery(
                 });
             deliveries.sort((a, b) => a.sequence - b.sequence);
             let index = 0;
+            let hadQueued = false;
             for await (const observation of observations(
                 root,
                 context,
@@ -371,18 +377,24 @@ export function createNativeInputDelivery(
                 let next = deliveries[index];
                 while (next && next.sequence < observation.sequence) {
                     context.abortSignal?.throwIfAborted();
-                    if ((await next.deliver()) === false) return;
+                    const status = await next.deliver();
+                    if (status === "deferred") return { hadQueued: true };
+                    if (status === "queued") hadQueued = true;
                     next = deliveries[++index];
                 }
-                await observation.deliver();
+                if ((await observation.deliver()) === "queued")
+                    hadQueued = true;
             }
             for (const delivery of deliveries.slice(index)) {
                 context.abortSignal?.throwIfAborted();
-                if ((await delivery.deliver()) === false) return;
+                const status = await delivery.deliver();
+                if (status === "deferred") return { hadQueued: true };
+                if (status === "queued") hadQueued = true;
             }
+            return { hadQueued };
         })();
         try {
-            await syncingInputs;
+            return await syncingInputs;
         } finally {
             syncingInputs = undefined;
         }

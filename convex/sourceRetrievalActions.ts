@@ -1,10 +1,8 @@
 "use node";
 
 import { createHash } from "node:crypto";
-import {
-    documentaryRange,
-    referencedContextResult,
-} from "@convex/domain/savedMaterialOperations";
+import { referencedContextResult } from "@convex/domain/savedMaterialOperationResults";
+import { documentaryRange } from "@convex/domain/savedMaterialOperations";
 import {
     completeCharacterBoundary,
     extractPassagesFromNormalizedText,

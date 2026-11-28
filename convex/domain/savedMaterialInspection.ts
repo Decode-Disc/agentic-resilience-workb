@@ -1,6 +1,8 @@
 import { internal } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
+import { savedMaterialWireContract } from "@convex/domain/savedMaterialOperationResults";
+import { getAgentAuthority } from "@convex/execution/agentAuthorityCatalog";
 import type {
     AgentDefinition,
     AgentProgressMission,
@@ -27,7 +29,6 @@ import {
     savedMaterialResultValidator,
     savedMaterialScopeValidator,
     savedMaterialStateValidator,
-    savedMaterialWireContract,
     supportsScopedDocumentaryExamination,
 } from "./savedMaterialOperations";
 import { savedMaterialSimulation } from "./savedMaterialSimulation";
@@ -55,9 +56,10 @@ export const savedMaterialInspectionDefinition: AgentDefinition & {
     stateValidator: savedMaterialStateValidator,
     resultValidator: savedMaterialResultValidator,
     completionValidator: savedMaterialCompletionValidator,
-    async requireAuthority(ctx, mission, run) {
-        await requireSavedMaterialScope(ctx, mission, run);
-    },
+    requireAuthority: getAgentAuthority(
+        "saved_material_inspection_v1",
+        SAVED_MATERIAL_DEFINITION_VERSION,
+    ).requireAuthority,
     simulate: savedMaterialSimulation,
     operations: savedMaterialOperations,
     modelOperation(name, operation) {

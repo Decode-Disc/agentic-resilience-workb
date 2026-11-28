@@ -2,7 +2,7 @@ import { internal } from "@convex/_generated/api";
 import { internalMutation } from "@convex/_generated/server";
 import { stableStringify } from "@convex/domain/sourcePassages";
 import { readPreparationLimits } from "@convex/domain/sourcePreparationAuthority";
-import { pinMissionModel } from "@convex/modelConfiguration";
+import { pinMissionModel } from "@convex/execution/modelConfigurationCore";
 import { taskMethodDefinitionVersion } from "@convex/qualificationAgentMethods";
 import {
     EXECUTION_WINDOW_MS,

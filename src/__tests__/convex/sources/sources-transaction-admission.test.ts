@@ -3,6 +3,7 @@ import { extractObservedDestinations } from "@convex/integrations/evidenceNormal
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { scopedFixtureControl } from "@/__tests__/setup/model-stream";
+import { beginFixtureInvocation } from "@/__tests__/setup/pi-mission";
 import {
     dispatchSourcesOperation,
     prepareSourcesResult,
@@ -172,15 +173,12 @@ test("admission stops before control I/O while every previously admitted qualifi
     const preparation = await f.t.run((ctx) => ctx.db.get(f.preparationId));
     assert(preparation?.sourcesMission);
     expect(preparation.sourcesMission.qualifications).toHaveLength(admitted);
-    const invocation = await f.t.mutation(
-        internal.execution.invocations.begin,
-        {
-            missionId: f.missionId,
-            expectedGeneration: 4,
-            taskKey: "complete-admitted-material",
-            provenance: "simulation",
-        },
-    );
+    const invocation = await beginFixtureInvocation(f.t, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        taskKey: "complete-admitted-material",
+        provenance: "simulation",
+    });
     assert(invocation.kind === "ready");
     const preparedResult = await prepareSourcesResult(
         f.t,

@@ -7,15 +7,12 @@ import {
     readPreparationBudget,
     sourcePreparationError,
 } from "@convex/domain/sourcePreparationAuthority";
-import {
-    type CampaignLimits,
-    emptyCampaignLimits,
-} from "@convex/qualificationCampaignPolicy";
-
+import type { CampaignLimits } from "@convex/qualificationCampaignPolicy";
 import {
     MODEL_MAX_INPUT_PRICE_PER_MILLION,
     MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
 } from "@convex/resourcePolicy";
+import { emptyCampaignLimits } from "./qualificationLimits";
 
 /** Charges maximum approved prices against the applicable full-context reservation. */
 export function qualificationModelReservationUsd(capacity: {

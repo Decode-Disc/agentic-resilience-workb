@@ -1,12 +1,22 @@
+export {
+    readCampaignResearchDeadline,
+    readWorkbenchQualification,
+    readWorkbenchQualificationDeadline,
+    SOURCES_QUALIFICATION_ENVELOPE,
+} from "./qualificationAccess";
+
+import { runMatchesWorkspace } from "@convex/domain/browserFixtureAccess";
+
+export { runMatchesWorkspace } from "@convex/domain/browserFixtureAccess";
+
 import {
     MAX_QUALIFICATION_CONTEXT_DURATION_MS,
     PERSISTENCE_PAGE_SIZE,
-    SOURCES_QUALIFICATION_RESEARCH_WINDOW_MS,
 } from "@convex/resourcePolicy";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Doc, Id } from "./_generated/dataModel";
+import type { Id } from "./_generated/dataModel";
 import {
     internalMutation,
     internalQuery,
@@ -15,9 +25,7 @@ import {
 import {
     isLoopbackDeployment,
     isReservedAnalystSlot,
-    localBrowserFixturesEnabled,
     requireBrowserTestOwner,
-    requireBrowserTestRunOwner,
     workspaceForVisitor,
 } from "./domain/browserFixtureAccess";
 
@@ -34,18 +42,7 @@ export {
 } from "./domain/browserFixtureAccess";
 
 import { cancelRunExecution } from "./domain/runCancellation";
-import { requireCampaignLot } from "./qualificationCampaigns";
-import { RESOURCE_POLICY_VERSION } from "./resourcePolicy";
 
-/** Fixed limits of the explicitly authorized local two-dossier Sources qualification. */
-export const SOURCES_QUALIFICATION_ENVELOPE = {
-    version: 1 as const,
-    maxNeeds: 4,
-    initialSearches: 2,
-    complementSearches: 1,
-    acquisitions: 6,
-    controls: 8,
-};
 type AccessDenied = (code: "not_authenticated" | "not_authorized") => Error;
 
 export async function readWorkspace(ctx: QueryCtx, denied?: AccessDenied) {
@@ -73,125 +70,6 @@ export async function requireWorkspaceRun(
     if (!runMatchesWorkspace(run, workspace))
         throw denied?.("not_authorized") ?? new Error("Unauthorized");
     return { run, visitor, workspace };
-}
-
-/** Namespace membership is shared by projections and authorization, never inferred in React. */
-export function runMatchesWorkspace(
-    run: Doc<"researchRuns">,
-    workspace: Awaited<ReturnType<typeof workspaceForVisitor>>,
-) {
-    const purpose = run.purpose;
-    return (
-        purpose === workspace.purpose &&
-        (purpose !== "browser_test" ||
-            (!!workspace.contextId &&
-                run.browserTestContextId === workspace.contextId))
-    );
-}
-
-async function readQualificationScope(ctx: QueryCtx, run: Doc<"researchRuns">) {
-    if (run.purpose !== "browser_test" || !run.browserTestContextId)
-        return null;
-    const context = await ctx.db.get(run.browserTestContextId);
-    const grant = context?.paidQualification;
-    if (
-        !context ||
-        !grant ||
-        context.ownerVisitorId !== run.ownerVisitorId ||
-        !(grant.scenarios
-            ? grant.scenarios.some((s) => s.runId === run._id)
-            : grant.sourcesLot
-              ? grant.sourcesLot.includes(run._id)
-              : grant.runId === run._id)
-    )
-        return null;
-    const lot = context.campaignLotId
-        ? await ctx.db.get(context.campaignLotId)
-        : null;
-    const campaign = lot ? await ctx.db.get(lot.campaignId) : null;
-    const durationMs =
-        campaign && campaign.manifest.version !== 1
-            ? campaign.manifest.researchDurationMs
-            : undefined;
-    const researchDeadlineAt =
-        grant.sourcesLot && run.researchStartedAt !== undefined
-            ? run.researchStartedAt +
-              (durationMs ?? SOURCES_QUALIFICATION_RESEARCH_WINDOW_MS)
-            : undefined;
-    const deadlineAt = Math.min(
-        context.expiresAt,
-        context.campaignLotId ? (campaign?.manifest.expiresAt ?? 0) : Infinity,
-        researchDeadlineAt ?? Infinity,
-    );
-    return {
-        context,
-        deadlineAt,
-        campaignResearchDeadlineAt:
-            durationMs !== undefined && researchDeadlineAt !== undefined
-                ? deadlineAt
-                : undefined,
-    };
-}
-
-/** Factual bound, including expired grants. This projection never grants spending or progression authority. */
-export async function readWorkbenchQualificationDeadline(
-    ctx: QueryCtx,
-    run: Doc<"researchRuns">,
-) {
-    return (await readQualificationScope(ctx, run))?.deadlineAt;
-}
-
-/** Original explicit campaign bound, including expiry; absence preserves legacy clocks. This does not authorize I/O. */
-export async function readCampaignResearchDeadline(
-    ctx: QueryCtx,
-    run: Doc<"researchRuns">,
-) {
-    return (await readQualificationScope(ctx, run))?.campaignResearchDeadlineAt;
-}
-
-/** A fixture remains unpaid unless its active local context explicitly authorizes this framing dossier. */
-export async function readWorkbenchQualification(
-    ctx: QueryCtx,
-    run: Doc<"researchRuns">,
-) {
-    if (
-        !localBrowserFixturesEnabled() ||
-        run.purpose !== "browser_test" ||
-        !run.browserTestContextId ||
-        run.withdrawnAt !== undefined
-    )
-        return null;
-    const scope = await readQualificationScope(ctx, run);
-    if (scope?.context.status !== "active" || scope.deadlineAt <= Date.now())
-        return null;
-    const { context } = scope;
-    if (
-        !context.paidQualification?.sourcesLot &&
-        (run.lifecycleState !== "framing" ||
-            run.researchStartedAt !== undefined ||
-            run.executionStatus !== "idle")
-    )
-        return null;
-    if (
-        context.paidQualification?.resourcePolicy !== RESOURCE_POLICY_VERSION ||
-        context.paidQualification.costAccountingPolicy !== "known_final_v1"
-    )
-        throw new ConvexError({
-            area: "execution",
-            code: "resource_policy_unsupported",
-        });
-    if (context.campaignLotId)
-        await requireCampaignLot(ctx, context.campaignLotId);
-    const visitor = await requireBrowserTestRunOwner(ctx, run);
-    if (
-        visitor._id !== context.ownerVisitorId ||
-        visitor.authUserId !== context.authUserId
-    )
-        return null;
-    return {
-        ...context.paidQualification,
-        deadlineAt: scope.deadlineAt,
-    };
 }
 
 export const openBrowserTestContext = internalMutation({

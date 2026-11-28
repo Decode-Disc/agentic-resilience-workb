@@ -1,3 +1,8 @@
+import { readSourcesDecisionRequestId } from "@convex/execution/approvalCore";
+import {
+    applyRequestedResearchPause,
+    recordResearchObservation,
+} from "@convex/execution/researchControlCore";
 import { sourcesSettlementBlock } from "@convex/sourcesMission";
 import type { IndexRangeBuilder } from "convex/server";
 import {
@@ -27,11 +32,6 @@ import {
     sourcesPhaseValidator,
     workflowStepKeyValidator,
 } from "./domain/validators";
-import { readSourcesDecisionRequestId } from "./execution/approvals";
-import {
-    applyRequestedResearchPause,
-    recordResearchObservation,
-} from "./execution/researchControl";
 import { readWorkspace, requireWorkspaceRun } from "./runWorkspace";
 import schema from "./schema";
 

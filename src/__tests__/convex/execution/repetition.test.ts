@@ -1,5 +1,6 @@
 import { internal } from "@convex/_generated/api";
 import { expect, test } from "vitest";
+import { beginFixtureInvocation } from "@/__tests__/setup/pi-mission";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 
 test("invalid requests remain diagnostic beyond three turns without duplicating the objective", async () => {
@@ -16,15 +17,12 @@ test("invalid requests remain diagnostic beyond three turns without duplicating 
         start,
     );
     for (let turn = 0; turn < 5; turn++) {
-        const invocation = await t.mutation(
-            internal.execution.invocations.begin,
-            {
-                missionId,
-                expectedGeneration: 4,
-                taskKey: `turn-${turn}`,
-                provenance: "simulation",
-            },
-        );
+        const invocation = await beginFixtureInvocation(t, {
+            missionId,
+            expectedGeneration: 4,
+            taskKey: `turn-${turn}`,
+            provenance: "simulation",
+        });
         if (invocation.kind !== "ready")
             throw new Error("Expected ready invocation");
         const result = await t.mutation(internal.execution.invocations.finish, {
@@ -67,7 +65,7 @@ test("invalid requests remain diagnostic beyond three turns without duplicating 
         }),
     ).toBe(missionId);
     expect(
-        await t.mutation(internal.execution.invocations.begin, {
+        await beginFixtureInvocation(t, {
             missionId,
             expectedGeneration: 4,
             taskKey: "new-turn",

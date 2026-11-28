@@ -1,6 +1,6 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
-import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
+import { sha256Hex, stableStringify } from "@convex/domain/hashing";
 import { supportsResearchControl } from "@convex/domain/transitions";
 import { retainedReplyKey } from "@convex/execution/conversationBodies";
 import { RETAINED_TEXT_INLINE_BYTES } from "@convex/resourcePolicy";

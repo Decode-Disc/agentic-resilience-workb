@@ -5,6 +5,10 @@ import { retainedDocumentaryControl } from "@convex/domain/sourcesContracts";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { scopedFixtureControl } from "@/__tests__/setup/model-stream";
+import {
+    beginFixtureInvocation,
+    recordFixtureAttempt,
+} from "@/__tests__/setup/pi-mission";
 import { readRetainedBody } from "@/__tests__/setup/retained-history";
 import {
     dispatchSourcesOperation,
@@ -43,6 +47,11 @@ test("a controlled reply after public Resume settles its original receipt withou
             fixedFramingRevisionId: framing,
         });
         await ctx.db.patch(f.missionId, { piActiveWriter: "control-writer" });
+    });
+    await f.t.mutation(internal.execution.piStore.claim, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        writer: "control-writer",
     });
     await installModel(
         f.t,
@@ -108,7 +117,7 @@ test("a controlled reply after public Resume settles its original receipt withou
     ).toEqual([]);
     assert(receipt);
     await expect(
-        f.t.mutation(internal.providerCalls.recordAttempt, {
+        recordFixtureAttempt(f.t, {
             runId: f.runId,
             corpusRevisionId: f.corpusRevisionId,
             preparationId: f.preparationId,
@@ -605,7 +614,7 @@ test("controlled material is handed off partially with exact contribution versio
     expect(
         await f.t.run((ctx) => ctx.db.get(f.corpusRevisionId)),
     ).toMatchObject({ status: "draft" });
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 4,
         taskKey: "controlled-completion",

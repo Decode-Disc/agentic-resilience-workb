@@ -20,9 +20,9 @@ import {
     workbenchCompletionAdmission,
 } from "@convex/domain/workbenchResponseControlContracts";
 import { reasoningEffort } from "@convex/modelConfigurationSchema";
-import { vEventId } from "@convex-dev/workflow";
-import { defineTable } from "convex/server";
-import { v } from "convex/values";
+import type { EventId } from "@convex-dev/workflow";
+import { defineTable, docValidator } from "convex/server";
+import { type VString, v } from "convex/values";
 import {
     agentResultValidator,
     agentScopeValidator,
@@ -49,9 +49,15 @@ import {
 import {
     completionFeedbackValidator,
     historyReadReceiptValidator,
+    operationRequestStatusValidator,
     protectedDiagnosticValidator,
     retainedPayloadValidator,
 } from "./operationContracts";
+import {
+    executionEventActorValidator,
+    nativeContextObservationValidator,
+    piCommitsTable,
+} from "./piStorageValidators";
 import { textManifestValidator } from "./retainedText";
 
 const retainedTextCheckpointValidator = v.object({
@@ -60,25 +66,8 @@ const retainedTextCheckpointValidator = v.object({
     sizeBytes: v.number(),
 });
 
-export const nativeInputBodyValidator = v.union(
-    v.object({ messageId: v.id("agentMessageDeliveries"), text: v.string() }),
-    v.object({
-        messageId: v.id("agentMessageDeliveries"),
-        contentHash: v.string(),
-    }),
-);
-
-export const nativeInputsValidator = v.array(
-    v.object({
-        requestId: v.string(),
-        nativeInputSequence: v.number(),
-        instructionVersion: v.number(),
-        messages: v.array(nativeInputBodyValidator),
-    }),
-);
-
 const missionFields = {
-    completionEventId: v.optional(vEventId()),
+    completionEventId: v.optional(v.string() as VString<EventId>),
     completionNotified: v.optional(v.boolean()),
     historyMaterialSequence: v.optional(v.number()),
     historyProjection: v.optional(
@@ -104,6 +93,8 @@ const missionFields = {
     piWakeAt: v.optional(v.number()),
     piWakeToken: v.optional(v.string()),
     piResultWakePending: v.optional(v.boolean()),
+    piResultWakeVersion: v.optional(v.number()),
+    piPreparedWakeVersion: v.optional(v.number()),
     parentRequestId: v.optional(v.id("agentOperationRequests")),
     rootMissionId: v.optional(v.id("agentMissions")),
     childMissionRequests: v.optional(v.number()),
@@ -240,15 +231,7 @@ export const executionTables = {
         index: v.number(),
         content: v.string(),
     }).index("by_text_and_index", ["textId", "index"]),
-    piCommits: defineTable({
-        sessionId: v.id("piSessions"),
-        sequence: v.number(),
-        key: v.string(),
-        payload: v.optional(v.string()),
-        textId: v.optional(v.id("retainedTexts")),
-    })
-        .index("by_session_and_sequence", ["sessionId", "sequence"])
-        .index("by_session_and_key", ["sessionId", "key"]),
+    piCommits: piCommitsTable,
     agentConversations: defineTable({
         nativeInputSequence: v.optional(v.number()),
         publicationRevision: v.optional(v.number()),
@@ -527,14 +510,7 @@ export const executionTables = {
         operationVersion: v.number(),
         expectedGeneration: v.number(),
         logicalKey: v.string(),
-        status: v.union(
-            v.literal("pending"),
-            v.literal("running"),
-            v.literal("waiting"),
-            v.literal("observed"),
-            v.literal("unknown"),
-            v.literal("completed"),
-        ),
+        status: operationRequestStatusValidator,
         outcome: v.optional(operationOutcomeValidator),
         createdAt: v.number(),
         completedAt: v.optional(v.number()),
@@ -561,37 +537,12 @@ export const executionTables = {
     agentExecutionEvents: defineTable({
         nativeInputSequence: v.optional(v.number()),
         contextHistoryHash: v.optional(v.string()),
-        contextObservation: v.optional(
-            v.object({
-                version: v.literal(1),
-                key: v.string(),
-                topic: v.union(
-                    v.literal("framing"),
-                    v.literal("research"),
-                    v.literal("documentary"),
-                    v.literal("analyst_request"),
-                    v.literal("analyst_decision"),
-                ),
-                textId: v.id("retainedTexts"),
-            }),
-        ),
+        contextObservation: nativeContextObservationValidator,
         protectedDiagnostic: v.optional(protectedDiagnosticValidator),
         invocationPayloadId: v.optional(v.id("agentInvocationPayloads")),
         payload: v.optional(retainedPayloadValidator),
         historySourceSequence: v.optional(v.number()),
-        actor: v.optional(
-            v.union(
-                v.object({ type: v.literal("system") }),
-                v.object({
-                    type: v.literal("agent"),
-                    missionId: v.id("agentMissions"),
-                }),
-                v.object({
-                    type: v.literal("visitor"),
-                    visitorId: v.id("visitors"),
-                }),
-            ),
-        ),
+        actor: executionEventActorValidator,
         parentRequestId: v.optional(v.id("agentOperationRequests")),
         missionId: v.optional(v.id("agentMissions")),
         runId: v.id("researchRuns"),
@@ -652,3 +603,16 @@ export const executionTables = {
         revokedBy: v.optional(auditActorValidator),
     }).index("by_run_and_action", ["runId", "action"]),
 };
+
+export const missionDocument = docValidator(
+    "agentMissions",
+    executionTables.agentMissions,
+);
+export const invocationDocument = docValidator(
+    "agentInvocations",
+    executionTables.agentInvocations,
+);
+export const operationRequestDocument = docValidator(
+    "agentOperationRequests",
+    executionTables.agentOperationRequests,
+);

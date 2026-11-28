@@ -15,6 +15,7 @@ import { projectWorkbenchCompletionAdmission } from "@convex/responseControl";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { seedConversation } from "@/__tests__/setup/agent-harness";
+import { beginFixtureInvocation } from "@/__tests__/setup/pi-mission";
 import { readMessageBodies } from "@/__tests__/setup/retained-messages";
 
 import { seedWorkbench } from "@/__tests__/setup/workbench";
@@ -155,7 +156,6 @@ test("native invocation admission reuses the instruction identity from the check
             JSON.parse(context.inputJson),
         ),
     );
-    const begin = internal.execution.invocations.begin;
     const args = {
         ...scope,
         taskKey: "bounded-native-admission",
@@ -163,13 +163,13 @@ test("native invocation admission reuses the instruction identity from the check
         returnInputReference: true as const,
     };
     await expect(
-        t.mutation(begin, {
+        beginFixtureInvocation(t, {
             ...args,
             nativeInput: { messageIds: [], toolSetKey },
         }),
     ).resolves.toMatchObject({ kind: "blocked", code: "native_input_changed" });
     await expect(
-        t.mutation(begin, {
+        beginFixtureInvocation(t, {
             ...args,
             nativeInput: { messageIds: [delivery._id], toolSetKey },
         }),

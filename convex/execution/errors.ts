@@ -1,4 +1,4 @@
-import { sha256Hex } from "@convex/domain/sourcePassages";
+import { sha256Hex } from "@convex/domain/hashing";
 import type { Infer } from "convex/values";
 import { ConvexError } from "convex/values";
 import { validate } from "convex-helpers/validators";

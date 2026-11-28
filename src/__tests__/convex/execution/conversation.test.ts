@@ -2,6 +2,10 @@ import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedConversation as fixture } from "@/__tests__/setup/agent-harness";
+import {
+    beginFixtureInvocation,
+    retainFixtureOutput,
+} from "@/__tests__/setup/pi-mission";
 import { readMessageBodies } from "@/__tests__/setup/retained-messages";
 
 afterEach(() => {
@@ -14,7 +18,7 @@ async function observeSimulation(
 ) {
     const args = { invocationId, expectedGeneration: 1 };
     const response = await t.action(internal.execution.simulation.invoke, args);
-    await t.mutation(internal.execution.invocationLifecycle.retainOutput, {
+    await retainFixtureOutput(t, {
         ...args,
         responseJson: JSON.stringify(response),
     });
@@ -242,7 +246,7 @@ test("a conversational mission survives research generation changes and publishe
             pauseReason: "source_review",
         }),
     );
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId,
         expectedGeneration: 1,
         taskKey: "reply",
@@ -305,7 +309,7 @@ test("steering between observation and adoption prevents stale publication and r
         requestKey: "steering",
         expectedGeneration: 1,
     });
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId,
         expectedGeneration: 1,
         taskKey: "old",
@@ -506,7 +510,7 @@ test("steering beyond one history page preserves every instruction and completes
             delivery: "steer",
             turnId,
         });
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId,
         expectedGeneration: 1,
         taskKey: "after-steering",
@@ -634,7 +638,7 @@ test("a steer exceeding the assembled context rolls back without stranding the a
         requestKey: "byte-budget",
         expectedGeneration: 1,
     });
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId,
         expectedGeneration: 1,
         taskKey: "after-refusal",

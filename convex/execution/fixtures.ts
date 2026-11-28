@@ -13,7 +13,7 @@ import {
     claimCorpusApprovedRunExecution,
     claimPausedRunExecution,
 } from "@convex/domain/executionClaim";
-import { readInContextResult } from "@convex/domain/savedMaterialOperations";
+import { readInContextResult } from "@convex/domain/savedMaterialOperationResults";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { upsertSourceReviewItem } from "@convex/domain/sourceReviewProjection";
 import {
@@ -22,18 +22,19 @@ import {
     readSourcesMission,
 } from "@convex/domain/sources";
 import { INITIAL_FRAMING_MESSAGE_KEY } from "@convex/domain/workbenchContracts";
+import { publishTurn } from "@convex/execution/conversationCore";
+import {
+    readResponseControlPolicy,
+    requireReasoningEffort,
+    resolveAgentModel,
+    revisionRoute,
+} from "@convex/execution/modelConfigurationCore";
 import { initializeFraming } from "@convex/framing";
 import {
     agentInputByteLength,
     preparePiSimulationRequest,
 } from "@convex/integrations/modelInput";
 import { resolveReasoningPreference } from "@convex/integrations/modelRouting";
-import {
-    readResponseControlPolicy,
-    requireReasoningEffort,
-    resolveAgentModel,
-    revisionRoute,
-} from "@convex/modelConfiguration";
 import {
     effectiveModelConfiguration,
     qualificationReasoningSelection,
@@ -82,11 +83,12 @@ import { getAgentDefinition } from "./agentCatalog";
 import { agentToolSchemas } from "./agentDefinition";
 import { agentResultValidator } from "./agentSchemas";
 import { requireMissionAuthority } from "./authority";
-import { publishTurn, submitAuthorizedMessage } from "./conversations";
+import { submitAuthorizedMessage } from "./conversations";
 import {
     agentBackendValidator,
     DEFAULT_AGENT_BACKEND,
 } from "./executionProtocol";
+import { withFixturePiWriter } from "./fixturePiWriter";
 import { admittedInputHash, hasReceivedResponse } from "./journal";
 import { generationInterruption, retainedMissionResult } from "./missionData";
 import {
@@ -341,55 +343,72 @@ export const activateValidation = internalMutation({
             expectedGeneration: generation,
             simulation: true,
         });
-        if (args.largeJournal) {
-            const begun = await ctx.runMutation(
-                internal.execution.invocations.begin,
-                {
-                    missionId,
-                    expectedGeneration: generation,
-                    taskKey: "fragmented-journal-fixture",
-                    provenance: "simulation",
-                },
-            );
-            if (begun.kind !== "ready")
-                throw new Error("Local journal fixture could not be admitted");
-            const observation = {
-                kind: "blocked" as const,
-                code: "fixture_inspection_only",
-            };
-            await ctx.runMutation(
-                internal.execution.invocations.retainRequest,
-                {
-                    invocationId: begun.invocationId,
-                    expectedGeneration: generation,
-                    requestJson: preparePiSimulationRequest([
+        if (args.largeJournal)
+            await withFixturePiWriter(
+                ctx,
+                { missionId, expectedGeneration: generation },
+                "fixture:large-journal",
+                async (piLease) => {
+                    const begun = await ctx.runMutation(
+                        internal.execution.invocations.begin,
                         {
-                            role: "user",
-                            content:
-                                "Retained local verification text. ".repeat(
-                                    23000,
-                                ),
-                            timestamp: 0,
+                            missionId,
+                            expectedGeneration: generation,
+                            taskKey: "fragmented-journal-fixture",
+                            piLease,
+                            provenance: "simulation",
                         },
-                    ]).json,
+                    );
+                    if (begun.kind !== "ready")
+                        throw new Error(
+                            "Local journal fixture could not be admitted",
+                        );
+                    const observation = {
+                        kind: "blocked" as const,
+                        code: "fixture_inspection_only",
+                    };
+                    await ctx.runMutation(
+                        internal.execution.invocations.retainRequest,
+                        {
+                            invocationId: begun.invocationId,
+                            expectedGeneration: generation,
+                            piLease,
+                            requestJson: preparePiSimulationRequest([
+                                {
+                                    role: "user",
+                                    content:
+                                        "Retained local verification text. ".repeat(
+                                            23000,
+                                        ),
+                                    timestamp: 0,
+                                },
+                            ]).json,
+                        },
+                    );
+                    await ctx.runMutation(
+                        internal.execution.invocations.retainOutput,
+                        {
+                            invocationId: begun.invocationId,
+                            expectedGeneration: generation,
+                            piLease,
+                            responseJson: JSON.stringify(observation),
+                            observableReplyJson: JSON.stringify({
+                                version: 1,
+                                provenance: "simulation",
+                                response: observation,
+                            }),
+                        },
+                    );
+                    await ctx.runMutation(
+                        internal.execution.invocations.finish,
+                        {
+                            invocationId: begun.invocationId,
+                            expectedGeneration: generation,
+                            response: observation,
+                        },
+                    );
                 },
             );
-            await ctx.runMutation(internal.execution.invocations.retainOutput, {
-                invocationId: begun.invocationId,
-                expectedGeneration: generation,
-                responseJson: JSON.stringify(observation),
-                observableReplyJson: JSON.stringify({
-                    version: 1,
-                    provenance: "simulation",
-                    response: observation,
-                }),
-            });
-            await ctx.runMutation(internal.execution.invocations.finish, {
-                invocationId: begun.invocationId,
-                expectedGeneration: generation,
-                response: observation,
-            });
-        }
         return missionId;
     },
 });
@@ -1026,10 +1045,25 @@ export const startConversation = internalAction({
             },
         );
         if (created.kind === "retained") return created.missionId;
-        await ctx.runAction(internal.execution.operations.dispatch, {
-            requestId: created.requestId,
-            expectedGeneration: 1,
-        });
+        const scope = { missionId: created.missionId, expectedGeneration: 1 };
+        const mission = await ctx.runQuery(
+            internal.execution.piControlReads.state,
+            scope,
+        );
+        const dispatch = (piLease?: import("./piSession").PiDispatchLease) =>
+            ctx.runAction(internal.execution.operations.dispatch, {
+                requestId: created.requestId,
+                expectedGeneration: 1,
+                piLease,
+            });
+        if (mission.executionRuntime === "pi-durable")
+            await withFixturePiWriter(
+                ctx,
+                scope,
+                "fixture:conversation-start",
+                dispatch,
+            );
+        else await dispatch();
         await ctx.runMutation(internal.execution.missions.resume, {
             missionId: created.missionId,
             expectedGeneration: 1,
@@ -2680,8 +2714,25 @@ export const prepareRequestApprovalFixture = internalMutation({
             )
             .unique();
         if (previous?.status === "processed") return { kind: "done" };
+        if (run.startMode !== "framed")
+            throw new Error("A framed fixture dossier is required");
         if (
-            run.startMode !== "framed" ||
+            run.lifecycleState === "framing" &&
+            run.executionStatus === "idle" &&
+            run.currentFramingRevisionId &&
+            !run.fixedFramingRevisionId &&
+            !run.sourcePreparationId &&
+            !run.workflowId
+        ) {
+            // Approval UI tests need stable running research while Workbench admits a turn.
+            await ctx.db.patch(run._id, {
+                fixedFramingRevisionId: run.currentFramingRevisionId,
+                researchStartedAt: Date.now(),
+                lifecycleState: "discovering_sources",
+                executionStatus: "running",
+                agentExecutionVersion: 3,
+            });
+        } else if (
             !run.fixedFramingRevisionId ||
             run.executionStatus !== "running"
         )
@@ -2823,10 +2874,19 @@ export const requestApprovalFixture = internalAction({
             }
         }
         if (prepared.kind === "done") return null;
+        const { sessionId, writer, epoch } = await ctx.runMutation(
+            internal.execution.piStore.claim,
+            {
+                missionId: prepared.missionId,
+                expectedGeneration: prepared.expectedGeneration,
+                writer: prepared.writer,
+            },
+        );
         const outcome = await ctx.runAction(
             internal.execution.operations.dispatch,
             {
                 requestId: prepared.operationId,
+                piLease: { sessionId, writer, epoch },
                 expectedGeneration: prepared.expectedGeneration,
             },
         );

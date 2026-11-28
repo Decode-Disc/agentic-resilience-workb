@@ -28,6 +28,12 @@ import {
     providerFixtureResponse,
     scopedFixtureControl,
 } from "@/__tests__/setup/model-stream";
+import {
+    beginFixtureInvocation,
+    claimFixturePiLease,
+    dispatchFixtureOperation,
+    recordFixtureAttempt,
+} from "@/__tests__/setup/pi-mission";
 import { readRetainedBody } from "@/__tests__/setup/retained-history";
 import {
     dispatchSourcesOperation,
@@ -63,7 +69,7 @@ test("Sources returns a durable wait before documentary I/O and retains its even
         await gate;
         return documentaryReply(init);
     });
-    const dispatch = f.t.action(internal.execution.operations.dispatch, {
+    const dispatch = dispatchFixtureOperation(f.t, {
         requestId: f.requestId,
         expectedGeneration: 4,
     });
@@ -100,7 +106,7 @@ test("Sources returns a durable wait before documentary I/O and retains its even
         await dispatch;
         await worker;
     }
-    const result = await f.t.action(internal.execution.operations.dispatch, {
+    const result = await dispatchFixtureOperation(f.t, {
         requestId: f.requestId,
         expectedGeneration: 4,
     });
@@ -177,14 +183,9 @@ test("an interrupted structured stream keeps its visible prefix without adopting
 test("a scheduled Sources wait blocks another effect while saved-material reads remain available", async () => {
     const f = await fixture();
     const args = { requestId: f.requestId, expectedGeneration: 4 };
-    const waiting = await f.t.action(
-        internal.execution.operations.dispatch,
-        args,
-    );
+    const waiting = await dispatchFixtureOperation(f.t, args);
     expect(waiting.kind).toBe("waiting");
-    expect(
-        await f.t.action(internal.execution.operations.dispatch, args),
-    ).toEqual(waiting);
+    expect(await dispatchFixtureOperation(f.t, args)).toEqual(waiting);
     const next = await f.t.mutation(internal.execution.operations.enqueue, {
         missionId: f.missionId,
         expectedGeneration: 4,
@@ -196,7 +197,7 @@ test("a scheduled Sources wait blocks another effect while saved-material reads 
         },
     });
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId: next,
             expectedGeneration: 4,
         }),
@@ -208,7 +209,7 @@ test("a scheduled Sources wait blocks another effect while saved-material reads 
         input: { kind: "consult_mission_state" },
     });
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId: read,
             expectedGeneration: 4,
         }),
@@ -224,7 +225,7 @@ test("a scheduled Sources wait blocks another effect while saved-material reads 
 test("a revision refusal before worker start settles waiting work and permits the next effect", async () => {
     const f = await fixture();
     const args = { requestId: f.requestId, expectedGeneration: 4 };
-    await f.t.action(internal.execution.operations.dispatch, args);
+    await dispatchFixtureOperation(f.t, args);
     await f.t.run(async (ctx) => {
         const preparation = await ctx.db.get(f.preparationId);
         assert(preparation?.sourcesMission);
@@ -255,7 +256,7 @@ test("a revision refusal before worker start settles waiting work and permits th
         },
     });
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(f.t, {
             requestId: next,
             expectedGeneration: 4,
         }),
@@ -286,7 +287,7 @@ test("an inline retained request cannot masquerade as an owned scheduled epoch",
 test("a queued Sources job cannot start under a changed generation", async () => {
     const f = await fixture();
     const args = { requestId: f.requestId, expectedGeneration: 4 };
-    await f.t.action(internal.execution.operations.dispatch, args);
+    await dispatchFixtureOperation(f.t, args);
     await f.t.run((ctx) => ctx.db.patch(f.runId, { executionGeneration: 5 }));
     expect(
         await f.t.action(internal.sourcesMissionActions.execute, {
@@ -309,7 +310,7 @@ test("a queued Sources job cannot start under a changed generation", async () =>
 test("cancellation cancels a queued Sources job before any work starts", async () => {
     const f = await fixture();
     const args = { requestId: f.requestId, expectedGeneration: 4 };
-    await f.t.action(internal.execution.operations.dispatch, args);
+    await dispatchFixtureOperation(f.t, args);
     const request = await f.t.run((ctx) => ctx.db.get(f.requestId));
     const scheduledJobId =
         request?.scheduledExecution?.phase === "queued"
@@ -344,7 +345,7 @@ test("cancellation cancels a queued Sources job before any work starts", async (
 
 test("rebinding result adoption cannot start an old scheduled job in a new generation", async () => {
     const f = await fixture();
-    await f.t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(f.t, {
         requestId: f.requestId,
         expectedGeneration: 4,
     });
@@ -429,9 +430,9 @@ test.each([
         },
     );
     const args = { requestId, expectedGeneration: 4 };
-    expect(
-        await f.t.action(internal.execution.operations.dispatch, args),
-    ).toMatchObject({ kind: "waiting" });
+    expect(await dispatchFixtureOperation(f.t, args)).toMatchObject({
+        kind: "waiting",
+    });
     const outcome = await f.t.action(internal.sourcesMissionActions.execute, {
         ...args,
         epoch: 1,
@@ -443,9 +444,9 @@ test.each([
             epoch: 1,
         }),
     ).toBeNull();
-    expect(
-        await f.t.action(internal.execution.operations.dispatch, args),
-    ).toMatchObject({ kind: "success" });
+    expect(await dispatchFixtureOperation(f.t, args)).toMatchObject({
+        kind: "success",
+    });
     expect(await f.t.run((ctx) => ctx.db.get(requestId))).toMatchObject({
         status: "completed",
         scheduledExecution: expect.objectContaining({ phase: "finished" }),
@@ -482,6 +483,7 @@ test.each([
 
 test("a transaction rollback cannot leave a scheduled Sources job or waiting request behind", async () => {
     const f = await fixture();
+    const piLease = await claimFixturePiLease(f.t, f.missionId, 4);
     const before = await f.t.run((ctx) =>
         ctx.db.system.query("_scheduled_functions").collect(),
     );
@@ -490,6 +492,7 @@ test("a transaction rollback cannot leave a scheduled Sources job or waiting req
             await ctx.runMutation(internal.execution.operations.claim, {
                 requestId: f.requestId,
                 expectedGeneration: 4,
+                piLease,
             });
             throw new Error("abort scheduling transaction");
         }),
@@ -510,7 +513,7 @@ test("a transaction rollback cannot leave a scheduled Sources job or waiting req
 test("a lost scheduled worker remains unknown and cannot be restarted by delivery or polling", async () => {
     const f = await fixture();
     const args = { requestId: f.requestId, expectedGeneration: 4 };
-    await f.t.action(internal.execution.operations.dispatch, args);
+    await dispatchFixtureOperation(f.t, args);
     expect(
         await f.t.mutation(
             internal.execution.operations.beginScheduledExecution,
@@ -519,6 +522,8 @@ test("a lost scheduled worker remains unknown and cannot be restarted by deliver
     ).toBe(true);
     const mission = await f.t.run((ctx) => ctx.db.get(f.missionId));
     assert(mission);
+    vi.setSystemTime(mission.deadlineAt - 1);
+    const piLease = await claimFixturePiLease(f.t, f.missionId, 4);
     vi.setSystemTime(mission.deadlineAt);
     await f.t.mutation(internal.execution.operations.expire, args);
     expect(await f.t.run((ctx) => ctx.db.get(f.requestId))).toMatchObject({
@@ -531,8 +536,10 @@ test("a lost scheduled worker remains unknown and cannot be restarted by deliver
         }),
     ).toBeNull();
     expect(
-        await f.t.action(internal.execution.operations.dispatch, args),
-    ).toMatchObject({ kind: "refused" });
+        await dispatchFixtureOperation(f.t, { ...args, piLease }),
+    ).toMatchObject({
+        kind: "refused",
+    });
     expect(
         await f.t.run((ctx) => ctx.db.query("providerCalls").collect()),
     ).toEqual([]);
@@ -659,7 +666,7 @@ test("a real documentary examination retains exact evidence through the Sources 
     });
     expect(result.kind).toBe("success");
     expect(calls).toBe(1);
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 4,
         taskKey: "complete-controlled-material",
@@ -1147,7 +1154,7 @@ async function settleUnusableExaminations(
         ...args,
         epoch: 2,
     });
-    return f.t.action(internal.execution.operations.dispatch, args);
+    return dispatchFixtureOperation(f.t, args);
 }
 
 test("an unfinished real documentary examination reaches Sources with precise bounded feedback", async () => {
@@ -1221,7 +1228,7 @@ test("an unfinished real documentary examination reaches Sources with precise bo
             .take(2),
     );
     expect(tasks).toEqual([]);
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 4,
         taskKey: "after-control-failure",
@@ -1547,7 +1554,7 @@ test.each([
         }
     }
     if (verified) {
-        await f.t.mutation(internal.providerCalls.recordAttempt, {
+        await recordFixtureAttempt(f.t, {
             preparationId: call.preparationId,
             runId: call.runId,
             corpusRevisionId: call.corpusRevisionId,
@@ -1875,7 +1882,7 @@ test("Sources 7 controls the capture cited before a newer capture was registered
         }),
     };
     expect(evidence).toEqual([expect.objectContaining(expected)]);
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 4,
         taskKey: "complete-exact-capture",
@@ -2001,7 +2008,7 @@ test.each([
     const f = await fixture();
     mockControlReply("context_only");
     const args = { requestId: f.requestId, expectedGeneration: 4 };
-    await f.t.action(internal.execution.operations.dispatch, args);
+    await dispatchFixtureOperation(f.t, args);
     const execute = await registeredSourcesWorker();
     let lost = false;
     const result = await f.t.action(async (ctx) => {
@@ -2041,7 +2048,7 @@ test("a lost acknowledgement after committing a provider wait leaves it recovera
     const f = await fixture();
     mockControlReply("context_only", null, "wait-ack-generation");
     const args = { requestId: f.requestId, expectedGeneration: 4, epoch: 1 };
-    await f.t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(f.t, {
         requestId: f.requestId,
         expectedGeneration: 4,
     });
@@ -2124,7 +2131,7 @@ test("a fenced worker cannot adopt a successful one-shot after Pause takes effec
     mockControlReply("context_only");
     const client = f.t.withIdentity({ subject: f.userId });
     const args = { requestId: f.requestId, expectedGeneration: 4, epoch: 1 };
-    await f.t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(f.t, {
         requestId: f.requestId,
         expectedGeneration: 4,
     });
@@ -2217,18 +2224,14 @@ test("terminal v2 documentary history replays unchanged and an unfinished v2 req
         }),
     );
     const args = { requestId: f.requestId, expectedGeneration: 4 };
-    expect(
-        await f.t.action(internal.execution.operations.dispatch, args),
-    ).toEqual(captured);
+    expect(await dispatchFixtureOperation(f.t, args)).toEqual(captured);
     await f.t.run((ctx) =>
         ctx.db.patch(f.requestId, {
             status: "waiting",
             outcome: undefined,
         }),
     );
-    expect(
-        await f.t.action(internal.execution.operations.dispatch, args),
-    ).toEqual({
+    expect(await dispatchFixtureOperation(f.t, args)).toEqual({
         kind: "refused",
         code: "operation_version_conflict",
     });
@@ -2263,7 +2266,7 @@ test("a safe documentary wait cannot settle Pause while another research operati
             },
         },
     );
-    await f.t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(f.t, {
         requestId: otherId,
         expectedGeneration: 4,
     });
@@ -2279,7 +2282,7 @@ test("a safe documentary wait cannot settle Pause while another research operati
     ).toBe(true);
     mockControlReply("context_only", null, "mixed-pause-generation");
     const args = { requestId: f.requestId, expectedGeneration: 4, epoch: 1 };
-    await f.t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(f.t, {
         requestId: f.requestId,
         expectedGeneration: 4,
     });
@@ -2295,7 +2298,10 @@ test("a safe documentary wait cannot settle Pause while another research operati
                     );
                     if (
                         getFunctionName(reference) ===
-                        "providerCalls:observeGeneration"
+                        getFunctionName(
+                            internal.execution.providerCallReceipts
+                                .observeGeneration,
+                        )
                     ) {
                         expect(
                             await client.mutation(
@@ -2488,7 +2494,7 @@ test("losing the acknowledgement of failed reply retention completes with the re
         ),
     );
     const args = { requestId, expectedGeneration: 4 };
-    await f.t.action(internal.execution.operations.dispatch, args);
+    await dispatchFixtureOperation(f.t, args);
     const execute = await registeredSourcesWorker();
     let unavailable = false;
     let lost = false;
@@ -2856,7 +2862,7 @@ test.each([
             },
         },
     );
-    const reading = await f.t.action(internal.execution.operations.dispatch, {
+    const reading = await dispatchFixtureOperation(f.t, {
         requestId: readingRequestId,
         expectedGeneration: 4,
     });
@@ -2880,7 +2886,7 @@ test.each([
             ],
         },
     });
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 4,
         taskKey: "complete-scoped-material",
@@ -3281,12 +3287,10 @@ test.each([
             expectedGeneration: 5,
         }),
     ).toBe(6);
-    for (let i = 0; i < 12; i++) {
-        await vi.advanceTimersByTimeAsync(1);
-        await f.t.finishInProgressScheduledFunctions();
-        const request = await f.t.run((ctx) => ctx.db.get(f.requestId));
-        if (request?.status === "completed") break;
-    }
+    await f.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        500,
+    );
     const after = await f.t.run(async (ctx) => ({
         request: await ctx.db.get(f.requestId),
         prep: await ctx.db.get(f.preparationId),
@@ -3348,7 +3352,7 @@ test("the owned wake closes an abandoned generation after an abandoned lookup is
         });
     });
     const args = { requestId: f.requestId, expectedGeneration: 4, epoch: 1 };
-    await f.t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(f.t, {
         requestId: f.requestId,
         expectedGeneration: 4,
     });
@@ -3372,7 +3376,11 @@ test("the owned wake closes an abandoned generation after an abandoned lookup is
                         );
                         if (
                             !lost &&
-                            name === "providerCalls:observeGeneration"
+                            name ===
+                                getFunctionName(
+                                    internal.execution.providerCallReceipts
+                                        .observeGeneration,
+                                )
                         ) {
                             lost = true;
                             throw new Error(
@@ -3505,7 +3513,7 @@ test("a boundary-crossing raw delta aborts before its retained append acknowledg
         release = resolve;
     });
     const args = { requestId: f.requestId, expectedGeneration: 4, epoch: 1 };
-    await f.t.action(internal.execution.operations.dispatch, {
+    await dispatchFixtureOperation(f.t, {
         requestId: f.requestId,
         expectedGeneration: 4,
     });

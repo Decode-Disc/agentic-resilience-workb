@@ -9,6 +9,10 @@ import {
 import { importRetainedDocument } from "@convex/sourceCaptureActions";
 import { type FunctionArgs, getFunctionName } from "convex/server";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import {
+    claimFixtureOperation,
+    dispatchFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 import { sourcesTestEnvelope } from "@/__tests__/setup/sources-mission";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
@@ -185,7 +189,7 @@ test("imports adopted historical public text once without changing its bytes or 
     expect(
         await t.run((ctx) => ctx.db.query("sourceCaptures").first()),
     ).toBeNull();
-    const result = await t.action(internal.execution.operations.dispatch, {
+    const result = await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });
@@ -241,9 +245,9 @@ test("protects an active historical attachment and resumes it after its first wo
             },
         }),
     };
-    expect(
-        await t.mutation(internal.execution.operations.claim, first),
-    ).toMatchObject({ kind: "execute" });
+    expect(await claimFixtureOperation(t, first)).toMatchObject({
+        kind: "execute",
+    });
     const reserved = await t.mutation(
         internal.sourceCaptures.reserveRetainedImport,
         first,
@@ -279,7 +283,7 @@ test("protects an active historical attachment and resumes it after its first wo
         ...first,
         outcome: { kind: "unavailable", code: "operation_outcome_unknown" },
     });
-    const claim = await t.mutation(internal.execution.operations.claim, second);
+    const claim = await claimFixtureOperation(t, second);
     assert(claim.kind === "execute", JSON.stringify(claim));
     let lost = false;
     const resumed = await t.action((ctx) =>
@@ -337,9 +341,7 @@ test("an upload interrupted before attachment reclaims the blob and retries the 
         }),
         expectedGeneration: 1,
     };
-    expect(
-        await t.mutation(internal.execution.operations.claim, first),
-    ).toMatchObject({
+    expect(await claimFixtureOperation(t, first)).toMatchObject({
         kind: "execute",
     });
     let abandoned:
@@ -397,10 +399,7 @@ test("an upload interrupted before attachment reclaims the blob and retries the 
         }),
         expectedGeneration: 1,
     };
-    const result = await t.action(
-        internal.execution.operations.dispatch,
-        remaining,
-    );
+    const result = await dispatchFixtureOperation(t, remaining);
     assert(result.kind === "success", JSON.stringify(result));
     expect(JSON.parse(result.valueJson)).toMatchObject({
         captureId: initial?._id,
@@ -463,7 +462,7 @@ test.each([
         input: { kind: "read_in_context", reference },
     });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 1,
         }),
@@ -480,7 +479,7 @@ test("Start exposes a historical import without inventing its retrieval date", a
         cause: "import-before-start",
         input: { kind: "read_in_context", reference },
     });
-    const result = await t.action(internal.execution.operations.dispatch, {
+    const result = await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 1,
     });

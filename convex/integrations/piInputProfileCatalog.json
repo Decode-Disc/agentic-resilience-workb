@@ -1,4 +1,9 @@
 {
     "profileCatalog": "a2c2bee2ec134e002ce4e6a7df675eb0c3dc7fc768d4876d70d05f612d408b52",
-    "generatedBy": "UPDATE_PI_INPUT_PROFILES=1 pnpm exec vitest run src/__tests__/convex/execution/pi-input-capacity.test.ts --maxWorkers=1"
+    "generatedBy": "UPDATE_PI_INPUT_PROFILES=1 pnpm exec vitest run src/__tests__/convex/execution/pi-input-capacity.test.ts --maxWorkers=1",
+    "versions": {
+        "pi-ai": "1.4.0",
+        "pi-durable": "1.4.0",
+        "chord": "1.4.0"
+    }
 }

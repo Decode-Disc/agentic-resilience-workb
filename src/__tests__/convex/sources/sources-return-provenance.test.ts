@@ -5,6 +5,7 @@ import {
 } from "@convex/domain/sources";
 import { readWorkbenchFacts } from "@convex/domain/workbenchContext";
 import { assert, expect, test } from "vitest";
+import { beginFixtureInvocation } from "@/__tests__/setup/pi-mission";
 import { readRetainedBody } from "@/__tests__/setup/retained-history";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 
@@ -24,15 +25,12 @@ test("the handoff attributes a false resource explanation to Sources while retai
             },
         });
     });
-    const invocation = await f.t.mutation(
-        internal.execution.invocations.begin,
-        {
-            missionId: f.missionId,
-            expectedGeneration: 4,
-            taskKey: "source-return-provenance",
-            provenance: "simulation",
-        },
-    );
+    const invocation = await beginFixtureInvocation(f.t, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        taskKey: "source-return-provenance",
+        provenance: "simulation",
+    });
     assert(invocation.kind === "ready");
     const declaredReason =
         "Search allowance for saved material was exhausted (6/6).";
@@ -158,15 +156,12 @@ test("historical material has explicitly unknown assessment authorship without r
 
 test("a model completion cannot supply system assessment provenance", async () => {
     const f = await seedCapturedSources();
-    const invocation = await f.t.mutation(
-        internal.execution.invocations.begin,
-        {
-            missionId: f.missionId,
-            expectedGeneration: 4,
-            taskKey: "forged-assessment-provenance",
-            provenance: "simulation",
-        },
-    );
+    const invocation = await beginFixtureInvocation(f.t, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        taskKey: "forged-assessment-provenance",
+        provenance: "simulation",
+    });
     assert(invocation.kind === "ready");
     const forged = {
         kind: "complete" as const,

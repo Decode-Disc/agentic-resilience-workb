@@ -1,28 +1,38 @@
-import { zodToConvex } from "convex-helpers/server/zod4";
-import { z } from "zod";
+import { type Infer, v } from "convex/values";
 
-const dateEvidenceSchema = z.object({
-    kind: z.enum(["publication", "filing", "event"]),
-    value: z.string(),
-    precision: z.enum(["day", "instant"]),
-    origin: z.object({
-        kind: z.enum(["metadata", "sec_field", "dateline"]),
-        label: z.string(),
-        raw: z.string(),
+const dateEvidenceValidator = v.object({
+    kind: v.union(
+        v.literal("publication"),
+        v.literal("filing"),
+        v.literal("event"),
+    ),
+    value: v.string(),
+    precision: v.union(v.literal("day"), v.literal("instant")),
+    origin: v.object({
+        kind: v.union(
+            v.literal("metadata"),
+            v.literal("sec_field"),
+            v.literal("dateline"),
+        ),
+        label: v.string(),
+        raw: v.string(),
     }),
 });
-const dateGroupSchema = z.object({
-    status: z.enum(["unknown", "known", "conflict"]),
-    evidence: z.array(dateEvidenceSchema),
+const dateGroupValidator = v.object({
+    status: v.union(
+        v.literal("unknown"),
+        v.literal("known"),
+        v.literal("conflict"),
+    ),
+    evidence: v.array(dateEvidenceValidator),
 });
-export const documentDatesSchema = z.object({
-    publication: dateGroupSchema,
-    filing: dateGroupSchema,
-    event: dateGroupSchema,
+export const documentDatesValidator = v.object({
+    publication: dateGroupValidator,
+    filing: dateGroupValidator,
+    event: dateGroupValidator,
 });
-export const documentDatesValidator = zodToConvex(documentDatesSchema);
-export type DateEvidence = z.infer<typeof dateEvidenceSchema>;
-export type DocumentDates = z.infer<typeof documentDatesSchema>;
+export type DateEvidence = Infer<typeof dateEvidenceValidator>;
+export type DocumentDates = Infer<typeof documentDatesValidator>;
 const months = [
     "january",
     "february",

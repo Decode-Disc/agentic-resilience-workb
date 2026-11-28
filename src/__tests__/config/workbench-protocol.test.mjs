@@ -1,10 +1,22 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+    chmodSync,
+    mkdirSync,
+    mkdtempSync,
+    readdirSync,
+    readFileSync,
+    rmSync,
+    symlinkSync,
+    writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import {
+    buildPreflightChildEnv,
+    defaultPreflightCacheRoot,
     planQualification,
     qualificationFingerprints,
     readQualificationBattery,
@@ -173,7 +185,6 @@ const {
     assessQualification,
     browserBatteryPath,
 } = await import("../../../scripts/evaluations/workbench-browser/protocol.ts");
-const { mkdirSync } = await import("node:fs");
 const { dirname } = await import("node:path");
 function preservedRun() {
     const root = mkdtempSync(join(tmpdir(), "qualification-review-"));
@@ -345,4 +356,327 @@ test("zero paid attempts still permit bounded inspection of simulated invocation
         await collectSourcesTranscripts(readPage, 0, "deterministic"),
         { invocations: [invocation], payloads: [] },
     );
+});
+
+test("separate campaigns reuse checks with the exact sanitized child environment", async () => {
+    const f = fixture();
+    const second = mkdtempSync(join(tmpdir(), "workbench-protocol-"));
+    const sharedCacheRoot = join(f.root, "shared");
+    const envKey = "QUALIFICATION_TEST_NON_CHILD_SECRET";
+    const previous = process.env[envKey];
+    const previousTz = process.env.TZ;
+    try {
+        process.env.TZ = "Etc/UTC";
+        writeFileSync(
+            join(second, "fingerprints.json"),
+            JSON.stringify(f.fingerprints),
+        );
+        process.env[envKey] = "first";
+        const envs = [];
+        await verifyQualificationCandidate(
+            f.root,
+            f.fingerprints,
+            (_binary, _args, _signal, env) => {
+                envs.push(env);
+                return { status: 0, stdout: "verified" };
+            },
+            { sharedCacheRoot },
+        );
+        assert.equal(envs.length, 6);
+        for (const env of envs) {
+            assert.equal(env.PATH, process.env.PATH);
+            assert.equal(env[envKey], undefined);
+        }
+        process.env[envKey] = "second";
+        await verifyQualificationCandidate(
+            second,
+            f.fingerprints,
+            () => {
+                assert.fail(
+                    "The second campaign must load the verified checks",
+                );
+            },
+            { sharedCacheRoot },
+        );
+        assert.equal(
+            readFileSync(join(second, "checks", "domain-tests.log"), "utf8"),
+            "verified\n",
+        );
+        process.env.TZ = "America/New_York";
+        await verifyQualificationCandidate(
+            second,
+            f.fingerprints,
+            (_binary, _args, _signal, env) => {
+                assert.equal(env.TZ, "America/New_York");
+                envs.push(env);
+                return { status: 0, stdout: "new environment" };
+            },
+            { sharedCacheRoot },
+        );
+        assert.equal(envs.length, 12);
+    } finally {
+        if (previousTz === undefined) delete process.env.TZ;
+        else process.env.TZ = previousTz;
+        if (previous === undefined) delete process.env[envKey];
+        else process.env[envKey] = previous;
+        rmSync(f.root, { recursive: true, force: true });
+        rmSync(second, { recursive: true, force: true });
+    }
+});
+
+test("a checked script added, edited, or removed outside the campaign archive invalidates preflight", async () => {
+    const f = fixture();
+    const source = join(f.root, "checkout");
+    const originalDirectory = process.cwd();
+    try {
+        mkdirSync(join(source, "scripts"), { recursive: true });
+        execFileSync("git", ["init", "-q", source]);
+        process.chdir(source);
+        const sharedCacheRoot = join(f.root, "shared");
+        let calls = 0;
+        const campaign = async () => {
+            const root = mkdtempSync(join(f.root, "campaign-"));
+            const fingerprints = qualificationFingerprints();
+            writeFileSync(
+                join(root, "fingerprints.json"),
+                JSON.stringify(fingerprints),
+            );
+            await verifyQualificationCandidate(
+                root,
+                fingerprints,
+                () => {
+                    calls++;
+                    return { status: 0 };
+                },
+                { sharedCacheRoot },
+            );
+        };
+        await campaign();
+        const script = "scripts/sync-local-convex.ts";
+        writeFileSync(script, "export const enabled = true;");
+        await campaign();
+        writeFileSync(script, "export const enabled = false;");
+        await campaign();
+        rmSync(script);
+        await campaign();
+        // Deletion restores the first validated tree.
+        assert.equal(calls, 18);
+    } finally {
+        process.chdir(originalDirectory);
+        rmSync(f.root, { recursive: true, force: true });
+    }
+});
+
+test("an in-checkout cache does not fingerprint its own entries", async () => {
+    const f = fixture();
+    const originalDirectory = process.cwd();
+    const checkout = join(f.root, "checkout");
+    try {
+        mkdirSync(checkout);
+        execFileSync("git", ["init", "-q", checkout]);
+        process.chdir(checkout);
+        const sharedCacheRoot = join(checkout, "cache");
+        let calls = 0;
+        for (const name of ["first", "second"]) {
+            const root = join(f.root, name);
+            mkdirSync(root);
+            writeFileSync(
+                join(root, "fingerprints.json"),
+                JSON.stringify(f.fingerprints),
+            );
+            await verifyQualificationCandidate(
+                root,
+                f.fingerprints,
+                () => {
+                    calls++;
+                    return { status: 0, stdout: "verified" };
+                },
+                { sharedCacheRoot },
+            );
+        }
+        assert.equal(calls, 6);
+    } finally {
+        process.chdir(originalDirectory);
+        rmSync(f.root, { recursive: true, force: true });
+    }
+});
+
+test("shared preflight rejects corrupted or symlinked artifacts and separates fingerprint encodings", async () => {
+    const f = fixture();
+    const sharedCacheRoot = join(f.root, "shared");
+    const options = { sharedCacheRoot };
+    let calls = 0;
+    const execute = () => {
+        calls++;
+        return { status: 0, stdout: `verified check ${calls}` };
+    };
+    let runs = 0;
+    const campaign = async (serialization = JSON.stringify(f.fingerprints)) => {
+        const root = join(f.root, `campaign-${++runs}`);
+        mkdirSync(root);
+        writeFileSync(join(root, "fingerprints.json"), serialization);
+        return verifyQualificationCandidate(
+            root,
+            f.fingerprints,
+            execute,
+            options,
+        );
+    };
+    try {
+        const first = await campaign();
+        const candidate = join(sharedCacheRoot, first.candidateHash);
+        const entry = join(candidate, first.validationIdentity);
+        const log = join(entry, "checks", "domain-tests.log");
+        rmSync(log);
+        symlinkSync(f.file, log);
+        assert.equal((await campaign()).status, "passed");
+        assert.equal(calls, 12);
+        const freshLogs = join(f.root, "campaign-2", "checks");
+        assert.equal(readdirSync(freshLogs).length, 6);
+        assert.deepEqual(
+            readdirSync(freshLogs)
+                .map((name) => readFileSync(join(freshLogs, name), "utf8"))
+                .sort(),
+            [7, 8, 9, 10, 11, 12].map((n) => `verified check ${n}\n`).sort(),
+        );
+
+        writeFileSync(join(entry, "validation.json"), "{broken");
+        assert.equal((await campaign()).status, "passed");
+        assert.equal(calls, 18);
+
+        const changed = await campaign(JSON.stringify(f.fingerprints, null, 2));
+        assert.notEqual(first.validationIdentity, changed.validationIdentity);
+        assert.equal(calls, 24);
+
+        rmSync(candidate, { recursive: true });
+        symlinkSync(f.root, candidate, "dir");
+        assert.equal((await campaign()).status, "passed");
+        assert.equal(calls, 30);
+    } finally {
+        rmSync(f.root, { recursive: true, force: true });
+    }
+});
+
+test("concurrent preflight publication leaves a complete winner and two usable archives", async () => {
+    const f = fixture();
+    const sharedCacheRoot = join(f.root, "shared");
+    const second = join(f.root, "second");
+    mkdirSync(second);
+    writeFileSync(
+        join(second, "fingerprints.json"),
+        JSON.stringify(f.fingerprints),
+    );
+    let release;
+    const bothStarted = new Promise((resolve) => {
+        release = resolve;
+    });
+    let calls = 0;
+    const execute = async () => {
+        if (++calls === 12) release();
+        await bothStarted;
+        return { status: 0, stdout: "verified" };
+    };
+    try {
+        const [first, other] = await Promise.all(
+            [f.root, second].map((root) =>
+                verifyQualificationCandidate(root, f.fingerprints, execute, {
+                    sharedCacheRoot,
+                }),
+            ),
+        );
+        assert.deepEqual(first, other);
+        const candidate = join(sharedCacheRoot, first.candidateHash);
+        assert.deepEqual(readdirSync(candidate), [first.validationIdentity]);
+        for (const root of [
+            f.root,
+            second,
+            join(candidate, first.validationIdentity),
+        ]) {
+            assert.equal(readdirSync(join(root, "checks")).length, 6);
+            assert.equal(
+                JSON.parse(readFileSync(join(root, "validation.json"), "utf8"))
+                    .status,
+                "passed",
+            );
+        }
+    } finally {
+        rmSync(f.root, { recursive: true, force: true });
+    }
+});
+
+test("preflight does not inherit credentials or config overrides through package-manager prefixes", () => {
+    assert.deepEqual(
+        buildPreflightChildEnv({
+            npm_config_registry: "fixture-registry",
+            npm_config_userconfig: "/private/config",
+            npm_config_auth_token: "fixture-token",
+            PNPM_PASSWORD: "fixture-password",
+            VITEST_MAX_WORKERS: "2",
+        }),
+        { npm_config_registry: "fixture-registry", VITEST_MAX_WORKERS: "2" },
+    );
+    assert.equal(
+        defaultPreflightCacheRoot({
+            XDG_CACHE_HOME: " relative/cache ",
+            HOME: "/home/fixture ",
+        }),
+        "/home/fixture/.cache/agentic-resilience-workbench/qualification-preflight",
+    );
+    assert.equal(
+        defaultPreflightCacheRoot({
+            XDG_CACHE_HOME: " /tmp ",
+            HOME: "/home/fixture",
+        }),
+        "/home/fixture/.cache/agentic-resilience-workbench/qualification-preflight",
+    );
+});
+
+test("preflight does not trust a shared cache with group access", async () => {
+    const f = fixture();
+    try {
+        const sharedCacheRoot = join(f.root, "shared");
+        let calls = 0;
+        const execute = () => ({ status: 0, stdout: String(++calls) });
+        await verifyQualificationCandidate(f.root, f.fingerprints, execute, {
+            sharedCacheRoot,
+        });
+        chmodSync(sharedCacheRoot, 0o750);
+        const second = join(f.root, "second");
+        mkdirSync(second);
+        writeFileSync(
+            join(second, "fingerprints.json"),
+            JSON.stringify(f.fingerprints),
+        );
+        await verifyQualificationCandidate(second, f.fingerprints, execute, {
+            sharedCacheRoot,
+        });
+        assert.equal(calls, 12);
+    } finally {
+        rmSync(f.root, { recursive: true, force: true });
+    }
+});
+
+test("preflight output inside the checkout does not invalidate its own input fingerprint", async () => {
+    const f = fixture();
+    const checkout = join(f.root, "checkout");
+    const original = process.cwd();
+    try {
+        mkdirSync(checkout);
+        execFileSync("git", ["init", "-q", checkout]);
+        process.chdir(checkout);
+        const root = join(checkout, "campaign");
+        mkdirSync(root);
+        writeFileSync(
+            join(root, "fingerprints.json"),
+            JSON.stringify(f.fingerprints),
+        );
+        let calls = 0;
+        const executor = () => ({ status: 0, stdout: String(++calls) });
+        await verifyQualificationCandidate(root, f.fingerprints, executor);
+        await verifyQualificationCandidate(root, f.fingerprints, executor);
+        assert.equal(calls, 6);
+    } finally {
+        process.chdir(original);
+        rmSync(f.root, { recursive: true, force: true });
+    }
 });

@@ -388,3 +388,12 @@ export function operationInputFeedback(
         expected: expected.slice(0, MAX_VALIDATION_FEEDBACK_FIELD_CHARS),
     };
 }
+
+export const operationRequestStatusValidator = v.union(
+    v.literal("pending"),
+    v.literal("running"),
+    v.literal("waiting"),
+    v.literal("observed"),
+    v.literal("unknown"),
+    v.literal("completed"),
+);

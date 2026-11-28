@@ -16,7 +16,7 @@ import {
     SOURCE_RETRIEVAL_RANKING_POLICY,
     SOURCE_RETRIEVAL_VERSION,
 } from "@convex/domain/sourceRetrievalPolicy";
-import { applyRequestedResearchPause } from "@convex/execution/researchControl";
+import { applyRequestedResearchPause } from "@convex/execution/researchControlCore";
 import { sourcePreparationWindowMs } from "@convex/resourceLimits";
 import {
     MAX_HISTORICAL_SOURCE_CANDIDATES,

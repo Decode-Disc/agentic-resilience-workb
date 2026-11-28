@@ -8,8 +8,6 @@ import {
 } from "@convex/domain/documentDates";
 import type { GenericDatabaseReader } from "convex/server";
 import { v } from "convex/values";
-import { zodToConvex } from "convex-helpers/server/zod4";
-import { z } from "zod";
 /** Persisted embedding format identity; changing it requires rebuilding derived indexes. */
 export const SOURCE_EMBEDDING_PROFILE_VERSION = "evidence-embedding-v1";
 export const SOURCE_RETRIEVAL_VERSION = "structured-v1";
@@ -133,18 +131,15 @@ export const retrievalModeValidator = v.union(
     v.literal("lexical"),
     v.literal("hybrid"),
 );
-export const retrievalMetadataSchema = z
-    .object({
-        version: z.literal(SOURCE_RETRIEVAL_VERSION),
-        rankingPolicy: z.literal(SOURCE_RETRIEVAL_RANKING_POLICY).optional(),
-        requestedMode: z.enum(["lexical", "hybrid"]),
-        effectiveMode: z.enum(["lexical", "hybrid"]),
-        degradationReason: z.string().optional(),
-        selectedPassageKeys: z.array(z.string()),
-        omittedCandidateCount: z.number().int().nonnegative(),
-    })
-    .strict();
-export const retrievalMetadataValidator = zodToConvex(retrievalMetadataSchema);
+export const retrievalMetadataValidator = v.object({
+    version: v.literal(SOURCE_RETRIEVAL_VERSION),
+    rankingPolicy: v.optional(v.literal(SOURCE_RETRIEVAL_RANKING_POLICY)),
+    requestedMode: retrievalModeValidator,
+    effectiveMode: retrievalModeValidator,
+    degradationReason: v.optional(v.string()),
+    selectedPassageKeys: v.array(v.string()),
+    omittedCandidateCount: v.number(),
+});
 const STOP_WORDS = new Set(
     "the and for from with this that was were are is its not into about after also because their through within millionth".split(
         " ",

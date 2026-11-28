@@ -1,4 +1,12 @@
 import {
+    ownedCampaign as owned,
+    requireCampaignLot,
+} from "./qualificationCampaignAccess";
+
+export { requireCampaignLot } from "./qualificationCampaignAccess";
+
+import { readResponseControlPolicy } from "@convex/execution/modelConfigurationCore";
+import {
     exceededQualificationAllowance,
     qualificationCategory,
     qualificationModelReservationUsd,
@@ -9,9 +17,8 @@ import { PERSISTENCE_PAGE_SIZE } from "@convex/resourcePolicy";
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import { zodToConvex } from "convex-helpers/server/zod4";
-import type { Doc, Id } from "./_generated/dataModel";
+import type { Doc } from "./_generated/dataModel";
 import {
-    env,
     internalMutation,
     internalQuery,
     type QueryCtx,
@@ -25,7 +32,6 @@ import {
     modelConfigurationKey,
     resolveReasoningPreference,
 } from "./integrations/modelRouting";
-import { readResponseControlPolicy } from "./modelConfiguration";
 import { selectedTaskMethodVersion } from "./qualificationAgentMethods";
 import {
     analysisPricingAuthority,
@@ -51,30 +57,6 @@ import schema from "./schema";
 
 const hash = (value: unknown) => sha256Hex(stableStringify(value));
 const keys = ["model", "search", "acquisition", "costUsd"] as const;
-async function owned(ctx: QueryCtx, campaignId: Id<"qualificationCampaigns">) {
-    // Status and cleanup remain available after temporary fixture flags are restored.
-    let hostname: string;
-    try {
-        hostname = new URL(env.CONVEX_CLOUD_URL).hostname;
-    } catch {
-        throw new Error("Local campaign configuration invalid");
-    }
-    if (!["localhost", "127.0.0.1"].includes(hostname))
-        throw new Error("Local campaign required");
-    const campaign = await ctx.db.get(campaignId);
-    const invitation = await ctx.db
-        .query("invitations")
-        .withIndex("by_slot_key", (q) => q.eq("slotKey", BROWSER_TEST_SLOT))
-        .unique();
-    const owner = campaign ? await ctx.db.get(campaign.ownerVisitorId) : null;
-    if (
-        !campaign ||
-        invitation?.claimedByVisitorId !== owner?._id ||
-        owner?.status !== "active"
-    )
-        throw new Error("Campaign owner unavailable");
-    return campaign;
-}
 type CampaignProfile = ReturnType<typeof campaignConfiguration>;
 type ConfigurableCampaign = Exclude<CampaignManifest, { version: 1 }>;
 type CampaignModel = Pick<
@@ -536,22 +518,6 @@ export const admit = internalMutation({
     },
 });
 /** Shared by lot binding and the final provider authority check. */
-export async function requireCampaignLot(
-    ctx: QueryCtx,
-    lotId: Id<"qualificationLots">,
-) {
-    const lot = await ctx.db.get(lotId);
-    if (!lot) throw new Error("Campaign lot unavailable");
-    const campaign = await owned(ctx, lot.campaignId);
-    if (
-        campaign.status !== "active" ||
-        campaign.manifest.expiresAt <= Date.now() ||
-        campaign.activeLotId !== lotId ||
-        lot.status !== "running"
-    )
-        throw new Error("Campaign lot is not active");
-    return { lot, campaign };
-}
 export const bind = internalMutation({
     args: {
         lotId: v.id("qualificationLots"),

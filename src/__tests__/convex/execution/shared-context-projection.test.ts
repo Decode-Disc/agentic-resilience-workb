@@ -1,5 +1,11 @@
 import { api, internal } from "@convex/_generated/api";
 import { assert, expect, test } from "vitest";
+import {
+    authorizeFixtureDispatch,
+    beginFixtureInvocation,
+    dispatchFixtureOperation,
+    retainFixtureRequest,
+} from "@/__tests__/setup/pi-mission";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 
 test("required Workbench state preserves a rejected statement with its effective source exclusion", async () => {
@@ -159,7 +165,7 @@ test("required context carries a compact outcome and an exact recoverable observ
             },
         },
     );
-    const result = await f.t.action(internal.execution.operations.dispatch, {
+    const result = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -465,7 +471,7 @@ test("large admitted native state stays immutable and readable without exceeding
             },
         });
     });
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 4,
         taskKey: "large-admitted-input",
@@ -503,7 +509,7 @@ test("large admitted native state stays immutable and readable without exceeding
             input: { kind: "consult_mission_state" },
         },
     );
-    const outcome = await f.t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -555,10 +561,11 @@ test("native preparation binds the method and actual tool declarations as well a
         preparedInstructionsHash: sha256Hex("Different method"),
         preparedSerializer: NATIVE_MODEL_SERIALIZER,
     };
-    expect(
-        await f.t.mutation(internal.execution.invocations.begin, prepared),
-    ).toEqual({ kind: "blocked", code: "native_input_changed" });
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    expect(await beginFixtureInvocation(f.t, prepared)).toEqual({
+        kind: "blocked",
+        code: "native_input_changed",
+    });
+    const begun = await beginFixtureInvocation(f.t, {
         ...prepared,
         preparedInstructionsHash: sha256Hex(
             piInstructionSection(definition.instructions),
@@ -589,7 +596,7 @@ test("dispatch rechecks a documentary exclusion committed after native admission
     });
     assert(context.kind === "ready");
     const definition = getAgentDefinition("sources_v1", 5);
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 4,
         taskKey: "dispatch-freshness",
@@ -610,19 +617,14 @@ test("dispatch rechecks a documentary exclusion committed after native admission
         invocationId: begun.invocationId,
         expectedGeneration: 4,
     };
-    await f.t.mutation(internal.execution.invocationLifecycle.retainRequest, {
+    await retainFixtureRequest(f.t, {
         ...dispatch,
         requestJson: JSON.stringify({
             model: "offline",
             input: context.inputJson,
         }),
     });
-    await expect(
-        f.t.query(
-            internal.execution.invocationLifecycle.authorizeDispatch,
-            dispatch,
-        ),
-    ).resolves.toBeNull();
+    await expect(authorizeFixtureDispatch(f.t, dispatch)).resolves.toBeNull();
     await f.t.withIdentity({ subject: f.userId }).mutation(api.sources.decide, {
         runId: f.runId,
         corpusRevisionId: f.corpusRevisionId,
@@ -630,12 +632,9 @@ test("dispatch rechecks a documentary exclusion committed after native admission
         decision: "rejected",
         decisionKey: "exclude-after-admission",
     });
-    await expect(
-        f.t.query(
-            internal.execution.invocationLifecycle.authorizeDispatch,
-            dispatch,
-        ),
-    ).rejects.toMatchObject({ data: { code: "native_input_changed" } });
+    await expect(authorizeFixtureDispatch(f.t, dispatch)).rejects.toMatchObject(
+        { data: { code: "native_input_changed" } },
+    );
     expect(
         await f.t.run((ctx) => ctx.db.query("providerCalls").collect()),
     ).toEqual([]);

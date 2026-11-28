@@ -1,5 +1,16 @@
+import {
+    SOURCES_PROTOCOL,
+    sourcesScopeValidator,
+    sourcesStateValidator,
+} from "./sourcesScope";
+
+export {
+    SOURCES_PROTOCOL,
+    sourcesScopeValidator,
+    sourcesStateValidator,
+} from "./sourcesScope";
+
 import { commonOperationSuccessValidator } from "@convex/execution/operationContracts";
-import { operationResultValidator } from "@convex/execution/operationResults";
 import { type Infer, v } from "convex/values";
 import { sourceMaterialReferenceValidator } from "./sourceRetrievalPolicy";
 import {
@@ -32,7 +43,6 @@ export const authorizedDiscovery = v.object({
     focus: v.optional(discoveryFocus),
 });
 
-export const SOURCES_PROTOCOL = "sources_mission_v1";
 export const sourcesEnvelopeValidator = v.object({
     version: v.literal(1),
     maxNeeds: v.number(),
@@ -629,13 +639,6 @@ export const sourcesOperationValidator = v.union(
         ...documentaryCheckInput.fields,
     }),
 );
-export const sourcesScopeValidator = v.object({
-    kind: v.literal("sources_v1"),
-    preparationId: v.id("sourceSelectionProposalRebuilds"),
-});
-export const sourcesStateValidator = v.object({
-    kind: v.literal("sources_v1"),
-});
 export const sourcesCompletionValidator = v.object({
     kind: v.literal("complete"),
     needsRevision: v.number(),
@@ -693,30 +696,6 @@ export type DocumentaryContribution = Infer<
     typeof documentaryContributionValidator
 >;
 
-export const consultableSourceResult = operationResultValidator(
-    v.union(
-        v.object({
-            ...sourceMaterialReferenceValidator.fields,
-            status: v.union(v.literal("complete"), v.literal("partial")),
-        }),
-        v.object({
-            sourceId: sourceMaterialReferenceValidator.fields.sourceId,
-            captureId: v.optional(
-                sourceMaterialReferenceValidator.fields.captureId,
-            ),
-            status: v.literal("unavailable"),
-            reasonCode: v.string(),
-        }),
-    ),
-);
-export const discoveryResult = operationResultValidator(
-    v.object({
-        needId: v.string(),
-        query: v.string(),
-        inserted: v.number(),
-        total: v.number(),
-    }),
-);
 export const documentarySubmissionValue = v.object({
     taskId: v.id("aiTaskResults"),
     controlVersion: v.literal(2),
@@ -738,10 +717,6 @@ export const documentarySubmissionValue = v.object({
         }),
     ),
 });
-export const documentarySubmissionResult = operationResultValidator(
-    documentarySubmissionValue,
-);
-
 export const sourceMembershipValidator = v.union(
     v.literal("pending"),
     v.literal("retained"),

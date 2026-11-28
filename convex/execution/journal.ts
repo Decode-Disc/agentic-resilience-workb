@@ -1,3 +1,20 @@
+import { retainablePayload } from "./journalPayloads";
+import { admittedInputHash, contextObservationSequence } from "./journalReads";
+
+export { retainExecutionEventPayload } from "./journalPayloads";
+export {
+    admittedInputHash,
+    contextObservationSequence,
+    hasKnownNonDispatch,
+    hasReceivedResponse,
+    invocationResponseManifest,
+    isContextObservation,
+    latestNativeControl,
+    matchInvocationResponse,
+    receivedResponseDigest,
+    retainedNativeCalls,
+} from "./journalReads";
+
 import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import {
@@ -7,19 +24,18 @@ import {
     type MutationCtx,
     type QueryCtx,
 } from "@convex/_generated/server";
-import type { PreparedAnalystWording } from "@convex/domain/preparedAnalystWording";
 import {
     completeCharacterBoundary,
     sha256Hex,
     stableStringify,
-} from "@convex/domain/sourcePassages";
+} from "@convex/domain/hashing";
+import type { PreparedAnalystWording } from "@convex/domain/preparedAnalystWording";
 import type { preparedResponseReviewDraft } from "@convex/domain/workbenchResponseControlContracts";
 import {
     CONVEX_MAX_DOCUMENT_BYTES,
     DOSSIER_PURGE_BATCH,
     HISTORY_PAGE_SIZE,
     MAX_CONVERSATION_SCAN_BYTES,
-    MAX_OBSERVABLE_OUTPUT_BYTES,
     MAX_OPERATION_RESULT_BYTES,
     RETAINED_TEXT_INLINE_BYTES,
 } from "@convex/resourcePolicy";
@@ -48,31 +64,6 @@ import {
 
 type RetainedPayload = Infer<typeof retainedPayloadValidator>;
 
-function retainablePayload(
-    contentJson: string | undefined,
-    capacityCode: string,
-    missingCode: string,
-): RetainedPayload {
-    const json =
-        contentJson === undefined
-            ? undefined
-            : stableStringify(JSON.parse(contentJson));
-    const sizeBytes = new TextEncoder().encode(json ?? "").length;
-    const contentHash = json === undefined ? undefined : sha256Hex(json);
-    const complete =
-        json !== undefined && sizeBytes <= MAX_OBSERVABLE_OUTPUT_BYTES;
-    return {
-        version: 1,
-        state: complete ? "complete" : "incomplete",
-        ...(complete ? { json } : {}),
-        ...(contentHash ? { contentHash } : {}),
-        sizeBytes,
-        ...(!complete
-            ? { code: json === undefined ? missingCode : capacityCode }
-            : {}),
-    };
-}
-
 const OPERATION_OBSERVATIONS = new Set([
     "operation_requested",
     "operation_refused",
@@ -96,27 +87,6 @@ export function operationEventObservation(
               pin: request.pin,
               outcome: admissionOutcome ?? request.outcome,
           };
-}
-
-/** Append-only event content is written in the same transaction as its observed effect/result. */
-export async function retainExecutionEventPayload(
-    ctx: MutationCtx,
-    eventId: Id<"agentExecutionEvents">,
-    value: unknown,
-): Promise<void> {
-    const event = await ctx.db.get(eventId);
-    if (!event) throw executionError("journal_event_unavailable");
-    const payload = retainablePayload(
-        JSON.stringify(value),
-        "journal_operation_capacity",
-        "operation_observation_unavailable",
-    );
-    if (event.payload) {
-        if (stableStringify(event.payload) !== stableStringify(payload))
-            throw executionError("journal_payload_conflict");
-        return;
-    }
-    await ctx.db.patch(eventId, { payload });
 }
 
 function observablePayload(payload: RetainedPayload) {
@@ -670,10 +640,6 @@ export async function admittedInputManifest(
     return text;
 }
 
-export function admittedInputHash(invocation: Doc<"agentInvocations">) {
-    return invocation.inputContentHash ?? sha256Hex(invocation.inputJson);
-}
-
 export async function admittedInputFragment(
     ctx: QueryCtx,
     invocation: Doc<"agentInvocations">,
@@ -766,125 +732,6 @@ export async function retainInvocationResponse(
     if (!staged) throw executionError("invocation_result_not_prepared");
     await completeRetainedText(ctx, staged._id);
     return { json: undefined, textId: staged._id };
-}
-
-/** Resolves an invocation-owned retained response, independently of how callers read it. */
-export async function invocationResponseManifest(
-    ctx: QueryCtx,
-    invocation: Doc<"agentInvocations">,
-    textId: Id<"retainedTexts">,
-    kind: "response" | "raw",
-) {
-    const text = await completeRetainedText(ctx, textId);
-    const expectedKey =
-        kind === "raw"
-            ? `${invocation._id}:raw_output`
-            : `${invocation._id}:response:${text.contentHash}`;
-    if (text.key !== expectedKey)
-        throw executionError("invocation_result_invalid");
-    return text;
-}
-
-/** Resolves the observed digest and checks any coexisting inline copy. */
-export async function receivedResponseDigest(
-    ctx: QueryCtx,
-    invocation: Doc<"agentInvocations">,
-) {
-    const inline =
-        invocation.receivedOutputJson === undefined
-            ? undefined
-            : sha256Hex(invocation.receivedOutputJson);
-    if (!invocation.receivedOutputTextId) return inline;
-    const text = await invocationResponseManifest(
-        ctx,
-        invocation,
-        invocation.receivedOutputTextId,
-        "response",
-    );
-    if (inline !== undefined && inline !== text.contentHash)
-        throw executionError("invocation_result_conflict");
-    return text.contentHash;
-}
-
-/** Validates a replay or adoption against the stored identity without reading fragments. */
-export async function matchInvocationResponse(
-    ctx: QueryCtx,
-    invocation: Doc<"agentInvocations">,
-    part: "received" | "adopted",
-    expected: string | { responseHash: string },
-) {
-    const [textId, inline] =
-        part === "received"
-            ? [invocation.receivedOutputTextId, invocation.receivedOutputJson]
-            : [invocation.outputTextId, invocation.outputJson];
-    if (
-        inline !== undefined &&
-        (typeof expected === "string"
-            ? inline !== expected
-            : sha256Hex(inline) !== expected.responseHash)
-    )
-        throw executionError("invocation_result_conflict");
-    if (textId) {
-        const text = await invocationResponseManifest(
-            ctx,
-            invocation,
-            textId,
-            "response",
-        );
-        const bytes =
-            typeof expected === "string"
-                ? new TextEncoder().encode(expected)
-                : undefined;
-        const hash =
-            typeof expected === "string"
-                ? sha256Hex(bytes ?? expected)
-                : expected.responseHash;
-        if (
-            text.contentHash !== hash ||
-            (typeof expected === "string" &&
-                (text.characters !== expected.length ||
-                    text.sizeBytes !== bytes?.length))
-        )
-            throw executionError("invocation_result_conflict");
-    }
-    return textId || inline !== undefined
-        ? { textId, json: textId ? undefined : inline }
-        : null;
-}
-
-/** Verifies the persisted operation correlation against the original response identity. */
-export async function retainedNativeCalls(
-    ctx: QueryCtx,
-    invocation: Doc<"agentInvocations">,
-) {
-    const retained = invocation.nativeOperations;
-    if (!retained) return undefined;
-    const expected = { responseHash: retained.responseHash };
-    if (
-        invocation.status !== "returned" ||
-        retained.calls.length !== invocation.requestIds?.length ||
-        !(await matchInvocationResponse(ctx, invocation, "adopted", expected))
-    )
-        throw executionError("operation_correlation_invalid");
-    await matchInvocationResponse(ctx, invocation, "received", expected);
-    return retained.calls;
-}
-
-export function hasReceivedResponse(invocation: Doc<"agentInvocations">) {
-    return (
-        invocation.receivedOutputJson !== undefined ||
-        invocation.receivedOutputTextId !== undefined
-    );
-}
-
-/** Without provider admission, a retained live response is a known local refusal. */
-export function hasKnownNonDispatch(invocation: Doc<"agentInvocations">) {
-    return (
-        invocation.journalVersion === 1 &&
-        invocation.provenance === "live" &&
-        !invocation.providerCallId &&
-        hasReceivedResponse(invocation)
-    );
 }
 
 /** Stores immutable, bounded observations separately from model continuation state. */
@@ -1340,46 +1187,4 @@ export async function recordContextObservation(
         contextHistoryHash: sha256Hex(prefix + json + suffix),
     });
     return eventId;
-}
-
-/** Current observation frontier is independent of invocation/lease bookkeeping. */
-export async function contextObservationSequence(
-    ctx: QueryCtx,
-    runId: Id<"researchRuns">,
-) {
-    const last = await ctx.db
-        .query("agentExecutionEvents")
-        .withIndex("by_run_and_native_input_sequence", (q) =>
-            q.eq("runId", runId).gt("nativeInputSequence", 0),
-        )
-        .order("desc")
-        .first();
-    return last?.nativeInputSequence ?? 0;
-}
-
-/** Run observations have their own dossier ordering and are never mistaken for mission events. */
-export function isContextObservation(event: Doc<"agentExecutionEvents">) {
-    return (
-        event.kind === "context_observed" &&
-        event.contextObservation?.version === 1 &&
-        Number.isSafeInteger(event.nativeInputSequence) &&
-        event.nativeInputSequence === event.sequence
-    );
-}
-
-/** The latest command frontier is separate from business-state changes and queued user messages. */
-export async function latestNativeControl(
-    ctx: QueryCtx,
-    runId: Id<"researchRuns">,
-) {
-    return ctx.db
-        .query("agentMessageDeliveries")
-        .withIndex("by_run_and_delivery_and_native_input_sequence", (q) =>
-            q
-                .eq("runId", runId)
-                .eq("delivery", "control")
-                .gt("nativeInputSequence", 0),
-        )
-        .order("desc")
-        .first();
 }

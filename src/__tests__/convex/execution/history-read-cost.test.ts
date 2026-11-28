@@ -1,5 +1,4 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { QueryCtx } from "@convex/_generated/server";
 import { sha256Hex } from "@convex/domain/sourcePassages";
@@ -12,6 +11,7 @@ import {
     dispatchHistory,
     seedHistoryMission,
 } from "@/__tests__/setup/execution-history";
+import { beginFixtureInvocation } from "@/__tests__/setup/pi-mission";
 
 afterEach(() => {
     vi.restoreAllMocks();
@@ -428,7 +428,7 @@ test(`restores ${process.env.HARNESS_REAL_TRAVERSAL_INPUT ? "supplied retained t
 
 test("history fragment loads its inline invocation payload once", async () => {
     const f = await seedHistoryMission();
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 1,
         taskKey: "history-inline-cost",
@@ -489,7 +489,7 @@ test("history fragment loads its inline invocation payload once", async () => {
 
 test("fragmented retained invocation history restores exact Unicode content across bounded pages", async () => {
     const f = await seedHistoryMission();
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 1,
         taskKey: "fragmented-history-cost",

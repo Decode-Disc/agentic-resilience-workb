@@ -1,5 +1,5 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
-import { framingMessageUrls } from "@convex/domain/documentaryAccess";
+import { framingMessageUrls } from "@convex/domain/framingUrls";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import {
     explicitFramingPreservation,

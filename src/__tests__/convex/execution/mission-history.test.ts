@@ -13,6 +13,10 @@ import {
     dispatchHistory,
     seedHistoryMission,
 } from "@/__tests__/setup/execution-history";
+import {
+    beginFixtureInvocation,
+    dispatchFixtureOperation,
+} from "@/__tests__/setup/pi-mission";
 import { readHistoryEvent } from "@/__tests__/setup/retained-history";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 
@@ -23,7 +27,7 @@ afterEach(() => {
 
 test("history_text_is_unchanged_when_live_request_and_invocation_change", async () => {
     const f = await seedHistoryMission();
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 1,
         taskKey: "history-stability",
@@ -150,15 +154,12 @@ test.each([
             input: { kind: "consult_mission_state", cursor: "bad" },
         });
     } else {
-        const invocation = await t.mutation(
-            internal.execution.invocations.begin,
-            {
-                missionId,
-                expectedGeneration: args.executionGeneration,
-                taskKey: "history-refusal",
-                provenance: "simulation",
-            },
-        );
+        const invocation = await beginFixtureInvocation(t, {
+            missionId,
+            expectedGeneration: args.executionGeneration,
+            taskKey: "history-refusal",
+            provenance: "simulation",
+        });
         if (invocation.kind !== "ready") throw new Error("Expected invocation");
         const response = await t.mutation(
             internal.execution.invocations.finish,
@@ -181,7 +182,7 @@ test.each([
     }
     if (!requestId) throw new Error("Expected retained history request");
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: args.executionGeneration,
         }),
@@ -201,13 +202,13 @@ test.each([
         },
     );
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId: correctedId,
             expectedGeneration: args.executionGeneration,
         }),
     ).toMatchObject({ kind: "success" });
     expect(
-        await t.mutation(internal.execution.invocations.begin, {
+        await beginFixtureInvocation(t, {
             missionId,
             expectedGeneration: args.executionGeneration,
             taskKey: "after-corrected-history",

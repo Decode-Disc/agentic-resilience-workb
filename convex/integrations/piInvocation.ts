@@ -23,6 +23,7 @@ import type * as InvocationLifecycle from "@convex/execution/invocationLifecycle
 import { preparedReplyBasisHash } from "@convex/execution/journal";
 import { operationInputFeedback } from "@convex/execution/operationContracts";
 import type * as PiControl from "@convex/execution/piControl";
+import type * as PiControlReads from "@convex/execution/piControlReads";
 import {
     retainedTextParts,
     verifyRetainedText,
@@ -40,6 +41,9 @@ import type {
 import { getDocumentSize, type Infer, type Value } from "convex/values";
 import { ValidationError, validate } from "convex-helpers/validators";
 
+type ControlReadsApi = ApiFromModules<{
+    reads: typeof PiControlReads;
+}>["reads"];
 type ControlApi = ApiFromModules<{ control: typeof PiControl }>["control"];
 type LifecycleApi = ApiFromModules<{
     lifecycle: typeof InvocationLifecycle;
@@ -261,7 +265,7 @@ export async function recoverPiInvocationBody(
     };
     const content = await reconstructBody(
         (index) =>
-            ctx.runQuery(internal.execution.piControl.invocationFragment, {
+            ctx.runQuery(internal.execution.piControlReads.invocationFragment, {
                 ...args,
                 index,
             }),
@@ -275,10 +279,10 @@ export async function recoverPiInvocationBody(
 /** Looks up one native operation, loading old adopted responses only when needed. */
 export async function lookupPiOperation(
     ctx: ActionCtx,
-    args: Omit<FunctionArgs<ControlApi["operation"]>, "historical">,
+    args: Omit<FunctionArgs<ControlReadsApi["operation"]>, "historical">,
     signal?: AbortSignal,
 ) {
-    const read = internal.execution.piControl.operation;
+    const read = internal.execution.piControlReads.operation;
     const current = await ctx.runQuery(read, args);
     if (!current || !("invocation" in current)) return current;
     const adopted = await recoverPiInvocationBody(
@@ -315,7 +319,7 @@ export async function lookupPiOperation(
 /** Upgrades the historical sole completion only after both retained bodies agree. */
 export async function recoverHistoricalCompletion(
     ctx: ActionCtx,
-    lease: FunctionArgs<ControlApi["terminalCompletionAccepted"]>,
+    lease: FunctionArgs<ControlReadsApi["terminalCompletionAccepted"]>,
     invocation: Doc<"agentInvocations">,
     signal?: AbortSignal,
 ) {
@@ -394,7 +398,7 @@ export async function recoverPiPublication(
 async function reconstructBody(
     read: (
         index: number,
-    ) => Promise<FunctionReturnType<ControlApi["invocationFragment"]>>,
+    ) => Promise<FunctionReturnType<ControlReadsApi["invocationFragment"]>>,
     signal?: AbortSignal,
 ) {
     signal?.throwIfAborted();

@@ -1,3 +1,5 @@
+export { emptyCampaignLimits } from "./qualificationLimits.ts";
+
 import { z } from "zod";
 export const QUALIFICATION_ACCOUNTING_POLICY = "known_final_v1" as const;
 
@@ -133,13 +135,6 @@ export const qualificationPrerequisiteFailureSchema = z.object({
     required: z.number(),
     available: z.number(),
 });
-export const emptyCampaignLimits = (): CampaignLimits => ({
-    model: 0,
-    search: 0,
-    acquisition: 0,
-    costUsd: 0,
-});
-
 const identity = z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/);
 const question = z
     .object({

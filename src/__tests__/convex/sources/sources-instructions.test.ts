@@ -6,6 +6,10 @@ import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { WORKBENCH_MODEL_ROUTE } from "@convex/integrations/modelRouting";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
+import {
+    beginFixtureInvocation,
+    recordFixtureAttempt,
+} from "@/__tests__/setup/pi-mission";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 import { workbenchAdmissionInput } from "@/__tests__/setup/workbench";
 
@@ -135,20 +139,17 @@ test("closed instruction treatment reaches Workbench and its review without reop
             ),
         },
     });
-    const invocation = await f.t.mutation(
-        internal.execution.invocations.begin,
-        {
-            missionId: mission._id,
-            expectedGeneration: mission.generation,
-            taskKey: "closed-instruction-review",
-            provenance: "live",
-            nativeInput: await workbenchAdmissionInput(
-                f.t,
-                mission._id,
-                mission.generation,
-            ),
-        },
-    );
+    const invocation = await beginFixtureInvocation(f.t, {
+        missionId: mission._id,
+        expectedGeneration: mission.generation,
+        taskKey: "closed-instruction-review",
+        provenance: "live",
+        nativeInput: await workbenchAdmissionInput(
+            f.t,
+            mission._id,
+            mission.generation,
+        ),
+    });
     assert(invocation.kind === "ready");
     const row = await f.t.run((ctx) => ctx.db.get(invocation.invocationId));
     assert(row);
@@ -166,11 +167,11 @@ test("closed instruction treatment reaches Workbench and its review without reop
         attempt: 1,
         inputHash: sha256Hex(row.inputJson),
     };
-    await f.t.mutation(internal.providerCalls.recordAttempt, {
+    await recordFixtureAttempt(f.t, {
         ...receipt,
         status: "started",
     });
-    await f.t.mutation(internal.providerCalls.recordAttempt, {
+    await recordFixtureAttempt(f.t, {
         ...receipt,
         status: "succeeded",
         dispatchOutcome: "response_received",
@@ -319,7 +320,7 @@ test.each([
 ])("an instruction admitted during final generation refreshes Sources before completion (delivery already ran: %s)", async (delivered) => {
     vi.useFakeTimers();
     const f = await seedInstruction(await seedCapturedSources());
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 4,
         taskKey: "before-new-need",
@@ -354,7 +355,7 @@ test.each([
         (await f.t.run((ctx) => ctx.db.get(f.preparationId)))?.sourcesMission
             ?.result,
     ).toBeUndefined();
-    const next = await f.t.mutation(internal.execution.invocations.begin, {
+    const next = await beginFixtureInvocation(f.t, {
         missionId: f.missionId,
         expectedGeneration: 4,
         taskKey: "with-new-need",

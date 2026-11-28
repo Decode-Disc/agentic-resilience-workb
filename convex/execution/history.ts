@@ -10,6 +10,7 @@ import {
     stableStringify,
 } from "@convex/domain/sourcePassages";
 import { retainedDeliveryBody } from "@convex/execution/conversationBodies";
+import { requireInstructionVersion } from "@convex/execution/conversationCore";
 import {
     HISTORY_PAGE_SIZE,
     MAX_CONVERSATION_SCAN,
@@ -19,7 +20,6 @@ import {
 import { type Infer, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { requireMissionAuthority } from "./authority";
-import { requireInstructionVersion } from "./conversations";
 import { executionError, executionFailureCode } from "./errors";
 import {
     type AgentOperationDefinition,

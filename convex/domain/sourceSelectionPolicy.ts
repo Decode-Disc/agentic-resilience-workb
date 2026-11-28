@@ -1,3 +1,13 @@
+import {
+    SOURCE_COVERAGE_ROLES,
+    sourceCoverageRoleValidator,
+} from "./sourceCoverageRole";
+
+export {
+    SOURCE_COVERAGE_ROLES,
+    sourceCoverageRoleValidator,
+} from "./sourceCoverageRole";
+
 import type { CoveragePreset } from "@convex/domain/researchPlan";
 import { type Infer, v } from "convex/values";
 import type { SourceComparisonDisposition } from "./sourceComparison";
@@ -33,24 +43,6 @@ export const SOURCE_FAMILIES = [
     "counter_evidence",
     "official_security",
     "independent_analysis",
-] as const;
-
-export const SOURCE_COVERAGE_ROLES = [
-    "regulatory_annual",
-    "regulatory_interim",
-    "regulatory_material_event",
-    "investor_results",
-    "investor_presentation",
-    "official_product_platform",
-    "official_product_integration",
-    "official_commercial_pricing",
-    "official_commercial_terms",
-    "counter_evidence_primary",
-    "counter_evidence_secondary",
-    "official_security_architecture",
-    "official_security_trust",
-    "independent_analysis_primary",
-    "independent_analysis_secondary",
 ] as const;
 
 export const SOURCE_DOCUMENT_KINDS = [
@@ -98,9 +90,6 @@ export const SOURCE_COMPANY_LINKAGE_BASES = [
 
 export const sourceFamilyValidator = v.union(
     ...SOURCE_FAMILIES.map((value) => v.literal(value)),
-);
-export const sourceCoverageRoleValidator = v.union(
-    ...SOURCE_COVERAGE_ROLES.map((value) => v.literal(value)),
 );
 export const sourceDocumentKindValidator = v.union(
     ...SOURCE_DOCUMENT_KINDS.map((value) => v.literal(value)),

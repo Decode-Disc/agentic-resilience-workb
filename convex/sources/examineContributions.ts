@@ -4,7 +4,7 @@ import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { ActionCtx } from "@convex/_generated/server";
 import { sha256Hex } from "@convex/domain/sourcePassages";
-import { documentarySubmissionResult } from "@convex/domain/sourcesContracts";
+import { documentarySubmissionResult } from "@convex/domain/sourcesOperationResults";
 import { documentaryQuotationMatches } from "@convex/domain/sourceUsage";
 import { sourcesDocumentaryMethod } from "@convex/execution/agentSkillContracts";
 import type { operationOutcomeValidator } from "@convex/execution/executionProtocol";

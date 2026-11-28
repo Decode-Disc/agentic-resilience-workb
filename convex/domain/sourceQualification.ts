@@ -1,3 +1,5 @@
+export * from "./sourceQualificationVersions";
+
 import {
     extractPassagesFromNormalizedText,
     hasDetailedPassageContent,
@@ -16,57 +18,19 @@ import {
     MAX_QUALIFICATION_INPUT_BYTES,
     MAX_QUOTATION_CHARS,
 } from "@convex/resourcePolicy";
-import { type Infer, v } from "convex/values";
+import type { Infer } from "convex/values";
 import { zodToConvex } from "convex-helpers/server/zod4";
 import { z } from "zod";
+import {
+    type QualificationExecutionVersion,
+    SOURCE_QUALIFICATION_CANDIDATE_VERSION,
+    type SOURCE_QUALIFICATION_INPUT_POLICY,
+    SOURCE_QUALIFICATION_VERSION,
+} from "./sourceQualificationVersions";
 import {
     type retrievalMetadataValidator,
     SOURCE_RETRIEVAL_VERSION,
 } from "./sourceRetrievalPolicy";
-
-export const SOURCE_QUALIFICATION_VERSION = "source-qualification-v4";
-export const SOURCE_QUALIFICATION_CANDIDATE_VERSION = "source-qualification-v5";
-export const SOURCE_QUALIFICATION_EXECUTION_VERSIONS = [
-    "source-qualification-v3",
-    SOURCE_QUALIFICATION_VERSION,
-    SOURCE_QUALIFICATION_CANDIDATE_VERSION,
-] as const;
-export type QualificationExecutionVersion =
-    (typeof SOURCE_QUALIFICATION_EXECUTION_VERSIONS)[number];
-
-/** Only these protocols have an executable provider adapter. */
-export function isExecutableQualificationVersion(
-    version: string,
-): version is QualificationExecutionVersion {
-    return SOURCE_QUALIFICATION_EXECUTION_VERSIONS.some(
-        (value) => value === version,
-    );
-}
-
-/** Read compatibility does not authorize dispatch under an older protocol. */
-export function isReadableQualificationVersion(version: string): boolean {
-    return (
-        version === "source-qualification-v2" ||
-        isExecutableQualificationVersion(version)
-    );
-}
-
-/** Resumes keep their recorded protocol; only a first preparation defaults to the current one. */
-export function qualificationExecutionVersion(
-    version: string = SOURCE_QUALIFICATION_VERSION,
-): QualificationExecutionVersion {
-    const supported = SOURCE_QUALIFICATION_EXECUTION_VERSIONS.find(
-        (value) => value === version,
-    );
-    if (!supported)
-        throw new Error("Unsupported qualification execution version");
-    return supported;
-}
-export const SOURCE_QUALIFICATION_INPUT_POLICY = "full_document_first_v1";
-export const qualificationSelectionStrategyValidator = v.union(
-    v.literal("full_document"),
-    v.literal("retrieved_passages"),
-);
 
 const quotationSchema = z
     .object({

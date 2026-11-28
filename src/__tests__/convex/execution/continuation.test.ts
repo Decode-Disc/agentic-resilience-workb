@@ -7,6 +7,13 @@ import { stageObservedBody } from "@convex/execution/observedReply";
 import { afterEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { installModel } from "@/__tests__/setup/model-configuration";
+import {
+    beginFixtureInvocation,
+    dispatchFixtureOperation,
+    recordFixtureAttempt,
+    retainFixtureOutput,
+    seedSettledFixtureReceipt,
+} from "@/__tests__/setup/pi-mission";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 import {
     seedInspectedEvidence,
@@ -38,7 +45,7 @@ test.each([
         missionId,
         expectedGeneration: 4,
     });
-    const invocation = await t.mutation(internal.execution.invocations.begin, {
+    const invocation = await beginFixtureInvocation(t, {
         missionId,
         expectedGeneration: 4,
         taskKey: "before-rotation",
@@ -60,7 +67,7 @@ test.each([
         attempt: 1,
         inputHash: sha256Hex(invocation.inputJson),
     };
-    await t.mutation(internal.providerCalls.recordAttempt, {
+    await recordFixtureAttempt(t, {
         ...attempt,
         status: "started",
     });
@@ -79,7 +86,7 @@ test.each([
             })),
         ],
     });
-    await t.mutation(internal.providerCalls.recordAttempt, {
+    await recordFixtureAttempt(t, {
         ...attempt,
         status: "succeeded",
         dispatchOutcome: "response_received",
@@ -94,7 +101,7 @@ test.each([
             },
         ],
     };
-    await t.mutation(internal.execution.invocations.retainOutput, {
+    await retainFixtureOutput(t, {
         invocationId: invocation.invocationId,
         expectedGeneration: 4,
         responseJson: JSON.stringify(response),
@@ -150,12 +157,12 @@ test("duplicate completion references are refused before accepting an artifact",
         input: { kind: "read_in_context", sourceId, passageOrder: 0 },
     });
     expect(
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId,
             expectedGeneration: 4,
         }),
     ).toMatchObject({ kind: "success" });
-    const invocation = await t.mutation(internal.execution.invocations.begin, {
+    const invocation = await beginFixtureInvocation(t, {
         missionId,
         expectedGeneration: 4,
         taskKey: "complete",
@@ -191,7 +198,7 @@ test("a reused earlier request supplies its awaited result after newer requests"
         cause: "first-read",
         input: { kind: "read_in_context", sourceId, passageOrder: 0 },
     });
-    const outcome = await t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchFixtureOperation(t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -203,12 +210,12 @@ test("a reused earlier request supplies its awaited result after newer requests"
             cause: query,
             input: { kind: "search_available_material", sourceId, query },
         });
-        await t.action(internal.execution.operations.dispatch, {
+        await dispatchFixtureOperation(t, {
             requestId: newer,
             expectedGeneration: 4,
         });
     }
-    const invocation = await t.mutation(internal.execution.invocations.begin, {
+    const invocation = await beginFixtureInvocation(t, {
         missionId,
         expectedGeneration: 4,
         taskKey: "repeat-read",
@@ -268,7 +275,7 @@ test("a recreated invocation receives retained notes, human instructions and obl
             obligations: ["inspect_saved_material", "examine_counter_evidence"],
         }),
     );
-    const invocation = await t.mutation(internal.execution.invocations.begin, {
+    const invocation = await beginFixtureInvocation(t, {
         missionId,
         expectedGeneration: 4,
         taskKey: "turn-0",
@@ -323,7 +330,7 @@ test("a returned batch is persisted before dispatch and cannot complete with unf
         requestKey: "handoff",
         expectedGeneration: 4,
     });
-    const invocation = await t.mutation(internal.execution.invocations.begin, {
+    const invocation = await beginFixtureInvocation(t, {
         missionId,
         expectedGeneration: 4,
         taskKey: "turn-0",
@@ -357,7 +364,7 @@ test("a returned batch is persisted before dispatch and cannot complete with unf
         cause: "read-1",
         input: { kind: "read_in_context", sourceId, passageOrder: 0 },
     });
-    const next = await t.mutation(internal.execution.invocations.begin, {
+    const next = await beginFixtureInvocation(t, {
         missionId,
         expectedGeneration: 4,
         taskKey: "turn-1",
@@ -376,7 +383,7 @@ test("late cancelled output is retained but cannot create requests or advance th
         requestKey: "cancelled",
         expectedGeneration: 4,
     });
-    const invocation = await t.mutation(internal.execution.invocations.begin, {
+    const invocation = await beginFixtureInvocation(t, {
         missionId,
         expectedGeneration: 4,
         taskKey: "turn-0",
@@ -384,6 +391,7 @@ test("late cancelled output is retained but cannot create requests or advance th
     });
     if (invocation.kind !== "ready")
         throw new Error("Expected ready invocation");
+    await seedSettledFixtureReceipt(t, invocation.invocationId);
     await t.run((ctx) =>
         ctx.db.patch(args.runId, {
             executionStatus: "cancelled",
@@ -396,7 +404,7 @@ test("late cancelled output is retained but cannot create requests or advance th
             { callId: "late", name: "consult_mission_state", inputJson: "{}" },
         ],
     };
-    await t.mutation(internal.execution.invocations.retainOutput, {
+    await retainFixtureOutput(t, {
         invocationId: invocation.invocationId,
         expectedGeneration: 4,
         responseJson: JSON.stringify(response),
@@ -433,7 +441,7 @@ test("logical request identity ignores JSON argument key order", async () => {
         requestKey: "logical-identity",
         expectedGeneration: 4,
     });
-    const invocation = await t.mutation(internal.execution.invocations.begin, {
+    const invocation = await beginFixtureInvocation(t, {
         missionId,
         expectedGeneration: 4,
         taskKey: "turn-0",
@@ -472,7 +480,7 @@ test("saying complete without inspected artifacts cannot satisfy the mission", a
         requestKey: "completion",
         expectedGeneration: 4,
     });
-    const invocation = await t.mutation(internal.execution.invocations.begin, {
+    const invocation = await beginFixtureInvocation(t, {
         missionId,
         expectedGeneration: 4,
         taskKey: "turn-0",
@@ -510,7 +518,7 @@ test.each([
         requestKey: "observed-recovery",
         expectedGeneration: 4,
     });
-    const invocation = await t.mutation(internal.execution.invocations.begin, {
+    const invocation = await beginFixtureInvocation(t, {
         missionId,
         expectedGeneration: 4,
         taskKey: "turn-0",
@@ -534,11 +542,11 @@ test.each([
         attempt: 1,
         inputHash: sha256Hex(invocation.inputJson),
     };
-    await t.mutation(internal.providerCalls.recordAttempt, {
+    await recordFixtureAttempt(t, {
         ...attempt,
         status: "started",
     });
-    await t.mutation(internal.providerCalls.recordAttempt, {
+    await recordFixtureAttempt(t, {
         ...attempt,
         status: "succeeded",
         dispatchOutcome: "response_received",
@@ -553,7 +561,7 @@ test.each([
             },
         ],
     };
-    await t.mutation(internal.execution.invocations.retainOutput, {
+    await retainFixtureOutput(t, {
         invocationId: invocation.invocationId,
         expectedGeneration: 4,
         responseJson: JSON.stringify(response),
@@ -615,7 +623,7 @@ test("exact history pagination reconstructs large observable records without gap
         requestKey: "history",
         expectedGeneration: 4,
     });
-    const begun = await t.mutation(internal.execution.invocations.begin, {
+    const begun = await beginFixtureInvocation(t, {
         missionId,
         expectedGeneration: 4,
         taskKey: "large-history",
@@ -656,10 +664,10 @@ test("exact history pagination reconstructs large observable records without gap
                 },
             },
         );
-        const outcome: OperationOutcome = await t.action(
-            internal.execution.operations.dispatch,
-            { requestId, expectedGeneration: 4 },
-        );
+        const outcome: OperationOutcome = await dispatchFixtureOperation(t, {
+            requestId,
+            expectedGeneration: 4,
+        });
         expect(outcome.kind).toBe("success");
         if (outcome.kind !== "success") throw new Error("Expected history");
         const page = JSON.parse(outcome.valueJson).history;
@@ -694,7 +702,7 @@ test.each([
         requestKey: "invalid-correlation",
         expectedGeneration: 4,
     });
-    const invocation = await t.mutation(internal.execution.invocations.begin, {
+    const invocation = await beginFixtureInvocation(t, {
         missionId,
         expectedGeneration: 4,
         taskKey: "turn-0",
